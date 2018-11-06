@@ -2,8 +2,53 @@
 #include <iostream>
 
 namespace ffip {
-	N2F_Face_Base::N2F_Face_Base(const iVec3& _p1, const iVec3& _p2, const Side _side, const real _omega, const real _dx, const real _dt, const fVec3& _center): p1(_p1), p2(_p2), side(_side), omega(_omega), dx(_dx), dt(_dt), center(_center) {}
+	N2F_Face_Base::N2F_Face_Base(const iVec3& _p1, const iVec3& _p2, const Side _side, const real _omega, const real _dx, const real _dt, const fVec3& _center): p1(_p1), p2(_p2), side(_side), omega(_omega), dx(_dx), dt(_dt), center(_center) {
+		if ((p1.x == p2.x) + (p1.y == p2.y) + (p1.z == p2.z) == 2 && ElementWise_Less_Eq(p1, p2))
+			is_face = true;
+	}
 	
+	Simulation::Simulation(const real _dx, const real _dt, const iVec3 _dim): dx(_dx), dt(_dt), sim_dim(_dim) {}
+
+	void Simulation::probe_init() {}
+
+	void Simulation::N2F_init() {
+		auto center = sim_dim * (dx / 2 / 2);
+		iVec3 N2F_p1s[6] = { 
+			iVec3{ N2F_p1.x, N2F_p1.y, N2F_p1.z } ,		//x-
+			iVec3{ N2F_p2.x, N2F_p1.y, N2F_p1.z } ,		//x+
+			iVec3{ N2F_p1.x, N2F_p1.y, N2F_p1.z } ,		//y-
+			iVec3{ N2F_p1.x, N2F_p2.y, N2F_p1.z } ,		//y+
+			iVec3{ N2F_p1.x, N2F_p1.y, N2F_p1.z } ,		//z-
+			iVec3{ N2F_p1.x, N2F_p1.y, N2F_p2.z } };	//z+
+
+		iVec3 N2F_p2s[6] = {
+			iVec3{ N2F_p1.x, N2F_p2.y, N2F_p2.z } ,
+			iVec3{ N2F_p2.x, N2F_p2.y, N2F_p2.z } ,
+			iVec3{ N2F_p2.x, N2F_p1.y, N2F_p2.z } ,
+			iVec3{ N2F_p2.x, N2F_p2.y, N2F_p2.z } ,
+			iVec3{ N2F_p2.x, N2F_p2.y, N2F_p1.z } ,
+			iVec3{ N2F_p2.x, N2F_p2.y, N2F_p2.z } };
+
+		std::pair<iVec3, iVec3> faces[6];
+
+		for (int i = 0; i < 6; ++i) {
+			faces[i] = get_intersection(N2F_p1s[i], N2F_p2s[i], ch_p1, ch_p2);
+		}
+
+		for (auto omega : N2F_freq) {
+			if (N2F_faces.find(omega) == N2F_faces.end()) {
+				
+				N2F_faces[omega] = {
+					new N2F_Face<dir_x_tag>{ faces[0].first, faces[0].second, Side::Low, omega, dx, dt, center },
+					new N2F_Face<dir_x_tag>{ faces[1].first, faces[1].second, Side::High, omega, dx, dt, center },
+					new N2F_Face<dir_y_tag>{ faces[2].first, faces[2].second, Side::Low, omega, dx, dt, center },
+					new N2F_Face<dir_y_tag>{ faces[3].first, faces[3].second, Side::High, omega, dx, dt, center },
+					new N2F_Face<dir_z_tag>{ faces[4].first, faces[4].second, Side::Low, omega, dx, dt, center },
+					new N2F_Face<dir_z_tag>{ faces[5].first, faces[5].second, Side::High, omega, dx, dt, center } };
+				}
+			}
+	}
+
 	void Simulation::medium_init() {
 		const int N = 3;
 		if (background_medium == nullptr)
@@ -86,6 +131,20 @@ namespace ffip {
 	}
 	
 	void Simulation::chunk_init() {
+		//add TFSF faces
+		if (!eigen_sources.empty()) {
+			sim_p1 = sim_p1 - iVec3{ 1, 1, 1 };
+			sim_p2 = sim_p2 + iVec3{ 1, 1, 1 };
+		}
+
+		//implementations of N2F faces
+		if (!N2F_pos.empty()) {
+			N2F_p1 = sim_p1 - iVec3{ 1, 1, 1 };
+			N2F_p2 = sim_p2 + iVec3{ 1, 1, 1 };
+			sim_p1 = sim_p1 - iVec3{ 2, 2, 2 };
+			sim_p2 = sim_p2 + iVec3{ 2, 2, 2 };
+		}
+
 		//add PML layers
 		sim_p1.x -= 2 * PMLs[0][0].get_d();
 		sim_p1.y -= 2 * PMLs[1][0].get_d();
@@ -94,16 +153,7 @@ namespace ffip {
 		sim_p2.x += 2 * PMLs[0][1].get_d();
 		sim_p2.y += 2 * PMLs[1][1].get_d();
 		sim_p2.z += 2 * PMLs[2][1].get_d();
-		
-		//add TFSF faces
-		if(!eigen_sources.empty()) {
-			sim_p1 = sim_p1 - iVec3{1, 1, 1};
-			sim_p2 = sim_p2 + iVec3{1, 1, 1};
-		}
-		
-		//implementations of N2F faces
-		
-		
+
 		//implementaions of MPI, for now 1 chunk covers the whole region
 		chunk = new Chunk{sim_p1, sim_p2, ch_p1, ch_p2, dx, dt};
 		ch_p1 = chunk->get_p1();
@@ -125,8 +175,8 @@ namespace ffip {
 		if (eigen_cast) eigen_sources.push_back(eigen_cast);
 	}
 	
-	void Simulation::add_solid(Solid *geometry) {
-		solids.push_back(geometry);
+	void Simulation::add_solid(Solid *solid) {
+		solids.push_back(solid);
 	}
 	
 	void Simulation::add_PML_layer(PML *PML) {
@@ -139,6 +189,15 @@ namespace ffip {
 	void Simulation::set_background_medium(Medium_Type * medium) {
 		background_medium = medium;
 	}
+
+	void Simulation::add_probe(Probe* probe) {
+		probes.push_back(probe);
+	}
+
+	void Simulation::add_farfield_probe(const real freq, const fVec3& p) {
+		N2F_freq.push_back(freq);
+		N2F_pos.push_back(p);
+	}
 	
 	void Simulation::advance() {
 		real time = (step ++ ) * dt;
@@ -150,5 +209,28 @@ namespace ffip {
 		
 		chunk->update_padded_E(time);
 		chunk->update_padded_H(time);
+
+		for (auto item : probes)
+			item->update(*this);
+	}
+
+	real Simulation::at(const fVec3& p, const Coord_Type ctype) {
+		return chunk->at(p, ctype);
+	}
+
+	real Simulation::operator()(const fVec3& p, const Coord_Type ctype) const{
+		return chunk->operator()(p, ctype);
+	}
+
+	real Simulation::operator()(const iVec3& p, const Coord_Type ctype) const {
+		return chunk->operator()(p, ctype);
+	}
+
+	real Simulation::operator()(const iVec3& p) const {
+		return chunk->operator()(p);
+	}
+
+	int Simulation::get_step() const{
+		return step;
 	}
 }

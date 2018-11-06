@@ -41,7 +41,7 @@ namespace ffip {
 		iVec3 get_origin() const;
 		iVec3 get_p1() const;
 		iVec3 get_p2() const;
-		int get_index_ch(const iVec3& p) const;
+		int get_index_ch(const iVec3& p) const;			//get index relative to chunk origin
 		
 		/* Jd, Md (currenst, curl) updates*/
 		void update_Jd(real time);
@@ -57,11 +57,13 @@ namespace ffip {
 		void update_padded_H(real time);
 		void update_padded_E(real time);
 		
-		/* */
-		real operator[](const iVec3& p) const;		//access field at a domain computation
-		real get_field(const iVec3& p, const Coord_Type ctype) const;	//get field of ctype at a domain comp coordinate
-		real get_prev_field(const iVec3& p, const Coord_Type ctype) const;
+		/* field access functions*/
+		real at(const fVec3& p, const Coord_Type ctype) const;					//access at float physical coordinates
 		
+		/* field access at computation coordinates*/
+		real operator()(const fVec3& p, const Coord_Type ctype) const;		//access at float computation coordinates
+		real operator()(const iVec3& p, const Coord_Type ctype) const;		//access at integer computation coordinates
+		real operator()(const iVec3& p) const;								//raw access			
 		
 		/* average field according to bit patterns
 		 111 = average over 8 points
@@ -80,5 +82,16 @@ namespace ffip {
 		}
 		
 		int ave(const int bit, const int index) const;
+
+		/* interpolation helper functions*/
+		real interp_helper(const real* data, const real w) const;
+
+		template<typename... Args>
+		real interp_helper(const real* data, const real w, Args... args) const{
+			constexpr int N = sizeof...(Args) / 2;
+			constexpr int shift = 1 << N;
+
+			return interp_helper(data, args...) * (1 - w) + interp_helper(data + shift, args...) * w;
+		}
 	};
 }

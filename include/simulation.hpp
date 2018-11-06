@@ -5,10 +5,11 @@
 #include <medium.hpp>
 #include <source.hpp>
 #include <chunk.hpp>
+#include <analysis.hpp>
+#include <map>
 
 #include <memory>
 #include <vector>
-
 
 namespace ffip {
 	/* near to far field struct, resides in Simulation class*/
@@ -17,14 +18,16 @@ namespace ffip {
 		
 		iVec3 p1, p2;		//face lower and upper points in domain comp coordinates
 		Side side;			//face side +-
-		real omega;			//frequency
+		real omega;			//frequency in rad/s
 		real dx, dt;		//dx, dt from Simulation
 		fVec3 center;		//center in domain phys coordinates used in defining observation points
 		
 		complex_arr j1, j2, m1, m2;	//{j1, j2, j3}, {m1, m2, m3} are surface currents where j3, m3 are always zeros
 		std::vector<int> x1, x2;	//{x1, x2} are gridded points coordinates that cover the whole N2F face
 		real_arr fx1, fx2;			//{fx1, fx2} are {x1, x2} converetd to domain phys coordinates and subtrated by center coordinates
-		bool is_phase_corrected{0};
+		bool is_phase_corrected{0}; //phase needs to be corrected for H at the first time get_NL is called
+		bool is_face{ 0 };			//if it is not a face, ignore it and always output 0 to get_NL
+
 	public:
 		N2F_Face_Base(const iVec3& _p1, const iVec3& _p2, const Side _side, const real _omega, const real _dx, const real _dt, const fVec3& _center);
 		virtual void update(Chunk* const chunk, const int n) = 0;
@@ -87,6 +90,9 @@ namespace ffip {
 	
 	template<typename D>
 	void N2F_Face<D>::update(Chunk* const chunk, const int n) {
+		if (!is_face)
+			return;
+
 		int index, k = p1.z;
 		complex_num exp_omega_n;
 	
@@ -110,6 +116,9 @@ namespace ffip {
 	
 	template<typename D>
 	std::pair<Vec3<complex_num>, Vec3<complex_num>> N2F_Face<D>::get_NL(const real theta, const real phi)  const{
+		if (!is_face)
+			return { {0, 0, 0}, {0, 0, 0} };
+
 		if(!is_phase_corrected) {
 			auto phase_correction = exp(complex_num(0, omega * dt / 2));
 			
@@ -176,11 +185,19 @@ namespace ffip {
 		std::vector<Solid*> solids;
 		std::vector<Current_Source*> current_sources;
 		std::vector<Eigen_Source*> eigen_sources;
+		std::vector<Probe*> probes;
 		
-		
+		std::vector<real> N2F_freq;
+		std::vector<fVec3> N2F_pos;
+		std::map<real, std::vector<N2F_Face_Base*>> N2F_faces;
+
+		iVec3 N2F_p1, N2F_p2;	//coordinates of N2F box
+
 		PML PMLs[3][2];
 		std::vector<real> kx, ky, kz, bx, by, bz, cx, cy, cz;
 		
+		void probe_init();
+		void N2F_init();
 		void medium_init();
 		void source_init();
 		void PML_init();
@@ -190,11 +207,24 @@ namespace ffip {
 	public:
 		Simulation(const real _dx, const real _dt, const iVec3 _dim);
 		void advance();
-		void add_solid(Solid* geometry);
+		void add_solid(Solid* solid);
 		void add_source(Source* source);
 		void add_PML_layer(PML* PML);
+		void add_probe(Probe* probe);
+		void add_farfield_probe(const real freq, const fVec3& p);
 		void set_background_medium(Medium_Type* medium);
 		void init();
-	};
 
+		/* field access functions*/
+		real at(const fVec3& p, const Coord_Type ctype) const;					//access at float physical coordinates
+
+		/* field access at computation coordinates*/
+		real operator()(const fVec3& p, const Coord_Type ctype) const;		//access at float computation coordinates
+		real operator()(const iVec3& p, const Coord_Type ctype) const;		//access at integer computation coordinates
+		real operator()(const iVec3& p) const;								//raw access	
+
+		/* */
+		int get_step() const;
+		real get_dt() const;
+	};
 }

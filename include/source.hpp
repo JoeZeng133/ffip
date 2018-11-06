@@ -49,7 +49,7 @@ namespace ffip {
 		void set_PML_pos(const PML& _PML_pos);							//set up PML layer in x+
 		void init();														//after set-up, it has to be initialized
 		
-		real operator[](const iVec3& p) const;								//allow fields access through domain computation coordinates
+		real operator()(const iVec3& p) const;								//allow fields access through domain computation coordinates
 		
 		void hard_E(real time);		//hard E source to excite wave
 		void update(real time);		//H(t-0.5dt), E(t) -> H(t+0.5dt), E(t+dt)

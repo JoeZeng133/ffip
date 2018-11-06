@@ -24,7 +24,6 @@ namespace ffip {
 	enum Direction {X = 0, Y = 1, Z = 2};
 	enum Side {Low = -1, High = 1};
 	enum Coord_Type {Ex = 0b001, Ey = 0b010, Ez = 0b100, Hx = 0b110, Hy = 0b101, Hz = 0b011, Corner = 0b000, Center = 0b111, Null = -1};
-	enum class Component {Ex, Ey, Ez, Hx, Hy, Hz, Dx, Dy, Dz, Bx, By, Bz, Jx, Jy, Jz, Mx, My, Mz};
 
     /* tags */
 	struct dir_x_tag;
@@ -53,7 +52,6 @@ namespace ffip {
 	};
 	
 	struct dir_x_tag{
-		//rotational symmetry of cartesian coordinates (x, y, z)
 		using x1 = dir_y_tag;
 		using x2 = dir_z_tag;
 		using z = dir_y_tag;
@@ -83,6 +81,10 @@ namespace ffip {
 		static const Coord_Type H;
 	};
 	
+	
+	/*rotational symmetry of cartesian coordinates (x, y, z)
+	(y, z, x) or (z, x, y) or (x, y, z)
+	*/
 	template<typename D>
 	struct dir_traits {
 		using x1 = typename D::x1;
@@ -103,62 +105,70 @@ namespace ffip {
 		Vec3(T _x, T _y, T _z): x(_x), y(_y), z(_z) {}
 		Vec3(const Vec3&) = default;			//copy
 		Vec3& operator=(const Vec3&) = default;
+
 		/* function members */
-		
-		Coord_Type get_type() const;
-		Coord_Type get_type(const Coord_Type other) const;
-		
+		Coord_Type get_type() const;						//get Coord_Type for the given comp coordinates
+		Coord_Type get_type(const Coord_Type other) const;	//get Coord_Type for the given relative comp coordinates
 	};
 	
 	using iVec3 = Vec3<int>;
 	using fVec3 = Vec3<real>;
 	using cVec3 = Vec3<complex_num>;
 	
-	template<typename T>
-	inline bool ElementWise_Less(const Vec3<T>& a, const Vec3<T>& b) {
+	/* point wise less */
+	template<typename T1, typename T2>
+	inline bool ElementWise_Less(const Vec3<T1>& a, const Vec3<T2>& b) {
 		return a.x < b.x && a.y < b.y && a.z < b.z;
 	}
 	
-	template<typename T>
-	inline bool ElementWise_Less_Eq(const Vec3<T>& a, const Vec3<T>& b) {
+	/* point wise less than*/
+	template<typename T1, typename T2>
+	inline bool ElementWise_Less_Eq(const Vec3<T1>& a, const Vec3<T2>& b) {
 		return a.x <= b.x && a.y <= b.y && a.z <= b.z;
 	}
 	
+	/* dot product */
 	template<typename T>
 	inline Vec3<T> operator*(const Vec3<T>& a, const Vec3<T>& b) {
 		return Vec3<T>{a.x * b.x, a.y * b.y, a.z * b.z};
 	}
 	
+	/* right scalar product */
 	template<typename T>
 	inline Vec3<T> operator*(const Vec3<T>& a, const T b) {
 		return Vec3<T>{a.x * b, a.y * b, a.z * b};
 	}
-			
+	/* left scalar product*/
 	template<typename T>
 	inline Vec3<T> operator*(const T b, const Vec3<T>& a) {
 		return Vec3<T>{a.x * b, a.y * b, a.z * b};
 	}
 	
+	/* point wise addtion */
 	template<typename T>
 	inline Vec3<T> operator+(const Vec3<T>& a, const Vec3<T>& b) {
 		return Vec3<T>{a.x + b.x, a.y + b.y, a.z + b.z};
 	}
 	
+	/* point wise substraction */
 	template<typename T>
 	inline Vec3<T> operator-(const Vec3<T>& a, const Vec3<T>& b) {
 		return Vec3<T>{a.x - b.x, a.y - b.y, a.z - b.z};
 	}
 	
+	/* make dir_x_tag the x3 axis */
 	template<typename T>
 	inline Vec3<T> rotate_frame(const Vec3<T>& p, dir_x_tag) {
 		return Vec3<T>{p.y, p.z, p.x};
 	}
 	
+	/* make dir_y_tag the x3 axis */
 	template<typename T>
 	inline Vec3<T> rotate_frame(const Vec3<T>& p, dir_y_tag) {
 		return Vec3<T>{p.z, p.x, p.y};
 	}
 	
+	/* make dir_z_tag the x3 axis */
 	template<typename T>
 	inline Vec3<T> rotate_frame(const Vec3<T>& p, dir_z_tag) {
 		return p;
@@ -170,18 +180,18 @@ namespace ffip {
 
 	/* return the nearest integer (self included) that is even or odd*/
 	template<typename S, typename T>
-	int get_nearest_int(const int x) {
+	inline int get_nearest_int(const int x) {
 		return ((x & 1) ^ T::val)? S::get_next_int(x) : x;
 	}
 	
 	template<typename S, typename T>
-	int get_nearest_int(const real x) {
+	inline int get_nearest_int(const real x) {
 		return get_nearest_int<S, T>(S::round(x));
 	}
 	
 	/* get the nearest point of coord_type to a global computation point on side S (low or high)*/
 	template<typename S, typename T>
-	iVec3 get_nearest_point(const T& p, const Coord_Type type) {
+	inline iVec3 get_nearest_point(const Vec3<T>& p, const Coord_Type type) {
 		iVec3 res;
 		if (type & 1) {
 			res.x = get_nearest_int<S, odd_tag>(p.x);
@@ -206,30 +216,28 @@ namespace ffip {
 
 	/* p1, p2 are domain comp coordinates, return the largest box(surface, line) containing all the points of type component inside specified by the start and end point*/
 	template<typename T1, typename T2>
-	std::pair<iVec3, iVec3> get_component_interior(const T1& p1, const T2& p2, const Coord_Type type) {
+	inline std::pair<iVec3, iVec3> get_component_interior(const Vec3<T1>& p1, const Vec3<T2>& p2, const Coord_Type type) {
 		if (type == Coord_Type::Null)
 			throw std::runtime_error("Coord_Type cannot be Null");
 
-		auto res = std::make_pair(get_nearest_point<side_high_tag, T1>(p1, type), get_nearest_point<side_low_tag, T2>(p2, type));
-
-		return res;
+		return std::make_pair(	get_nearest_point<side_high_tag, Vec3<T1>>(p1, type),
+								get_nearest_point<side_low_tag, Vec3<T2>>(p2, type));
 	}
 
 	/* return the smallest box*/
 	template<typename T1, typename T2>
-	std::pair<iVec3, iVec3> get_component_closure(const T1& p1, const T2& p2, const Coord_Type type) {
+	inline std::pair<iVec3, iVec3> get_component_closure(const Vec3<T1>& p1, const Vec3<T2>& p2, const Coord_Type type) {
 		if (type == Coord_Type::Null)
 			throw std::runtime_error("Coord_Type cannot be Null");
 
-		auto res = std::make_pair(get_nearest_point<side_low_tag, T1>(p1, type), get_nearest_point<side_high_tag, T2>(p2, type));
-
-		return res;
+		return std::make_pair(	get_nearest_point<side_low_tag, Vec3<T1>>(p1, type),
+								get_nearest_point<side_high_tag, Vec3<T2>>(p2, type));
 	}
 
 	/* return the intersection of two boxes specified by (p1, p2) and (q1, q2)*/
 	template<typename T>
-	std::pair<T, T> get_intersection(const T& p1, const T& p2, const T& q1, const T& q2) {
-		return std::make_pair<T, T>({std::max(p1.x, q1.x), std::max(p1.y, q1.y), std::max(p1.z, q1.z)},
+	std::pair<Vec3<T>, Vec3<T>> get_intersection(const Vec3<T>& p1, const Vec3<T>& p2, const Vec3<T>& q1, const Vec3<T>& q2) {
+		return std::make_pair<Vec3<T>, Vec3<T>>({std::max(p1.x, q1.x), std::max(p1.y, q1.y), std::max(p1.z, q1.z)},
 									{std::min(p2.x, q2.x),std::min(p2.y, q2.y), std::min(p2.z, q2.z)});
 	}
 
@@ -281,22 +289,15 @@ namespace ffip {
         void set_dt(real dt);
     };
 
-    /* interpolation class */
+    /* linear interpolation on fixed interval grids*/
     class GriddedInterp {
     private:
-		real tol{0};
-		int dim;
-		bool active_dim[3];
         std::vector<real> x, y, z, v;
+		real x0, y0, z0;
+		real dx, dy, dz;
         std::string file_name;
 
 		size_t size, loc_jump_x, loc_jump_y, loc_jump_z;
-		std::vector<int> jump_arr;
-		mutable std::vector<real> val_arr;
-
-		/* helper functions, calling from outside might violate invariants*/
-		int add_val_arr(const std::vector<real>& v, real x, int& index) const;
-		
 
     public:
         /* Semiregular members*/
@@ -309,7 +310,6 @@ namespace ffip {
 
         /* Function Members */
 		void init();
-		void set_tol(real _tol);
         real request_value(const fVec3& p) const;			//return value at a point, 0 dimension is ignored
         real request_integral() const;						//return the integral over the entire volume
 		void expand_dim(real lo, real hi, Direction dir);	//expand zero dimension without changing the integral, this is for use in current source
@@ -317,68 +317,102 @@ namespace ffip {
 		
         fVec3 get_p1() const;								//return the lower corner point
         fVec3 get_p2() const;								//return the upper corner point
-		
+
 		//public functions for calculating generic line, face and volume integral
-		template<typename T>
-		static T integral1(const std::vector<real>& x, const T* f);
-		template<typename T>
-		static T integral2(const std::vector<real>& x1, const std::vector<real>& x2, const T* f);
-		template<typename T>
-		static T integral3(const std::vector<real>& x1, const std::vector<real>& x2, const std::vector<real>& x3, const T* f);
     };
-	
+
+
+
+	/* get size of series of vectors, one vector */
 	template<typename T>
-	T GriddedInterp::integral1(const std::vector<real> &x, const T* f) {
-		if(x.size() == 0)
+	inline size_t get_vec_size(const std::vector<T>& vn) {
+		return vn.size();
+	}
+
+	/* get size of series of vectors, template */
+	template<typename T, typename... Args>
+	inline size_t get_vec_size(const std::vector<T>& vn, Args... args) {
+		return vn.size() * get_vec_size(args...);
+	}
+
+	/* n dimensional linear interpolation, 1 dimension
+	   Xn must have fixed interval, otherwise the result does not make sense*/
+	template<typename T>
+	inline T interp_ndim(const T* data, const real xn, const std::vector<real>& Xn) {
+		if (Xn.size() == 0)
+			throw std::runtime_error("number of coordinates are zero");
+
+		if (Xn.size() == 1)		//ignore this dimension if it is 1
+			return data[0];
+
+		if (xn > Xn.back() || xn < Xn.front())
+			return 0;			//zero if it is outside of the region
+
+		real index = (xn - Xn[0]) / (Xn.back() - Xn.front()) * (Xn.size() - 1);
+
+		return (index - floor(index)) * data[(int)index + 1] + (ceil(index) - index) * data[(int)index];
+	}
+
+	/* n dimensional linear interpolation, template 
+	   Xn must have fixed interval, otherwise the result does not make sense*/
+	template<typename T, typename... Args>
+	inline T interp_ndim(const T* data, const real xn, const std::vector<real>& Xn, Args... args) {
+		if (Xn.size() == 0)
+			throw std::runtime_error("number of coordinates are zero");
+
+		if (Xn.size() == 1)		//ignore this dimension if it is 1
+			return interp_ndim(data, args...);
+
+		if (xn > Xn.back() || xn < Xn.front())
+			return 0;			//zero if it is outside of the region
+
+		real index = (xn - Xn[0]) / (Xn.back() - Xn.front()) * (Xn.size() - 1);
+		size_t shift = get_vec_size(args...);
+
+		return (index - floor(index)) * interp_dim(data + shift, args...) + (ceil(index) - index) *  interp_dim(data, args...);
+	}
+	
+	/* n dimensional linear integration, 1 dimension, 
+	   xn does not need to have fixed interval*/
+	template<typename T>
+	T integral_ndim(const T* data, const std::vector<real> &xn) {
+		if(xn.size() == 0)
 			throw std::runtime_error("Invalid array size");
 		
-		if(x.size() == 1)					//treat one point integration like a delta function, this allows a automatic calculation of surface, line and point integral
-			return f[0];
+		// ignore zero dimension
+		if(xn.size() == 1)
+			return data[0];
 		
-		int size = x.size();
-		T res = 0.5 * (x[1] - x[0]) * f[0] + 0.5 * (x[size - 1] - x[size - 2]) * f[size-1];
+		int size = xn.size();
+		T res = 0.5 * (xn[1] - xn[0]) * data[0] + 0.5 * (xn[size - 1] - xn[size - 2]) * data[size-1];
 		
 		for(int i = 1; i < size - 1; ++i) {
-			res += 0.5 * f[i] * (x[i + 1] - x[i - 1]);
+			res += 0.5 * data[i] * (xn[i + 1] - xn[i - 1]);
 		}
 		
 		return res;
 	}
 	
-	template<typename T>
-	T GriddedInterp::integral2(const std::vector<real> &x1, const std::vector<real> &x2, const T* f) {
-		if(x1.size() == 1)
-			return integral1(x2, f);
+	/* n dimensional linear integration, template,
+	xn does not need to have fixed interval*/
+	template<typename T, typename... Args>
+	T integral_ndim(const T* data, const std::vector<real> &xn, Args... args) {
+		if (xn.size() == 0)
+			throw std::runtime_error("Invalid array size");
+
+		// ignore zero dimension
+		if (xn.size() == 1)
+			return integral_ndim(data, args...);
 		
-		if(x2.size() == 1)
-			return integral1(x1, f);
 		
-		std::vector<T> tmp(x1.size());
-		for(int i = 0; i < x1.size(); ++i) {
-			tmp[i] = integral1<T>(x2, f + i * x2.size());
+		std::vector<T> tmp(xn.size());
+		size_t shift = get_vec_size(args...);
+
+		for(int i = 0; i < xn.size(); ++i) {
+			tmp[i] = integral_ndim(data + shift * i, args...);
 		}
 		
-		return integral1(x1, tmp.data());
-	}
-	
-	template<typename T>
-	T GriddedInterp::integral3(const std::vector<real> &x1, const std::vector<real> &x2, const std::vector<real> &x3, const T *f) {
-		
-		if(x1.size() == 1)
-			return integral2(x2, x3, f);
-		
-		if(x2.size() == 1)
-			return integral2(x1, x3, f);
-		
-		if(x3.size() == 1)
-			return integral2(x1, x2, f);
-		
-		std::vector<T> tmp(x1.size());
-		for(int i = 0; i < x1.size(); ++i) {
-			tmp[i] = integral2<T>(x2, x3, f + i * x2.size() * x3.size());
-		}
-		
-		return integral1(x1, tmp.data());
+		return integral_ndim(tmp.data(), xn);
 	}
 
 	/* PML class for calculating k, b, c arrays used in updating perfectly matched layer using CPML*/
@@ -445,8 +479,4 @@ namespace ffip {
 		bool is_empty();
 		size_t size();
 	};
-	
-	
-	
-	
 }

@@ -221,14 +221,47 @@ namespace ffip {
 	
 	void Chunk::update_padded_H(real time) {}
 	
-	real Chunk::operator[](const iVec3 &p) const{
+	real Chunk::at(const fVec3& p, const Coord_Type ctype) const{
+		return operator()(p * (2 / dx), ctype);
+	}
+
+	real Chunk::operator()(const iVec3 &p) const {
+		if (!ElementWise_Less_Eq(ch_p1, p) || !ElementWise_Less_Eq(p, ch_p2))
+			return 0;
+
 		return eh[(p.x - ch_origin.x) * ch_jump_x + (p.y - ch_origin.y) * ch_jump_y + (p.z - ch_origin.z) * ch_jump_z];
 	}
-	
-	real Chunk::get_field(const iVec3 &p, const Coord_Type ctype) const{
+
+	real Chunk::operator()(const iVec3& p, const Coord_Type ctype) const {
+		if (!ElementWise_Less_Eq(ch_p1, p) || !ElementWise_Less_Eq(p, ch_p2))
+			return 0;
+
 		return ave(ctype ^ p.get_type(), get_index_ch(p));
 	}
-	
+
+	real Chunk::interp_helper(const real* data, const real w) const{
+		return data[0] * (1 - w) + data[1] * w;
+	}
+
+	real Chunk::operator()(const fVec3& p, const Coord_Type ctype) const {
+		if (!ElementWise_Less_Eq(ch_p1, p) || !ElementWise_Less_Eq(p, ch_p2))
+			return 0;
+
+		static real f[8];
+		
+		auto tmp = get_component_closure(p, p, ctype);
+		int base_index_ch = get_index_ch(tmp.first);
+
+		for (int i = 0; i < 8; ++i)
+			f[i] = eh[base_index_ch + !(i & 1) * ch_jump_x + !(i & 2) * ch_jump_y + !(i & 4) * ch_jump_z];
+
+		return interp_helper(f, 
+			(p.z - tmp.first.z) / 2,
+			(p.y - tmp.first.y) / 2,
+			(p.x - tmp.first.x) / 2
+			);
+	}
+
 	template<>
 	int Chunk::ave_helper(const int bit, const int index, const int jump) const{
 		if(bit & 1) {

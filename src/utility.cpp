@@ -145,27 +145,21 @@ namespace ffip {
 		
 		int n, m, p;
 		f1 >> n >> m >> p;
-		for(int i = 0; i < n; ++i) {
-			real tmp;
-			f1 >> tmp;
-			x.push_back(tmp);
-		}
+		f1 >> x0 >> y0 >> z0;
+		f1 >> dx >> dy >> dz;
 		
-		for(int i = 0;i < m; ++i) {
-			real tmp;
-			f1 >> tmp;
-			y.push_back(tmp);
-		}
-		
-		for(int i = 0; i < p; ++i) {
-			real tmp;
-			f1 >> tmp;
-			y.push_back(tmp);
-		}
-		
-		for(int i = 0; i < n; ++i)
-			for(int j = 0; j < m; ++j)
-				for(int k = 0; k < p; ++k) {
+		for (int i = 0; i < n; ++i)
+			x.push_back(x0 + i * dx);
+
+		for (int j = 0; j < m; ++j)
+			y.push_back(y0 + j * dy);
+
+		for (int k = 0; k < p; ++k)
+			z.push_back(z0 + k * dz);
+
+		for (int k = 0; k < p; ++k)
+			for (int j = 0; j < m; ++j)
+				for (int i = 0; i < n; ++i) {
 					real tmp;
 					f1 >> tmp;
 					v.push_back(tmp);
@@ -178,111 +172,15 @@ namespace ffip {
 		init();
 	}
 	
-	void GriddedInterp::set_tol(real _tol) {
-		tol = _tol;
-	}
-	
 	void GriddedInterp::init() {
-		for(int i = 1; i < x.size(); ++i)
-			if(x[i] < x[i - 1])
-				throw runtime_error("Monotone series x is requried");
-		
-		for(int i = 1; i < y.size(); ++i)
-			if(y[i] < y[i - 1])
-				throw runtime_error("Monotone series y is requried");
-		
-		for(int i = 1; i < z.size(); ++i)
-			if(z[i] < z[i - 1])
-				throw runtime_error("Monotone series z is requried");
-		
-		if (x.size() == 1)
-			active_dim[0] = 0;
-		else
-			active_dim[0] = 1;
-		
-		if (y.size() == 1)
-			active_dim[1] = 0;
-		else
-			active_dim[1] = 1;
-		
-		if (z.size() == 1)
-			active_dim[2] = 0;
-		else
-			active_dim[2] = 1;
-		
-		dim = active_dim[0] + active_dim[1] + active_dim[2];
-		
-		for(int i = 0; i < active_dim[0] * 2; ++i)
-			for(int j = 0; j < active_dim[1] * 2; ++j)
-				for(int k = 0; k < active_dim[2] * 2; ++k) {
-					int tmp = i * y.size() * z.size() + j * z.size() + k;
-					jump_arr.push_back(tmp);
-				}
-		
-		size = jump_arr.size();
-		val_arr.resize(size);
-		loc_jump_x = y.size() * z.size();
-		loc_jump_y = z.size();
-		loc_jump_z = 1;
+		loc_jump_x = 1;
+		loc_jump_y = x.size();
+		loc_jump_z = x.size() * y.size();
 	}
 	
-	int GriddedInterp::add_val_arr(const std::vector<real> &v, real x, int &index) const{
-		/* igore 0 dimension*/
-		if(v.size() == 1) return 0;
-		
-		if(x < v.front() - tol || x > v.back() + tol)
-			return -1;
-		
-		x = max(x, v.front());				//geometry tolorance is important
-		x = min(x, v.back());
-		
-		auto itr = lower_bound(v.begin(), v.end(), x);
-		/* -1 if out of bound*/
-		
-		if(*itr == x)
-			if(itr == v.begin())
-				itr++;
-		
-		real v1 = *itr - x;
-		real v0 = x - *(itr - 1);
-		
-		if (index) {
-			for(int i = index; i < (index << 1); ++i)
-				val_arr[i] = val_arr[i - index] * v1;
-			
-			for(int i = 0; i < index; ++i)
-				val_arr[i] *= v0;
-			
-			index = (index << 1);
-		} else {
-			index = 2;
-			val_arr[0] = v0;
-			val_arr[1] = v1;
-		}
-		
-		return distance(itr - 1, v.begin());
-	}
 	
 	real GriddedInterp::request_value(const fVec3& p) const{
-		real res = 0;
-		int tail = 0;
-		
-		int idx_z = add_val_arr(z, p.z, tail);
-		if(idx_z < 0) return 0;
-		
-		int idx_y = add_val_arr(y, p.y, tail);
-		if(idx_y < 0) return 0;
-		
-		int idx_x = add_val_arr(x, p.x, tail);
-		if(idx_x < 0) return 0;
-		
-		int base_index = idx_x * loc_jump_x + idx_y * loc_jump_y + idx_z * loc_jump_z;
-		
-		for(int i = 0; i < size; ++i) {
-			res += val_arr[i] * v[jump_arr[i ^ (size - 1)] + base_index];
-		}
-		
-		return res;
+		return interp_ndim(v.data(), p.z, z, p.y, y, p.x, x);
 	}
 	
 	void GriddedInterp::expand_dim(real lo, real hi, Direction dir) {
@@ -344,7 +242,7 @@ namespace ffip {
 	}
 	
 	real GriddedInterp::request_integral() const {
-		return integral3(x, y, z, v.data());
+		return integral_ndim(v.data(), z, y, x);
 	}
 	
 	fVec3 GriddedInterp::get_p1() const{
@@ -355,6 +253,9 @@ namespace ffip {
 		return {x.back(), y.back(), z.back()};
 	}
 	
+	inline real interp_helper(const real* data, const real w) {
+		return data[0] * w + data[1] * w;
+	}
 	
 	/* PML */
 	PML::PML(Direction _dir, Side _side): dir(_dir), side(_side) {}

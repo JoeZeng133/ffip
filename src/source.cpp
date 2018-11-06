@@ -91,7 +91,7 @@ namespace ffip {
 		}
 	}
 	
-	real Plane_Wave::operator[](const iVec3 &p) const {
+	real Plane_Wave::operator()(const iVec3 &p) const {
 		if(p.z < 0 || p.z > (n << 1))
 			throw std::runtime_error("Access exceeds domain");
 		
@@ -286,12 +286,12 @@ namespace ffip {
 		std::vector<TFSF_Surface> tfsf_list;
 		
 		/* generate TF surfaces*/
-		tfsf_list.emplace_back(TFSF_Surface{iVec3{tf2.x, tf1.y, tf1.z}, iVec3{tf2.x, tf2.y, tf2.z}, Direction::X, Side::High, 1});	//x+
-		tfsf_list.emplace_back(TFSF_Surface{iVec3{tf1.x, tf1.y, tf1.z}, iVec3{tf1.x, tf2.y, tf2.z}, Direction::X, Side::Low, 1}); //x-
-		tfsf_list.emplace_back(TFSF_Surface{iVec3{tf1.x, tf2.y, tf1.z}, iVec3{tf2.x, tf2.y, tf2.z}, Direction::Y, Side::High, 1}); //y+
-		tfsf_list.emplace_back(TFSF_Surface{iVec3{tf1.x, tf1.y, tf1.z}, iVec3{tf2.x, tf1.y, tf2.z}, Direction::Y, Side::Low, 1}); //y-
-		tfsf_list.emplace_back(TFSF_Surface{iVec3{tf1.x, tf1.y, tf2.z}, iVec3{tf2.x, tf2.y, tf2.z}, Direction::Z, Side::High, 1});	//z+
-		tfsf_list.emplace_back(TFSF_Surface{iVec3{tf1.x, tf1.y, tf1.z}, iVec3{tf2.x, tf2.y, tf1.z}, Direction::Z, Side::Low, 1});	//z-
+		tfsf_list.push_back(TFSF_Surface{iVec3{tf2.x, tf1.y, tf1.z}, iVec3{tf2.x, tf2.y, tf2.z}, Direction::X, Side::High, 1});	//x+
+		tfsf_list.push_back(TFSF_Surface{iVec3{tf1.x, tf1.y, tf1.z}, iVec3{tf1.x, tf2.y, tf2.z}, Direction::X, Side::Low, 1}); //x-
+		tfsf_list.push_back(TFSF_Surface{iVec3{tf1.x, tf2.y, tf1.z}, iVec3{tf2.x, tf2.y, tf2.z}, Direction::Y, Side::High, 1}); //y+
+		tfsf_list.push_back(TFSF_Surface{iVec3{tf1.x, tf1.y, tf1.z}, iVec3{tf2.x, tf1.y, tf2.z}, Direction::Y, Side::Low, 1}); //y-
+		tfsf_list.push_back(TFSF_Surface{iVec3{tf1.x, tf1.y, tf2.z}, iVec3{tf2.x, tf2.y, tf2.z}, Direction::Z, Side::High, 1});	//z+
+		tfsf_list.push_back(TFSF_Surface{iVec3{tf1.x, tf1.y, tf1.z}, iVec3{tf2.x, tf2.y, tf1.z}, Direction::Z, Side::Low, 1});	//z-
 		
 		/* generate SF surfaces */
 		for(int i = 0; i < 6; ++i) {
@@ -364,7 +364,7 @@ namespace ffip {
 				for (int k = c1.z, gk = d1.z; k <= c2.z; k += 2, gk += 2) {
 					int index = i * jump_x + j * jump_y + k * jump_z;
 					
-					jmd[index] += side * TFSF_Mat[dir][type_int] * projector[iVec3{gi + pos_offset.x, gj + pos_offset.y, gk + pos_offset.z}];
+					jmd[index] += side * TFSF_Mat[dir][type_int] * projector(iVec3{gi + pos_offset.x, gj + pos_offset.y, gk + pos_offset.z});
 				}
 	}
 	
