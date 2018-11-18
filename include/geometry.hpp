@@ -104,34 +104,33 @@ namespace ffip {
 	class Solid {
 	public:
 		virtual ~Solid() {}
-		virtual bool get_weights(const fVec3& p, std::vector<real>& weights) const;			//get weights (R^n) of each material at each point, used to calculate mixing materials, if it is outside, weights are 0^n, return 1 if it is inside
+		virtual bool update_weights(const fVec3& p, std::vector<real>& weights) const = 0;			//get weights (R^n) of each material at each point, used to calculate mixing materials, if it is outside, weights are 0^n, return 1 if it is inside
 	};
 	
 	/* a box region with inhomogeneous material property specified by e = rho * e1 + (1 - rho) * e2*/
 	class Inhomogeneous_Box : public Solid, public Box {
 	private:
-		Medium_Type medium1;
-		Medium_Type medium2;
+		int medium1_id, medium2_id;
 		GriddedInterp interp;
 		
 	public:
-		Inhomogeneous_Box(const Medium_Type& _medium1, const Medium_Type& _medium2, const std::string& filename);	//given medium1, give medium2 and filename of the interpolation data of rho
+		Inhomogeneous_Box(const int id1, const int id2, const std::string& filename);	//given medium1, give medium2 and filename of the interpolation data of rho
 		
 		real get_density(const fVec3& p) const;			//return rho at a given point
 		/* override functions*/
-		bool get_weights(const fVec3& p, std::vector<real>& weights) const override;
+		bool update_weights(const fVec3& p, std::vector<real>& weights) const override;
 	};
 	
 	class Homogeneous_Object : public Solid, public Geometry_Node {
 	private:
-		Medium_Type medium;
+		int medium_id;
 		
 	public:
-		Homogeneous_Object(const Geometry_Node& _base, const Medium_Type& _medium);
-		bool get_weights(const fVec3& p, std::vector<real>& weights) const override;
+		Homogeneous_Object(const int id, const Geometry_Node& _base);
+		bool update_weights(const fVec3& p, std::vector<real>& weights) const override;
 	};
 	
-	/* type factory */
+	/* geometry factory */
 	template<typename... Args>
 	Geometry_Node make_sphere(Args&&... args) {
 		return Geometry_Node{new Sphere{std::forward<Args>(args)...}};
@@ -142,6 +141,6 @@ namespace ffip {
 		return Geometry_Node{new Box{std::forward<Args>(args)...}};
 	}
 	
-	Solid* make_solid(const Medium_Type& medium1, const Medium_Type& medium2, const std::string& filename);	//make inhomogeneous regions
-	Solid* make_solid(const Geometry_Node& geom, const Medium_Type& medium);											//make homogeneous regions
+	Solid* make_solid(const int id1, const int id2, const std::string& filename);	//make inhomogeneous regions
+	Solid* make_solid(const int id, const Geometry_Node& geom);											//make homogeneous regions
 }

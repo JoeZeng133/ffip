@@ -12,6 +12,8 @@
 #include <vector>
 
 namespace ffip {
+	class Simulation;
+	class Probe;
 	/* near to far field struct, resides in Simulation class*/
 	class N2F_Face_Base {
 	protected:
@@ -22,10 +24,10 @@ namespace ffip {
 		real dx, dt;		//dx, dt from Simulation
 		fVec3 center;		//center in domain phys coordinates used in defining observation points
 		
-		complex_arr j1, j2, m1, m2;	//{j1, j2, j3}, {m1, m2, m3} are surface currents where j3, m3 are always zeros
+		mutable complex_arr j1, j2, m1, m2;	//{j1, j2, j3}, {m1, m2, m3} are surface currents where j3, m3 are always zeros
 		std::vector<int> x1, x2;	//{x1, x2} are gridded points coordinates that cover the whole N2F face
 		real_arr fx1, fx2;			//{fx1, fx2} are {x1, x2} converetd to domain phys coordinates and subtrated by center coordinates
-		bool is_phase_corrected{0}; //phase needs to be corrected for H at the first time get_NL is called
+		mutable bool is_phase_corrected{0}; //phase needs to be corrected for H at the first time get_NL is called
 		bool is_face{ 0 };			//if it is not a face, ignore it and always output 0 to get_NL
 
 	public:
@@ -49,9 +51,9 @@ namespace ffip {
 	template<typename D>
 	N2F_Face<D>::N2F_Face(const iVec3& _p1, const iVec3& _p2, const Side _side, const real _omega, const real _dx, const real _dt, const fVec3& _center): N2F_Face_Base(_p1, _p2, _side, _omega, _dx, _dt, _center) {
 		//change frame to local coordinates
-		p1 = rotate_frame<D>(p1);
-		p2 = rotate_frame<D>(p2);
-		center = rotate_frame<D>(center);
+		p1 = rotate_frame(p1, D{});
+		p2 = rotate_frame(p2, D{});
+		center = rotate_frame(center, D{});
 		
 		if(!ElementWise_Less_Eq(p1, p2))
 			throw std::runtime_error("Invalid lower and upper points for N2F face");
@@ -102,13 +104,13 @@ namespace ffip {
 		for(auto i : x1)
 			for(auto j : x2) {
 				iVec3 pos{i, j, k};
-				rotate_frame<D::z>(pos);	//get fields using the coordinates in the original ref frame
+				rotate_frame(pos, typename D::z{});	//get fields using the coordinates in the original ref frame
 				
 				/* J = (0, 0, side) cross H, M = (0, 0, -side) cross E */
-				j1[index] += -side * chunk->get_field(pos, dir_traits<D>::X2::H) * exp_omega_n;
-				j2[index] += side * chunk->get_field(pos, dir_traits<D>::X1::H) * exp_omega_n;
-				m1[index] += side * chunk->get_field(pos, dir_traits<D>::X2::E) * exp_omega_n;
-				m2[index] += -side * chunk->get_field(pos, dir_traits<D>::X1::E) * exp_omega_n;
+				j1[index] += -side * (*chunk)(pos, dir_traits<D>::x2::H) * exp_omega_n;
+				j2[index] += side * (*chunk)(pos, dir_traits<D>::x1::H) * exp_omega_n;
+				m1[index] += side * (*chunk)(pos, dir_traits<D>::x2::E) * exp_omega_n;
+				m2[index] += -side * (*chunk)(pos, dir_traits<D>::x1::E) * exp_omega_n;
 				
 				++index;
 			}
@@ -123,11 +125,11 @@ namespace ffip {
 			auto phase_correction = exp(complex_num(0, omega * dt / 2));
 			
 			for(auto& x : m1) {
-				x *= phase_correction;
+				x = x * phase_correction;
 			}
 			
 			for(auto& x : m2) {
-				x *= phase_correction;
+				x = x * phase_correction;
 			}
 			is_phase_corrected = 1;
 		}
@@ -140,10 +142,10 @@ namespace ffip {
 		Vec3<complex_num> N, L;
 		
 		real z = p1.z * dx / 2 - center.z;	//z
-		real beta = omega / ffip::c;		//wave number
+		real beta = omega / ffip::c0;		//wave number
 		int index = 0;
 		
-		op = rotate_frame<D>(op);
+		op = rotate_frame(op, D{});
 		for(auto x : fx1)
 			for(auto y : fx2) {
 				auto phase = exp(complex_num(0, (op.x * x + op.y * y + op.z * z) * beta));
@@ -155,12 +157,12 @@ namespace ffip {
 				++index;
 			}
 		
-		N.x = GriddedInterp::integral2(fx1, fx2, j_int_1.data());
-		N.y = GriddedInterp::integral2(fx1, fx2, j_int_2.data());
+		N.x = integral_ndim(j_int_1.data(), fx1, fx2);
+		N.y = integral_ndim(j_int_2.data(), fx1, fx2);
 		N.z = 0;
 		
-		L.x = GriddedInterp::integral2(fx1, fx2, m_int_1.data());
-		L.y = GriddedInterp::integral2(fx1, fx2, m_int_2.data());
+		L.x = integral_ndim(m_int_1.data(), fx1, fx2);
+		L.y = integral_ndim(m_int_2.data(), fx1, fx2);
 		L.z = 0;
 		
 		return {N, L};
@@ -168,19 +170,16 @@ namespace ffip {
 	
 	class Simulation {
 	private:
-		int step;
-		
+
+		real dt, dx;
 		iVec3 sim_dim;
 		
-		real dt, dx;
-		
+		int step;
 		iVec3 sim_p1, sim_p2;			//domain coordinates of lower, upper points
-		
 		iVec3 ch_p1, ch_p2;		//domain coordinates of lower, upper points
 		
-		
 		Chunk* chunk;
-		Medium_Type* background_medium;
+		int background_medium_id{-1};
 		
 		std::vector<Solid*> solids;
 		std::vector<Current_Source*> current_sources;
@@ -206,13 +205,13 @@ namespace ffip {
 		
 	public:
 		Simulation(const real _dx, const real _dt, const iVec3 _dim);
-		void advance();
+		void advance(std::ostream& os);
 		void add_solid(Solid* solid);
 		void add_source(Source* source);
 		void add_PML_layer(PML* PML);
 		void add_probe(Probe* probe);
 		void add_farfield_probe(const real freq, const fVec3& p);
-		void set_background_medium(Medium_Type* medium);
+		void set_background_medium(const int id);
 		void init();
 
 		/* field access functions*/
@@ -226,5 +225,6 @@ namespace ffip {
 		/* */
 		int get_step() const;
 		real get_dt() const;
+		void output(std::ostream&);
 	};
 }

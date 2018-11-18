@@ -1,3 +1,5 @@
 build_vc/*
 build/*
 build_xcode/*
+*.in
+*.out

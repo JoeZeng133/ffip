@@ -8,7 +8,6 @@ medium.cpp
 chunk.cpp
 geometry.cpp
 analysis.cpp
-chunk.cpp
 source.cpp
 )
 

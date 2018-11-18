@@ -7,7 +7,7 @@ namespace ffip {
 	const real u0 = 1.2566370614e-6;
 	const real pi = boost::math::constants::pi<double>();
 	const real z0 = 376.73031346;
-	const real c = 3e8;
+	const real c0 = 3e8;
 	
 	const int side_low_tag::val = -1;
 	
@@ -19,13 +19,13 @@ namespace ffip {
 		return floor(x);
 	}
 	
-	int side_low_tag::round_wtol(real x) {
-		int res = floor(x);
-		if(x - res < 0.99)
-			return res;
-		else
-			return res + 1;
-	}
+//	int side_low_tag::round_wtol(real x) {
+//		int res = floor(x);
+//		if(x - res < 0.99)
+//			return res;
+//		else
+//			return res + 1;
+//	}
 	
 	const int side_high_tag::val = 1;
 	
@@ -37,13 +37,13 @@ namespace ffip {
 		return ceil(x);
 	}
 	
-	int side_high_tag::round_wtol(real x) {
-		int res = ceil(x);
-		if(res - x < 0.99)
-			return res;
-		else
-			return res - 1;
-	}
+//	int side_high_tag::round_wtol(real x) {
+//		int res = ceil(x);
+//		if(res - x < 0.99)
+//			return res;
+//		else
+//			return res - 1;
+//	}
 	
 	const int odd_tag::val = 1;
 	const int even_tag::val = 0;
@@ -60,6 +60,12 @@ namespace ffip {
 	const Coord_Type dir_z_tag::E = Ez;
 	const Coord_Type dir_z_tag::H = Hz;
 	
+	const Coord_Type ex_tag::ctype = Ex;
+	const Coord_Type ey_tag::ctype = Ey;
+	const Coord_Type ez_tag::ctype = Ez;
+	const Coord_Type hx_tag::ctype = Hx;
+	const Coord_Type hy_tag::ctype = Hy;
+	const Coord_Type hz_tag::ctype = Hz;
 	
 	/* specializations of Vec3*/
 	template<>
@@ -70,14 +76,6 @@ namespace ffip {
 	template<>
 	Coord_Type iVec3::get_type(const Coord_Type other) const {
 		return static_cast<Coord_Type>(other ^ get_type());
-	}
-	
-	fVec3 operator/(const fVec3& a, const real b) {
-		return fVec3{a.x / b, a.y / b, a.z / b};
-	}
-	
-	fVec3 operator*(const iVec3& a, const real b) {
-		return {a.x * b, a.y * b, a.z * b};
 	}
 	
 	/* Gaussian functions */
@@ -94,12 +92,19 @@ namespace ffip {
 		dt = _dt;
 	}
 	
-	real Gaussian_Func::operator()(real time) {
+	real Gaussian_Func::operator()(real time) const{
 		return exp(-a * time * time);
 	}
 	
-	real Gaussian_Func::operator[](int time) {
+	real Gaussian_Func::operator[](int time) const{
 		return operator()(time * dt);
+	}
+	
+	auto Gaussian_Func::get_functor() -> std::function<real(const real)> const {
+		
+		return [=](const real time) -> real {
+			return exp(-a * time * time);
+		};
 	}
 	
 	/* Sinuosuidal Functions*/
@@ -107,11 +112,11 @@ namespace ffip {
 		a = 2 * pi * freq;
 	}
 	
-	real Sinuosuidal_Func::operator()(real time) {
+	real Sinuosuidal_Func::operator()(real time) const{
 		return sin(a * time);
 	}
 	
-	real Sinuosuidal_Func::operator[](int time) {
+	real Sinuosuidal_Func::operator[](int time) const{
 		return operator()(time * dt);
 	}
 	
@@ -119,17 +124,25 @@ namespace ffip {
 		dt = _dt;
 	}
 	
-	/* ricker wavelet function*/
-	Rickerwavelet_Func::Rickerwavelet_Func(real fp, real d) {
-		a = (pi * fp) * (pi * fp);
+	auto Sinuosuidal_Func::get_functor() -> std::function<real(const real)> const {
+		return [=](const real time) -> real {
+			return sin(a * time);
+		};
 	}
 	
-	real Rickerwavelet_Func::operator()(real time) {
+	/* ricker wavelet function*/
+	Rickerwavelet_Func::Rickerwavelet_Func(real fp, real _d) {
+		a = (pi * fp) * (pi * fp);
+		d = _d;
+	}
+	
+	real Rickerwavelet_Func::operator()(real time) const{
 		real arg = a * (time - d) * (time - d);
+		//std::cout << "testing inside rickerwavelet function " << a  << " " << (time - d) << std::endl;
 		return (1 - 2 * arg) * exp(-arg);
 	}
 	
-	real Rickerwavelet_Func::operator[](int time) {
+	real Rickerwavelet_Func::operator[](int time) const{
 		return operator()(time * dt);
 	}
 	
@@ -137,108 +150,126 @@ namespace ffip {
 		dt = _dt;
 	}
 	
+	auto Rickerwavelet_Func::get_functor() -> std::function<real(const real)> const {
+		return [=](const real time) -> real {
+			real arg = a * (time - d) * (time - d);
+			return (1 - 2 * arg) * exp(-arg);
+		};
+	}
+	
 	/* Gridded Interpolation class*/
 	GriddedInterp::GriddedInterp(string _file_name):file_name(_file_name) {
-		fstream f1(_file_name, ios::in);
-		if(!f1.is_open())
-			throw runtime_error("File name invalid");
+		fstream fin{file_name, ios::in};
+		
+		if (!fin.is_open()) {
+			throw std::runtime_error("Cannot open the interpolation file");
+		}
 		
 		int n, m, p;
-		f1 >> n >> m >> p;
-		f1 >> x0 >> y0 >> z0;
-		f1 >> dx >> dy >> dz;
+		real x0, y0, z0;
+		real dx, dy, dz;
 		
-		for (int i = 0; i < n; ++i)
-			x.push_back(x0 + i * dx);
-
-		for (int j = 0; j < m; ++j)
-			y.push_back(y0 + j * dy);
-
-		for (int k = 0; k < p; ++k)
-			z.push_back(z0 + k * dz);
-
-		for (int k = 0; k < p; ++k)
-			for (int j = 0; j < m; ++j)
-				for (int i = 0; i < n; ++i) {
-					real tmp;
-					f1 >> tmp;
-					v.push_back(tmp);
-				}
+		fin >> n >> m >> p;
 		
-		init();
+		fin >> x0 >> dx;
+		fin >> y0 >> dy;
+		fin >> z0 >> dz;
+		
+		for(int i = 0; i < n; ++i)
+			x.push_back(x0 + dx * i);
+		
+		for(int j = 0; j < m; ++j)
+			y.push_back(y0 + dy * j);
+		
+		for(int k = 0; k < p; ++k)
+			z.push_back(z0 + dz * k);
+		
+		for(int i = 0; i < n * m * p; ++i) {
+			double tmp;
+			fin >> tmp;
+			v.push_back(tmp);
+		}
 	}
 	
-	GriddedInterp::GriddedInterp(const std::vector<real>& _x, const std::vector<real>& _y, const std::vector<real>& _z, const std::vector<real>& _v):x(_x), y(_y), z(_z), v(_v) {
-		init();
+	GriddedInterp::GriddedInterp(const iVec3& dim, const fVec3& w0, const fVec3& dw, const real_arr& _v):
+	v(_v) {
+		
+		for(int i = 0; i < dim.x; ++i)
+			x.push_back(w0.x + dw.x * i);
+		
+		for(int j = 0; j < dim.y; ++j)
+			y.push_back(w0.y + dw.y * j);
+		
+		for(int k = 0; k < dim.z; ++k)
+			z.push_back(w0.z + dw.z * k);
 	}
-	
-	void GriddedInterp::init() {
-		loc_jump_x = 1;
-		loc_jump_y = x.size();
-		loc_jump_z = x.size() * y.size();
-	}
-	
+
 	
 	real GriddedInterp::request_value(const fVec3& p) const{
 		return interp_ndim(v.data(), p.z, z, p.y, y, p.x, x);
 	}
 	
-	void GriddedInterp::expand_dim(real lo, real hi, Direction dir) {
-		real ratio_lo, ratio_hi;
-		vector<real> new_v;
+	void GriddedInterp::expand_dim_helper(std::vector<real> &w, const real lo, const real hi, const Direction dir) {
+		if(w.size() > 1 || lo > w[0] || hi < w[0] || lo >= hi) return;		//no need to expand if it is already non-zero dimension or w[0] is not inside [lo, hi]
 		
+		real ratio_lo, ratio_hi;
+		vector<real> new_v(v.size() * 2);
+		
+		ratio_lo = 2 * (hi - w[0]) / (hi - lo) / (hi - lo);			//the lower elements need to be multiplied by a linear interpolation ratio and divided by the length spanned by [lo, hi] to maintain the same integral
+		ratio_hi = 2 * (w[0] - lo) / (hi - lo) / (hi - lo);			//the same goes for high elements
+		
+		Vec3<size_t> new_dim = {x.size() + (dir == X), y.size() + (dir == Y), z.size() + (dir == Z)};
+		Vec3<size_t> jump = {1, x.size(), x.size() * y.size()};
+		Vec3<size_t> new_jump = {1, new_dim.x, new_dim.x * new_dim.y};
+		
+		auto get_index = [](const size_t x, const size_t y, const size_t z, const Vec3<size_t>& jump) -> size_t {
+			return x * jump.x + y * jump.y + z * jump.z;
+		};//used for calculation of index
+		
+		//get new value arrays based on interpolation
+		for(int i = 0; i < x.size(); ++i)
+			for(int j = 0; j < y.size(); ++j)
+				for(int k = 0; k < z.size(); ++k) {
+					size_t index = get_index(i, j, k, jump);
+					size_t new_index_lo = get_index(i, j, k, new_jump);
+					size_t new_index_hi = get_index(i + (dir == X), j + (dir == Y), k + (dir == Z), new_jump);
+					
+					new_v[new_index_lo] = ratio_lo * v[index];
+					new_v[new_index_hi] = ratio_hi * v[index];
+				}
+		
+		//final udpates
+		w[0] = lo;
+		w.push_back(hi);
+		v = std::move(new_v);
+	}
+	
+	void GriddedInterp::expand_dim(const real lo, const real hi, const Direction dir) {
 		switch (dir) {
 			case Direction::X:
-				if(x.size() > 1 || lo > x[0] || hi < x[0]) break;		//no need to expand if it is already non-zero dimension or x[0] is not inside [lo, hi]
-				
-				ratio_lo = (hi - x[0]) / (hi - lo) / (hi - lo);			//the lower elements need to be multiplied by a linear interpolation ratio and divided by the length spanned by [lo, hi] to maintain the same integral
-				ratio_hi = (x[0] - lo) / (hi - lo) / (hi - lo);			//the same goes for high elements
-				new_v.resize(v.size() * 2);
-				
-				for(int j = 0; j < y.size(); ++j)
-					for(int k = 0; k < z.size(); ++k) {
-						int index = j * loc_jump_y + k * loc_jump_z;
-						new_v[index] = ratio_lo * v[index];
-						new_v[index + loc_jump_x] = ratio_hi * v[index];
-					}
-				v = std::move(new_v);
+				expand_dim_helper(x, lo, hi, dir);
 				break;
 				
 			case Direction::Y:
-				if(y.size() > 1 || lo > y[0] || hi < y[0]) break;
-				
-				ratio_lo = (hi - y[0]) / (hi - lo) / (hi - lo);
-				ratio_hi = (y[0] - lo) / (hi - lo) / (hi - lo);
-				new_v.resize(v.size() * 2);
-				
-				for(int i = 0; i < x.size(); ++i)
-					for(int k = 0; k < z.size(); ++k) {
-						int index = i * loc_jump_x + k * loc_jump_z;
-						new_v[index] = ratio_lo * v[index];
-						new_v[index + loc_jump_y] = ratio_hi * v[index];
-					}
-				v = std::move(new_v);
+				expand_dim_helper(y, lo, hi, dir);
 				break;
 				
 			case Direction::Z:
-				if(z.size() > 1 || lo > z[0] || hi < z[0]) break;
-				
-				ratio_lo = (hi - z[0]) / (hi - lo) / (hi - lo);
-				ratio_hi = (z[0] - lo) / (hi - lo) / (hi - lo);
-				new_v.resize(v.size() * 2);
-				
-				for(int i = 0; i < x.size(); ++i)
-					for(int j = 0; j < y.size(); ++j) {
-						int index = i * loc_jump_x + j * loc_jump_y;
-						new_v[index] = ratio_lo * v[index];
-						new_v[index + loc_jump_z] = ratio_hi * v[index];
-					}
-				v = std::move(new_v);
+				expand_dim_helper(z, lo, hi, dir);
 				break;
 				
 			default:
 				break;
 		}
+	}
+	
+	void GriddedInterp::scale_xyz(const real sx, const real sy, const real sz) {
+		if (sx == 0 || sy == 0 || sz == 0)
+			throw runtime_error("The scale factor cannot be zero");
+		
+		for_each(x.begin(), x.end(), [=](real &x){x *= sx;});
+		for_each(y.begin(), y.end(), [=](real &y){y *= sy;});
+		for_each(z.begin(), z.end(), [=](real &z){z *= sz;});
 	}
 	
 	real GriddedInterp::request_integral() const {
@@ -260,6 +291,8 @@ namespace ffip {
 	/* PML */
 	PML::PML(Direction _dir, Side _side): dir(_dir), side(_side) {}
 	
+	PML::PML(Direction _dir, Side _side, real _d): d(_d), dir(_dir), side(_side) {}
+	
 	PML::PML(Direction _dir, Side _side, real _d, real _sigma_max): d(_d), sigma_max(_sigma_max), dir(_dir), side(_side) {}
 	
 	Direction PML::get_dir() const {
@@ -278,24 +311,24 @@ namespace ffip {
 		return pow(x / d, m) * sigma_max;
 	}
 	
-	real PML::get_chi(const real x) const {
-		return 1 + (chi_max - 1) * pow(x / d, m);
+	real PML::get_k(const real x) const {
+		return 1 + (k_max - 1) * pow(x / d, m);
 	}
 	
 	real PML::get_a(const real x) const {
 		return a_max * pow(1 - x / d, m_a);
 	}
 	
-	real PML::get_b(const real x) const {
-		return exp(-dt * (get_sigma(x) / e0 / get_chi(x) + get_a(x) / e0));
+	real PML::get_b(const real x, const real dt) const {
+		return exp(-(get_sigma(x) / get_k(x) + get_a(x)) * dt / e0);
 	}
 	
-	real PML::get_c(const real x) const {
-		return get_sigma(x) * (get_b(x) - 1) / (get_sigma(x) * get_chi(x) + get_chi(x) * get_chi(x) * get_a(x));
+	real PML::get_c(const real x, const real dt) const {
+		return get_sigma(x) * (get_b(x, dt) - 1) / (get_sigma(x) * get_k(x) + get_k(x) * get_k(x) * get_a(x));
 	}
 	
-	real PML::optimal_sigma_max(real m_k, real dt, real er, real ur) {
-		return 0.8 * (m_k + 1) / (z0 * dt * sqrt(er * ur));
+	real PML::optimal_sigma_max(real m_k, real dx, real er, real ur) {
+		return 0.8 * (m_k + 1) / (z0 * dx * sqrt(er * ur));
 	}
 	
 	/* PML point constructor*/
@@ -304,40 +337,53 @@ namespace ffip {
 	
 	
 	my_iterator::my_iterator(const iVec3& p1, const iVec3& p2, Coord_Type ctype) {
-		auto tmp = get_component_interior(p1, p2, ctype);
-		if(ElementWise_Less_Eq(p1, p2)) {
-			x = x0 = tmp.first.x;
-			y = y0 = tmp.first.y;
-			z = z0 = tmp.first.z;
-			x1 = tmp.second.x;
-			y1 = tmp.second.y;
-			z1 = tmp.second.z;
+		decltype(get_component_interior(p1, p2, ctype)) tmp;
+		
+		// loop through points inside [p1, p2]. Null means loop through every types of points
+		if (ctype != Coord_Type::Null)  {
+			tmp = get_component_interior(p1, p2, ctype);
+			jump = 2;
 		} else {
-			x = x1 + 1;
+			tmp = {p1, p2};
+			jump = 1;
 		}
+		
+		x = x0 = tmp.first.x;
+		y = y0 = tmp.first.y;
+		z = z0 = tmp.first.z;
+		x1 = tmp.second.x;
+		y1 = tmp.second.y;
+		z1 = tmp.second.z;
+		
+		if (is_empty())			//so that is_end is always true
+			z = z1 + 1;
 	}
 	
 	void my_iterator::advance() {
 		index++;
-		if((z += 2) > z1) {
-			z = z0;
-			if((y += 2) > y1) {
-				y = 0;
-				x += 2;
+		if((x += jump) > x1) {
+			x = x0;
+			if((y += jump) > y1) {
+				y = y0;
+				z += jump;
 			}
 		}
 	}
 	
-	bool my_iterator::is_end() {
-		return x > x1;
+	bool my_iterator::is_end() const{
+		return z > z1;
 	}
 	
-	bool my_iterator::is_empty() {
+	bool my_iterator::is_empty() const{
 		return x0 > x1 || y0 > y1 || z0 > z1;
 	}
 	
-	size_t my_iterator::size() {
-		return is_empty()? 0 : (size_t)((x1 - x0 + 2) >> 1) * ((y1 - y0 + 2) >> 1) * ((z1 - z0 + 2) >> 1);
+	size_t my_iterator::size() const{
+		return is_empty()? 0 : (size_t)((x1 - x0) / jump + 1) * ((y1 - y0) / jump + 1) * ((z1 - z0) / jump + 1);
+	}
+	
+	iVec3 my_iterator::get_vec() const {
+		return {x, y, z};
 	}
 
 }

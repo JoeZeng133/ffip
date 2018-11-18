@@ -85,10 +85,9 @@ namespace ffip {
 		return res*=f;
 	}
 	
-	
-	
 	/* Pole_base and derived classes*/
 	void Pole_Base::set_dt(real _dt) {dt = _dt;}
+	void Pole_Base::set_e0(real _e0) {e0 = _e0;}
 	int Lorents_Pole::id = 0x100;
 	int Deybe_Pole::id = 0x200;
 	int Drude_Pole::id = 0x400;
@@ -180,22 +179,29 @@ namespace ffip {
 	}
 	
 	/* Medium used for scripting*/
+	Medium_Type::Medium_Type(real _epsilon_inf, real _sigma, real _e0): epsilon_inf(_epsilon_inf), sigma(_sigma), e0(_e0) {
+		sigma /= abs(e0);
+	}
+	
 	Medium_Type::~Medium_Type() {
-		for(auto& i : poles) {
+		for(auto i : poles) {
 			delete i;
 		}
 	}
 	
 	void Medium_Type::add_Lorentz_pole(real epsilon, real fp, real delta) {
 		poles.push_back(new Lorents_Pole{epsilon, fp * 2 * pi, delta * 2 * pi});
+		poles.back()->set_e0(e0);
 	}
 	
 	void Medium_Type::add_Deybe_pole(real epsilon, real tau) {
 		poles.push_back(new Deybe_Pole{epsilon, tau / (2 * pi)});
+		poles.back()->set_e0(e0);
 	}
 	
 	void Medium_Type::add_Drude_pole(real fp, real gamma) {
 		poles.push_back(new Drude_Pole{fp * 2 * pi, gamma * 2 * pi});
+		poles.back()->set_e0(e0);
 	}
 	
 	void Medium_Type::set_dt(real _dt) {
@@ -205,13 +211,15 @@ namespace ffip {
 		}
 	}
 	
-	Medium_Type::Medium_Type(real _epsilon_inf, real _sigma): epsilon_inf(_epsilon_inf), sigma(_sigma) {}
+	void Medium_Type::set_id(const int _id) {
+		id = _id;
+	}
 	
 	Medium_Internal Medium_Type::get_medium_internal() const {
 		Medium_Internal res;
 		
-		real omega1 = 2 * e0 * epsilon_inf / dt + sigma;
-		real omega2 = 2 * e0 * epsilon_inf / dt - sigma;
+		real omega1 = 2 * e0 * epsilon_inf / dt + sigma * e0;
+		real omega2 = 2 * e0 * epsilon_inf / dt - sigma * e0;
 		real omega3 = 0;
 		
 		for(auto pole : poles) {
@@ -227,21 +235,32 @@ namespace ffip {
 		return res;
 	}
 	
-	Medium_Type* make_medium(real epsilon_inf, real sigma) {
-		medium_type_holder.push_back(Medium_Type(epsilon_inf, sigma));
-		medium_internal_holder.push_back(medium_type_holder.back().get_medium_internal());
-		medium_type_holder.back().set_id(medium_type_holder.size() - 1);
+	
+	/* medium factory */
+	size_t top = 0;
+	std::vector<Medium_Type> electric_medium_type_holder;
+	std::vector<Medium_Type> magnetic_medium_type_holder;
+	std::vector<Medium_Internal> electric_medium_internal_holder;
+	std::vector<Medium_Internal> magnetic_medium_internal_holder;
+	
+	int make_medium(const real epsilon_inf, const real sigma_epsilon, const real mu_inf, const real sigma_mu) {
 		
-		return &medium_type_holder.back();
+		electric_medium_type_holder.push_back(Medium_Type(epsilon_inf, sigma_epsilon, e0));
+		electric_medium_type_holder.back().set_id(top);
+		
+		magnetic_medium_type_holder.push_back(Medium_Type(mu_inf, sigma_mu, -u0));
+		magnetic_medium_type_holder.back().set_id(top);
+		
+		return top++;
 	}
 	
-	Medium_Internal* get_medium_internal(const std::vector<real>& weights) {
+	Medium_Internal* get_medium_internal(const std::vector<real>& weights, const bool is_electric_point) {
 		constexpr real tol = 1e-4;
 		int nonzeros = 0;
 		real total = 0;
 		Medium_Internal* res = nullptr;
 		
-		if(weights.size() != medium_type_holder.size())
+		if(weights.size() != top)
 			throw std::runtime_error("Mixing numbers have wrong length");
 		
 		/* rounding down parameters*/
@@ -252,8 +271,10 @@ namespace ffip {
 			}
 		}
 		
+		auto& medium_internal_holder = is_electric_point? electric_medium_internal_holder : magnetic_medium_internal_holder;
+		
 		if(nonzeros > 1) {								//for the case of mixing more than 1 material
-			medium_internal_holder.push_back(Medium_Internal{});
+			medium_internal_holder.push_back(Medium_Internal{});			//generate a mixing material at the back
 			for(int i = 0; i < weights.size(); ++i)
 				if (weights[i] > tol){
 					medium_internal_holder.back() += medium_internal_holder[i] * (weights[i] / total);
@@ -264,14 +285,27 @@ namespace ffip {
 			for(int i = 0; i < weights.size(); ++i) {
 				if (weights[i] > tol) {
 					res = &medium_internal_holder[i];
+					break;
 				}
 			}
 		}
-		
 		return res;
 	}
 	
 	std::vector<real> get_zero_weights() {
-		return std::vector<real>(medium_type_holder.size(), 0);
+		return std::vector<real>(top, 0);
 	}
+	
+	void prepare_medium_internal(const real _dt) {
+		for(auto& item : electric_medium_type_holder) {
+			item.set_dt(_dt);
+			electric_medium_internal_holder.push_back(item.get_medium_internal());
+		}
+		
+		for(auto& item : magnetic_medium_type_holder) {
+			item.set_dt(_dt);
+			magnetic_medium_internal_holder.push_back(item.get_medium_internal());
+		}
+	}
+
 }

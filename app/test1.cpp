@@ -1,13 +1,8 @@
-//#include <simulation.hpp>
+/* testing utility->integral_ndim and interp_ndim*/
+
 #include <utility.hpp>
-//#include <chunk.hpp>
-#include <geometry.hpp>
-#include <source.hpp>
-//#include <medium.hpp>
-//#include <analysis.hpp>
-#include <iostream>
-#include <cmath>
-#include <vector>
+#include <cstdio>
+#include <fstream>
 
 using namespace std;
 using namespace ffip;
@@ -15,13 +10,24 @@ using namespace ffip;
 using D = dir_x_tag;
 
 int main() {
-	iVec3 tmp {1, 2, 3};
+//	auto interp = GriddedInterp("data.in");s
 	
-	tmp = rotate_frame(tmp, D{});
-	cout << tmp.x << " " << tmp.y << " " << tmp.z << endl;
+//	fstream fin{"request.in", ios::in};
+//	int r;
+//	fin >> r;
+//
+//	for(int i = 0; i < r; ++i) {
+//		double x, y, z;
+//		fin >> x >> y >> z;
+//		cout << interp.request_value({x, y, z}) <<  " ";
+//	}
+//
+//	fin.close();
 	
-	tmp = rotate_frame(tmp, dir_traits<D>::z{});
 	
-	
-	cout << tmp.x << " " << tmp.y << " " << tmp.z << endl;
+//
+//	cout << endl << interp.request_integral() << endl;
+//	interp.expand_dim(-1, 2, Z);
+//	cout << endl << interp.request_integral() << endl;
+
 }

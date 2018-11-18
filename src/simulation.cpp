@@ -7,7 +7,7 @@ namespace ffip {
 			is_face = true;
 	}
 	
-	Simulation::Simulation(const real _dx, const real _dt, const iVec3 _dim): dx(_dx), dt(_dt), sim_dim(_dim) {}
+	Simulation::Simulation(const real _dx, const real _dt, const iVec3 _dim): dt(_dt), dx(_dx), sim_dim(_dim) {}
 
 	void Simulation::probe_init() {}
 
@@ -50,52 +50,65 @@ namespace ffip {
 	}
 
 	void Simulation::medium_init() {
+		if (background_medium_id == -1)
+			background_medium_id = make_medium(1, 0, 1, 0);
+		
+		prepare_medium_internal(dt);
 		const int N = 3;
-		if (background_medium == nullptr)
-			background_medium = make_medium(1, 0);
-											
-		for(int x = ch_p1.x; x <= ch_p2.x; ++x)
-			for(int y = ch_p1.y; y <= ch_p2.y; ++y)
-				for(int z = ch_p1.z; z <= ch_p2.z; ++z) {
-					/* assign material only when it is E or H*/
-					iVec3 p = {x, y, z};
-					if (p.get_type() == Coord_Type::Null || p.get_type() == Coord_Type::Center)
-						continue;
-					
-					/* spatial averaging to get materials*/
-					fVec3 box_p1{(x - 1) * dx / 2, (y - 1) * dx / 2, (z - 1) * dx / 2};
-					real delta = dx / (2 * N);
-					auto weights = get_zero_weights();
-					
-					for(int i = 1; i < 2 * N; i += 2)
-						for(int j = 1; j < 2 * N; j += 2)
-							for(int k = 1; k < 2 * N; k += 2) {
-								auto sampled_point = box_p1 + fVec3{i * delta, j * delta, k * delta};
-								bool assigned = 0;
-								
-								for(auto item : solids) {
-									if (item->get_weights(sampled_point, weights)) {
-										assigned = 1;
-										break;
-									}
-								}
-								
-								if (!assigned)			//assign background medium;
-									weights[background_medium->id] += 1;
-							}
-					
-					chunk->set_medium_point(p, get_medium_internal(weights));
+		real delta = dx / (2 * N);
+		std::vector<fVec3> sampled_points;
+		for(int i = 1; i < 2 * N; i += 2)
+			for(int j = 1; j < 2 * N; j += 2)
+				for(int k = 1; k < 2 * N; k += 2) {
+					sampled_points.push_back({i * delta, j * delta, k * delta});
 				}
+	
+		for(auto itr = my_iterator(ch_p1, ch_p2, Null); !itr.is_end(); itr.advance()) {
+			/* assign material only when it is E or H*/
+			auto p = itr.get_vec();
+			auto ctype = p.get_type();
+			
+			if (ctype == Coord_Type::Null || ctype == Coord_Type::Center || ctype == Coord_Type::Corner)			//exclude non-material points
+				continue;
+			
+			/* spatial averaging to get materials
+			   naive sampling integration over a cube
+			   can be improved using adaptive quadrature
+			   and ray tracing
+			 */
+			fVec3 box_p1{(p.x - 1) * dx / 2, (p.y - 1) * dx / 2, (p.z - 1) * dx / 2};
+			auto weights = get_zero_weights();
+			
+			for(auto& item : sampled_points) {
+				auto sampled_point = box_p1 + item;
+				bool assigned = 0;
+			
+				for(auto item : solids) {
+					if (item->update_weights(sampled_point, weights)) {	//it is true when it is inside the solid
+						assigned = 1;
+						break;
+					}
+				}
+			
+				if (!assigned)			//assign background medium;
+					weights[background_medium_id] += 1;
+			}
+			
+			if (ctype == Ex || ctype == Ey || ctype == Ez)
+				chunk->set_medium_point(p, get_medium_internal(weights, 1));
+			else
+				chunk->set_medium_point(p, get_medium_internal(weights, 0));
+		}
 	}
 	
 	void Simulation::source_init() {
 		for(auto item : current_sources) {
-			item->init(dx, chunk->get_p1(), chunk->get_p2(), chunk->get_dim(), chunk->get_origin());
+			item->init(dx, ch_p1, ch_p2, chunk->get_dim(), chunk->get_origin());
 			chunk->add_source_internal(item->get_source_internal());
 		}
 		
 		for(auto item : eigen_sources) {
-			item->init({0, 0, 0}, sim_dim * 2, chunk->get_dim(), chunk->get_origin(), chunk->get_p1(), chunk->get_p2());
+			item->init({0, 0, 0}, sim_dim, chunk->get_dim(), chunk->get_origin(), ch_p1, ch_p2);
 			chunk->add_source_internal(item->get_source_internal());
 		}
 	}
@@ -108,29 +121,41 @@ namespace ffip {
 		chunk->PML_init(kx, ky, kz, bx, by, bz, cx, cy, cz);
 	}
 	
-	void PML_init_helper(const PML& neg, const PML& pos, real_arr& k, real_arr& b, real_arr& c, const int p1, const int p2) {
-		k.resize(p2 - p1 + 1);
-		b.resize(k.size());
-		c.resize(k.size());
+	void Simulation::PML_init_helper(const PML& neg, const PML& pos, real_arr& k, real_arr& b, real_arr& c, const int p1, const int p2) {
+		size_t dim = p2 - p1;		//[0, dim]
 		
-		for(int i = 0; i <= neg.get_d(); ++i) {
-			real d = neg.get_d() - i / 2.0;
+		k.resize(dim + 1, 1);
+		b.resize(k.size(), 1);
+		c.resize(k.size(), 0);
+
+		for(int i = 0; i < 2 * neg.get_d(); ++i) {
+			real x = neg.get_d() - i / 2.0;
 			
-			k[i] = neg.get_chi(d);
-			b[i] = neg.get_b(d);
-			c[i] = neg.get_c(d);
+			k[i] = neg.get_k(x);
+			b[i] = neg.get_b(x, dt);
+			c[i] = neg.get_c(x, dt);
 		}
 		
-		for(int i = 0; i <= pos.get_d(); ++i) {
-			real d = pos.get_d() - i / 2.0;
+		for(int i = 0; i < 2 * pos.get_d(); ++i) {
+			real x = pos.get_d() - i / 2.0;
 			
-			k[p2 - i] = pos.get_chi(d);
-			b[p2 - i] = pos.get_b(d);
-			c[p2 - i] = pos.get_c(d);
+			k[dim - i] = pos.get_k(x);
+			b[dim - i] = pos.get_b(x, dt);
+			c[dim - i] = pos.get_c(x, dt);
 		}
 	}
 	
 	void Simulation::chunk_init() {
+		sim_dim = sim_dim * 2;
+		
+		// TMz simulation
+//		sim_p1 = {0, 0, 1};
+//		sim_p2 = {sim_dim.x, sim_dim.y, 1};
+
+		sim_p1 = {0, 0, 0};
+		sim_p2 = sim_dim;
+		//dimension is in computational units, so they are two times the original values
+		
 		//add TFSF faces
 		if (!eigen_sources.empty()) {
 			sim_p1 = sim_p1 - iVec3{ 1, 1, 1 };
@@ -155,7 +180,7 @@ namespace ffip {
 		sim_p2.z += 2 * PMLs[2][1].get_d();
 
 		//implementaions of MPI, for now 1 chunk covers the whole region
-		chunk = new Chunk{sim_p1, sim_p2, ch_p1, ch_p2, dx, dt};
+		chunk = new Chunk{sim_p1, sim_p2, sim_p1, sim_p2, dx, dt};
 		ch_p1 = chunk->get_p1();
 		ch_p2 = chunk->get_p2();
 	}
@@ -165,6 +190,7 @@ namespace ffip {
 		PML_init();
 		source_init();
 		medium_init();
+		step = 0;
 	}
 	
 	void Simulation::add_source(Source *source) {
@@ -186,8 +212,9 @@ namespace ffip {
 			PMLs[PML->get_dir()][0] = *PML;
 	}
 	
-	void Simulation::set_background_medium(Medium_Type * medium) {
-		background_medium = medium;
+	void Simulation::set_background_medium(const int id) {
+		if (id >= 0)
+			background_medium_id = id;
 	}
 
 	void Simulation::add_probe(Probe* probe) {
@@ -199,22 +226,26 @@ namespace ffip {
 		N2F_pos.push_back(p);
 	}
 	
-	void Simulation::advance() {
+	void Simulation::advance(std::ostream& os) {
+		std::cout << "Stepping from" << step << " to " << step + 1 << std::endl;
 		real time = (step ++ ) * dt;
+		//std::cout << "testing inside simulation" << dt << std::endl;
 		chunk->update_Md(time);
-		chunk->update_H2B(time);
+		chunk->update_B2H(time);
 		
-		chunk->update_Jd(time);
-		chunk->update_D2E(time);
+		chunk->update_Jd(time + 0.5 * dt);
+		chunk->update_D2E(time + 0.5 * dt);
 		
 		chunk->update_padded_E(time);
 		chunk->update_padded_H(time);
 
 		for (auto item : probes)
 			item->update(*this);
+		
+		
 	}
 
-	real Simulation::at(const fVec3& p, const Coord_Type ctype) {
+	real Simulation::at(const fVec3& p, const Coord_Type ctype) const{
 		return chunk->at(p, ctype);
 	}
 
@@ -233,4 +264,15 @@ namespace ffip {
 	int Simulation::get_step() const{
 		return step;
 	}
+	
+	real Simulation::get_dt() const {
+		return dt;
+	}
+	
+	void Simulation::output(std::ostream &o) {
+		for(auto item : probes) {
+			item->output(o);
+		}
+	}
 }
+

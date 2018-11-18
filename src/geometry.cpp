@@ -136,7 +136,7 @@ namespace ffip {
 	
 	bool Geometry_Node::is_in_closure(const fVec3 &point) const {
 		if(val)
-			return val->is_in_interior(point);
+			return val->is_in_closure(point);
 		else {
 			switch (op) {
 				case operation::plus:
@@ -175,18 +175,18 @@ namespace ffip {
 	}
 	
 	/* Inhomogeneous box*/
-	Inhomogeneous_Box::Inhomogeneous_Box(const Medium_Type& _medium1, const Medium_Type& _medium2, const std::string& filename): medium1(_medium1), medium2(_medium2), interp{filename} {
+	Inhomogeneous_Box::Inhomogeneous_Box(const int id1, const int id2, const std::string& filename): medium1_id(id1), medium2_id(id2), interp{filename} {
 		
 		Box::init(interp.get_p1(), interp.get_p2());
 	}
 	
-	bool Inhomogeneous_Box::get_weights(const fVec3& p, std::vector<real> &weights) const {
+	bool Inhomogeneous_Box::update_weights(const fVec3& p, std::vector<real> &weights) const {
 		if (!is_in_interior(p))
 			return 0;
 		else {
 			real density = get_density(p);
-			weights[medium1.id] += density;
-			weights[medium2.id] += 1 - density;
+			weights[medium1_id] += density;
+			weights[medium2_id] += 1 - density;
 			return 1;
 		}
 	}
@@ -195,23 +195,29 @@ namespace ffip {
 		return interp.request_value(p);
 	}
 	
-	Homogeneous_Object::Homogeneous_Object(const Geometry_Node& _base, const Medium_Type& _medium): Geometry_Node(_base), medium(_medium) {}
+	Homogeneous_Object::Homogeneous_Object(const int id, const Geometry_Node& _base): Geometry_Node(_base), medium_id(id) {}
 	
-	bool Homogeneous_Object::get_weights(const fVec3 &p, std::vector<real> &weights) const {
+	bool Homogeneous_Object::update_weights(const fVec3 &p, std::vector<real> &weights) const {
 		if (!is_in_interior(p))
 			return 0;
 		else {
-			weights[medium.id] += 1;
+			weights[medium_id] += 1;
 			return 1;
 		}
 	}
 	
-	Solid* make_solid(const Medium_Type& medium1, const Medium_Type& medium2, const std::string& filename) {
-		return new Inhomogeneous_Box{medium1, medium1, filename};
+	/* geometry factory */
+	std::vector<Inhomogeneous_Box> inhom_box_holder;
+	std::vector<Homogeneous_Object> hom_box_holder;
+	
+	Solid* make_solid(const int id1, const int id2 , const std::string& filename) {
+		inhom_box_holder.push_back(Inhomogeneous_Box{id1, id2, filename});
+		return &inhom_box_holder.back();
 	}
 	
-	Solid* make_solid(const Geometry_Node& geom, const Medium_Type& medium) {
-		return new Homogeneous_Object{geom, medium};
+	Solid* make_solid(const int id, const Geometry_Node& geom) {
+		hom_box_holder.push_back(Homogeneous_Object{id, geom});
+		return &hom_box_holder.back();
 	}
 }
 

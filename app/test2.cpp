@@ -1,75 +1,34 @@
-//template<int N, typename T, typename... Args>
-//class A: public A<N - 1, Args...> {
-//protected:
-//	using base = A<N - 1, Args...>;
-//	int extend;
-//
-//private:
-//	T arr;
-//	bool active{0};
-//
-//
-//public:
-//	A(const T& _arr, const Args&... args): base(args...), arr(_arr)
-//	{
-//		if(arr.size() > 1) {
-//			active = 1;
-//			base::val.resize(base::val.size() * 2);
-//			base::jump.resize(base::jump.size() * 2);
-//		}
-//	}
-//
-//	int get_coeff(const double x) {
-//		if (!active) {
-//			extend = base::extend;
-//			return extend;
-//		}
-//
-//		int prev = base::get_coeff();
-//		if(prev == -1) //capture if point is outside
-//			return -1;
-//
-//		auto itr = lower_bound(arr.begin(), arr.end(), x);
-//		if(itr == arr.begin() || itr == arr.end()) //point is outside
-//			return -1;
-//
-//		int idx = distance(itr, arr.begin());
-//
-//		//update val array
-//		for(int i = prev; i < (prev << 1); ++i)
-//			base::val[i] = base::val[i - prev] * (arr[idx] - x);
-//
-//		for(int i = 0; i < prev; ++i)
-//			base::val[i] *= (x - arr[idx - 1]);
-//
-//		extend = prev << 1;
-//		return extend;
-//	}
-////
-////	int get_jump() {
-////		if(!active)
-////			return base::get_jump();
-////
-////		int res = arr.size() * base::get_jump();
-////
-////
-////
-////		return res;
-////	}
-//};
-//
-//template<>
-//class A<1, vector<double>> {
-//protected:
-//	vector<double> val;
-//	vector<int> jump;
-//
-//private:
-//	vector<double> arr;
-//public:
-//	A(const vector<double>& _arr): arr(_arr) {}
-//};
+/* test plane wave projector */
+
+#include <simulation.hpp>
+
+using namespace std;
+using namespace ffip;
 
 int main() {
+	double courant = 1;
+	double dt = 2e-17 / 50;
+	double dx = c * dt / courant;
+	int n = 30;
+	int Np = 40;
 	
+	auto func = Sinuosuidal_Func(c / (Np * dx));
+	
+	auto plane_sim = Plane_Wave(dx, dt, n);
+	
+	plane_sim.set_excitation(func);
+	plane_sim.set_PML_neg(PML(X, Low, 0));
+	plane_sim.set_PML_pos(PML(X, High, 6, PML::optimal_sigma_max(3, dx)));
+	plane_sim.init();
+	
+
+	for(int i = 0; i < 200; ++i) {
+		plane_sim.advance();
+//		for(int j = 0; j <= n; ++j)
+//			cout << plane_sim.at({0, 0, dx * j}, Ex) << " ";
+//		cout << endl;
+	}
+//	
+	
+//	Simulation tmp{1e-9, 1e-9, iVec3{20, 50, 50}};
 }

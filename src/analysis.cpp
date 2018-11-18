@@ -1,36 +1,64 @@
 #include <analysis.hpp>
 
 namespace ffip {
+	Probe_Time::Probe_Time(const fVec3& _pos, const int _time_step): pos(_pos), time_step(_time_step) {}
+	
 	void Probe_Time::update(const Simulation& sim) {
 		if (sim.get_step() == time_step) {
-			ex = sim(pos, Ex);
-			ey = sim(pos, Ey);
-			ez = sim(pos, Ez);
+			ex = sim.at(pos, Ex);
+			ey = sim.at(pos, Ey);
+			ez = sim.at(pos, Ez);
 
-			hx = sim(pos, Hx) / 2;
-			hy = sim(pos, Hy) / 2;
-			hz = sim(pos, Hz) / 2;
+			hx = sim.at(pos, Hx) / 2;
+			hy = sim.at(pos, Hy) / 2;
+			hz = sim.at(pos, Hz) / 2;
 		}
 
 		if (sim.get_step() == time_step + 1) {
-			hx += sim(pos, Hx) / 2;
-			hy += sim(pos, Hy) / 2;
-			hz += sim(pos, Hz) / 2;
+			hx += sim.at(pos, Hx) / 2;
+			hy += sim.at(pos, Hy) / 2;
+			hz += sim.at(pos, Hz) / 2;
 		}
 	}
+	
+	void Probe_Time::output(std::ostream & o) {
+		o << std::scientific;
+		o << ex << " " << ey << " " << ez << " " << hx << " " << hy <<  " " << hz << std::endl;
+	}
+	
+	Probe_Frequency::Probe_Frequency(const fVec3& _pos, const real freq): pos(_pos), omega(2 * pi * freq) {}
 
 	void Probe_Frequency::update(const Simulation& sim) {
-		real phase = -sim.get_step() * sim.get_dt() * omega;
+		dt = sim.get_dt();
+		real phase = -sim.get_step() * dt * omega;
 		complex_num exp_omega_n = { cos(phase), sin(phase) };
 
-		ex += sim(pos, Ex) * exp_omega_n;
-		ey += sim(pos, Ey) * exp_omega_n;
-		ez += sim(pos, Ez) * exp_omega_n;
+		ex += sim.at(pos, Ex) * exp_omega_n;
+		ey += sim.at(pos, Ey) * exp_omega_n;
+		ez += sim.at(pos, Ez) * exp_omega_n;
 
-		hx += sim(pos, Hx) * exp_omega_n;
-		hy += sim(pos, Hx) * exp_omega_n;
-		hz += sim(pos, Hz) * exp_omega_n;
+		hx += sim.at(pos, Hx) * exp_omega_n;
+		hy += sim.at(pos, Hy) * exp_omega_n;
+		hz += sim.at(pos, Hz) * exp_omega_n;
 	}
 
-
+	void Probe_Frequency::output(std::ostream &o) {
+		if (!phase_corrected) {
+			phase_corrected = true;
+			complex_num correction = complex_num{cos(0.5 * dt * omega), sin(0.5 * dt * omega)};		//exp(0.5dtw)
+			
+			hx *= correction;
+			hy *= correction;
+			hz *= correction;
+		}
+		
+		o << std::scientific;
+		o <<
+		ex.real() << " " << ex.imag() << " " <<
+		ey.real() << " " << ey.imag() << " " <<
+		ez.real() << " " << ez.imag() << " " <<
+		hx.real() << " " << hx.imag() << " " <<
+		hy.real() << " " << hy.imag() << " " <<
+		hz.real() << " " << hz.imag() << " " << std::endl;
+	}
 }

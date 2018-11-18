@@ -35,6 +35,12 @@ namespace ffip {
 		void PML_init(const real_arr& kx, const real_arr& ky, const real_arr& kz,
 					  const real_arr& bx, const real_arr& by, const real_arr& bz,
 					  const real_arr& cx, const real_arr&cy, const real_arr&cz);		//provide with PML parameters in the entire simulation
+		//generic getter
+		template<typename T>
+		const int get_ch_jump() const;
+		
+		template<typename T>
+		const real get_k(const int id) const;
 		
 		//getter for dimension
 		iVec3 get_dim() const;
@@ -44,18 +50,20 @@ namespace ffip {
 		int get_index_ch(const iVec3& p) const;			//get index relative to chunk origin
 		
 		/* Jd, Md (currenst, curl) updates*/
-		void update_Jd(real time);
-		void update_Md(real time);
-		void update_JMd_helper(const Coord_Type Fx, const Coord_Type fy, const Coord_Type fz, std::vector<PML_Point>& PML);
+		void update_Jd(const real time);		//D(n + 1) - D(n) = Jd(n + 0.5) = curl(H(n + 0.5)) - Ji(n + 0.5)
+		void update_Md(const real time);		//B(n + 1) - B(n) = Md(n + 0.5) = -(curl(H(n + 0.5)) + Mi(n + 0.5))
+		
+		template<typename T>
+		void update_JMd_helper();
 		
 		/* Material updates */
-		void update_D2E(real time);
-		void update_H2B(real time);
+		void update_D2E(const real time);
+		void update_B2H(const real time);
 		void update_DEHB_helper(const Coord_Type F);
 		
 		/* MPI members */
-		void update_padded_H(real time);
-		void update_padded_E(real time);
+		void update_padded_H(const real time);
+		void update_padded_E(const real time);
 		
 		/* field access functions*/
 		real at(const fVec3& p, const Coord_Type ctype) const;					//access at float physical coordinates
@@ -88,10 +96,31 @@ namespace ffip {
 
 		template<typename... Args>
 		real interp_helper(const real* data, const real w, Args... args) const{
-			constexpr int N = sizeof...(Args) / 2;
+			constexpr int N = sizeof...(Args);
 			constexpr int shift = 1 << N;
 
 			return interp_helper(data, args...) * (1 - w) + interp_helper(data + shift, args...) * w;
 		}
 	};
+	
+	
+	template<typename T>
+	void Chunk::update_JMd_helper() {
+		/* Curl updates without PML */
+		using dir_base = typename T::dir_base;
+		using x1 = typename dir_base::x1;
+		using x2 = typename dir_base::x2;
+		
+		auto tmp = get_component_interior(ch_p1, ch_p2, T::ctype);
+		auto p1_ch = tmp.first - ch_origin;
+		auto p2_ch = tmp.second - ch_origin;
+		int ch_jump_x1 = get_ch_jump<x1>();
+		int ch_jump_x2 = get_ch_jump<x2>();
+		
+		for(auto itr = my_iterator(p1_ch, p2_ch, p1_ch.get_type()); !itr.is_end(); itr.advance()) {
+			int index = itr.x * ch_jump_x + itr.y * ch_jump_y + itr.z * ch_jump_z;
+			
+			jmd[index] = (eh[index + ch_jump_x1] - eh[index - ch_jump_x1]) / dx / get_k<x1>(choose<x1>::get(itr)) - (eh[index + ch_jump_x2] - eh[index - ch_jump_x2]) / dx / get_k<x2>(choose<x2>::get(itr));
+		}
+	}
 }
