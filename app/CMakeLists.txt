@@ -1,11 +1,16 @@
 project(script)
-add_executable(test1 test1.cpp)
-target_link_libraries(test1 ffip)
-add_executable(test2 test2.cpp)
-target_link_libraries(test2 ffip)
-add_executable(test3 test3.cpp)
-target_link_libraries(test3 ffip)
-add_executable(test4 test4.cpp)
-target_link_libraries(test4 ffip)
-add_executable(test5 test5.cpp)
-target_link_libraries(test5 ffip)
+
+add_executable(Temp_Test Temp_Test.cpp)
+target_link_libraries(Temp_Test ffip)
+
+add_executable(Dipole_Test Dipole_Test.cpp)
+target_link_libraries(Dipole_Test ffip)
+
+add_executable(N2F_Test N2F_Test.cpp)
+target_link_libraries(N2F_Test ffip)
+
+add_executable(Plane_Wave_Test Plane_Wave_Test.cpp)
+target_link_libraries(Plane_Wave_Test ffip)
+
+add_executable(Mie_Test Mie_Test.cpp)
+target_link_libraries(Mie_Test ffip)

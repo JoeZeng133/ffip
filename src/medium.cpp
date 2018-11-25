@@ -1,266 +1,299 @@
 #include <medium.hpp>
 
 namespace ffip {
-	real Medium_Internal::get_omega1() const{
-		return 2/ d3;
+	real Medium_Ref::get_d1() const {
+		return d1;
 	}
 	
-	real Medium_Internal::get_omega2() const{
-		if (isinf(d3))
-			return 0;
-		else
-			return 2 * d1 / d3;
+	real Medium_Ref::get_d2() const {
+		return d2;
 	}
 	
-	real Medium_Internal::get_omega3() const{
-		if (isinf(d3))
-			return 0;
-		else
-			return 2 * d2 / d3;
+	real Medium_Ref::get_d3() const {
+		return d3;
 	}
 	
-	void Medium_Internal::set_d(const real omega1, const real omega2, const real omega3) {
-		d1 = omega2 / omega1;
-		d2 = omega3 / omega1;
-		d3 = 2 / omega1;
+	size_t Medium_Ref::get_size_poles() const {
+		return poles.size();
 	}
 	
-	real Medium_Internal::update_field(real eh, real eh1, real jmd, Dispersive_Field *f2) const{
+	real Medium_Ref::update_field(real eh, real eh1, real norm_db, Dispersive_Field *f2) const{
 		
 		if (poles.empty()) {		/* non dispersive material updates*/
-			return d1 * eh + d3 * jmd;
+			return (2 * norm_db - eh * d2) / d1;
+			
 		} else {					/* update current contributions*/
 			
 			real sum_J = 0;
 			for(int i = 0; i < poles.size(); ++i) {
-				sum_J += f2->jp[i] * poles[i].c1 + f2->jp1[i] * poles[i].c2;
+				auto pole = poles[i];
+				
+				if (pole->a2 == 0) {				//deybe, drue update
+					f2->jp1[i] = f2->jp[i] * pole->a1;
+					sum_J += f2->jp[i] + f2->jp1[i];
+				}
+				else {										//lorentz pole
+					f2->jp1[i] =f2->jp[i] * pole->a1 + f2->jp1[i] * pole->a2;
+					sum_J += f2->jp[i] + f2->jp1[i];
+				}
 			}
 			
 			/* buffer E(n + 1) */
-			real ehp1 = d1 * eh + d3 * (jmd - sum_J);
-			if(d2 > 0) ehp1 += d2 * eh1;					//lorentz material has non-zero d2
+			real ehp1 = (2 * norm_db - sum_J - eh1 * d3 - eh * d2) / d1;
 			
 			/* update currents */
 			for(int i = 0; i < poles.size(); ++i) {
+				auto pole = poles[i];
 				
-				if(poles[i].a2 == 0) {			//Deybe or Drude update
-					f2->jp[i] = f2->jp[i] * poles[i].a1 + ehp1 * poles[i].b0 + eh * poles[i].b1;
+				if(pole->a2 == 0) {			//Deybe or Drude update
+					f2->jp[i] = f2->jp1[i] + (ehp1 * pole->b0 + eh * pole->b1) * weights[i];
 					
 				} else {						//Lorentz update
 					real tmp = f2->jp[i];		//buffer J(n)
-					f2->jp[i] = f2->jp[i] * poles[i].a1 + f2->jp1[i] * poles[i].a2 + ehp1 * poles[i].b0 + eh1 * poles[i].b2;
+					f2->jp[i] = f2->jp1[i] + (ehp1 * pole->b0 + eh1 * pole->b2) * weights[i];
 					f2->jp1[i] = tmp;
 				}
 			}
-			/* update currents*/
 			return ehp1;
 		}
 	}
 	
-	Medium_Internal& Medium_Internal::operator*=(const real f) {
-		d3 /= f;
-		for(auto item : poles) {
-			item.b0 *= f;
-			item.b1 *= f;
-			item.b2 *= f;
-		}
+	Medium_Ref& Medium_Ref::operator*=(const real f) {
+		for(auto& item : weights)
+			item *= f;
 		
+		d1 *= f;
+		d2 *= f;
+		d3 *= f;
 		return *this;
 	}
 	
-	Medium_Internal& Medium_Internal::operator+=(const Medium_Internal &other) {
+	Medium_Ref& Medium_Ref::operator+=(const Medium_Ref &other) {
 		poles.insert(poles.end(), other.poles.begin(), other.poles.end());
-		set_d(get_omega1() + other.get_omega1(), get_omega2() + other.get_omega2(), get_omega3() + other.get_omega3());
+		weights.insert(weights.end(), other.weights.begin(), other.weights.end());
 		
+		d1 += other.d1;
+		d2 += other.d2;
+		d3 += other.d3;
 		return *this;
 	}
 	
-	Medium_Internal Medium_Internal::operator+(const Medium_Internal& other) const {
-		Medium_Internal res{other};
-		return res+=other;
+	Medium_Ref operator+(const Medium_Ref& A, const Medium_Ref& B) {
+		Medium_Ref res{A};
+		return res+=B;
 	}
 	
-	Medium_Internal Medium_Internal::operator*(const real f) const{
-		Medium_Internal res{*this};
+	Medium_Ref operator*(const Medium_Ref& A, const real f) {
+		Medium_Ref res{A};
+		return res*=f;
+	}
+	
+	Medium_Ref operator*(const real f, const Medium_Ref& A) {
+		Medium_Ref res{A};
 		return res*=f;
 	}
 	
 	/* Pole_base and derived classes*/
-	void Pole_Base::set_dt(real _dt) {dt = _dt;}
-	void Pole_Base::set_e0(real _e0) {e0 = _e0;}
-	int Lorents_Pole::id = 0x100;
-	int Deybe_Pole::id = 0x200;
-	int Drude_Pole::id = 0x400;
+	void Pole_Base::set_dt(const real _dt) {dt = _dt;}
+	void Pole_Base::set_index(const int _index) {index = _index;}
+	Pole_Ref Pole_Base::get_ref() const {
+		return Pole_Ref{get_a1(), get_a2(), get_b0(), get_b1(), get_b2()};
+	}
+	
 	/* Lorentz Pole */
+	Lorentz_Pole::Lorentz_Pole(real rel_perm, real freq, real damp): epsilon(rel_perm), omega(freq * 2 * pi), delta(damp * pi) {}
 	
-	
-	Lorents_Pole::Lorents_Pole(real _epsilon, real _omega, real _delta): epsilon(_epsilon), omega(_omega), delta(_delta) {}
-	
-	real Lorents_Pole::get_alpha() {
+	real Lorentz_Pole::get_a1() const {
 		return (2 - omega * omega * dt * dt) / (1 + delta * dt);
 	}
 	
-	real Lorents_Pole::get_xi() {
+	real Lorentz_Pole::get_a2() const {
 		return (delta * dt - 1) / (delta * dt + 1);
 	}
 	
-	real Lorents_Pole::get_gamma() {
-		return e0 * epsilon * omega * omega * dt / 2 / (1 + delta * dt);
+	real Lorentz_Pole::get_b0() const {
+		return epsilon * omega * omega * dt / 2 / (1 + delta * dt);
 	}
 	
-	real Lorents_Pole::get_sigma1() {
-		return get_gamma();
-	}
-	
-	real Lorents_Pole::get_sigma2() {
+	real Lorentz_Pole::get_b1() const {
 		return 0;
 	}
 	
-	real Lorents_Pole::get_sigma3() {
-		return get_gamma();
-	}
-	
-	Pole_Internal Lorents_Pole::get_pole_internal() {
-		return Pole_Internal{get_alpha(), get_xi(), get_gamma(), 0, -get_gamma(), 0.5 * (1 + get_alpha()), get_xi()};
+	real Lorentz_Pole::get_b2() const {
+		return -get_b0();
 	}
 	
 	/* Deybe pole */
-	Deybe_Pole::Deybe_Pole(real _epsilon, real _tau): epsilon(_epsilon), tau(_tau) {}
+	Deybe_Pole::Deybe_Pole(real rel_perm, real relaxation): epsilon(rel_perm), tau(relaxation) {}
 	
-	real Deybe_Pole::get_kappa() {
+	real Deybe_Pole::get_a1() const {
 		return (1 - 0.5 * dt / tau) / (1 + 0.5 * dt / tau);
 	}
 	
-	real Deybe_Pole::get_beta() {
-		return e0 * epsilon / tau / (1 + 0.5 * dt / tau);
-	}
-	
-	real Deybe_Pole::get_sigma1() {
-		return get_beta();
-	}
-	
-	real Deybe_Pole::get_sigma2() {
-		return get_beta();
-	}
-	
-	real Deybe_Pole::get_sigma3() {
+	real Deybe_Pole::get_a2() const {
 		return 0;
 	}
 	
-	Pole_Internal Deybe_Pole::get_pole_internal() {
-		return Pole_Internal{get_kappa(), 0, get_beta(), 0, get_beta(), 0.5 * (1 + get_kappa()), 0};
+	real Deybe_Pole::get_b0() const {
+		return epsilon / tau / (1 + 0.5 * dt / tau);
+	}
+	
+	real Deybe_Pole::get_b1() const {
+		return -get_b0();
+	}
+	
+	real Deybe_Pole::get_b2() const {
+		return 0;
 	}
 	
 	/* Drude pole*/
-	Drude_Pole::Drude_Pole(real _omega, real _gamma): omega(_omega), gamma(_gamma) {}
+	Drude_Pole::Drude_Pole(real freq, real inv_relaxation): omega(freq * 2 * pi), gamma(inv_relaxation * 2 * pi) {}
 	
-	real Drude_Pole::get_kappa() {
+	real Drude_Pole::get_a1() const {
 		return (1 - gamma * dt / 2) / (1 + gamma * dt / 2);
 	}
 	
-	real Drude_Pole::get_beta() {
-		return omega * omega * e0 * dt / 2 / (1 + gamma * dt / 2);
-	}
-	
-	real Drude_Pole::get_sigma1() {
-		return get_beta();
-	}
-	
-	real Drude_Pole::get_sigma2() {
-		return -get_beta();
-	}
-	
-	real Drude_Pole::get_sigma3() {
+	real Drude_Pole::get_a2() const {
 		return 0;
 	}
 	
-	Pole_Internal Drude_Pole::get_pole_internal() {
-		return Pole_Internal{get_kappa(), 0, get_beta(), get_beta(), 0, 0.5 * (1 + get_kappa()), 0};
+	real Drude_Pole::get_b0() const {
+		return omega * omega * dt / 2 / (1 + gamma * dt / 2);
+	}
+	
+	real Drude_Pole::get_b1() const {
+		return get_b0();
+	}
+	
+	real Drude_Pole::get_b2() const {
+		return 0;
 	}
 	
 	/* Medium used for scripting*/
-	Medium_Type::Medium_Type(real _epsilon_inf, real _sigma, real _e0): epsilon_inf(_epsilon_inf), sigma(_sigma), e0(_e0) {
-		sigma /= abs(e0);
+	Medium::~Medium() {
+		for(auto item : e_poles)
+			delete item;
+		
+		for(auto item : m_poles)
+			delete item;
+		
+		for(auto item : e_poles_ref)
+			delete item;
+		
+		for(auto item : m_poles_ref)
+			delete item;
 	}
 	
-	Medium_Type::~Medium_Type() {
-		for(auto i : poles) {
-			delete i;
-		}
+	Medium::Medium(const real _e_inf, const real _sigma_e): e_inf{_e_inf}, sigma_e{_sigma_e} {}
+	
+	Medium::Medium(const real _e_inf, const real _sigma_e, const real _u_inf, const real _sigma_u): Medium{_e_inf, _sigma_e} {
+		u_inf = _u_inf;
+		sigma_u = _sigma_u;
 	}
 	
-	void Medium_Type::add_Lorentz_pole(real epsilon, real fp, real delta) {
-		poles.push_back(new Lorents_Pole{epsilon, fp * 2 * pi, delta * 2 * pi});
-		poles.back()->set_e0(e0);
+	void Medium::add_e_poles(Pole_Base* const  pole) {
+		e_poles.push_back(pole);
 	}
 	
-	void Medium_Type::add_Deybe_pole(real epsilon, real tau) {
-		poles.push_back(new Deybe_Pole{epsilon, tau / (2 * pi)});
-		poles.back()->set_e0(e0);
+	void Medium::add_m_poles(Pole_Base* const pole) {
+		m_poles.push_back(pole);
 	}
 	
-	void Medium_Type::add_Drude_pole(real fp, real gamma) {
-		poles.push_back(new Drude_Pole{fp * 2 * pi, gamma * 2 * pi});
-		poles.back()->set_e0(e0);
+	void Medium::set_index(const int _index) {
+		index = _index;
 	}
 	
-	void Medium_Type::set_dt(real _dt) {
+	void Medium::set_dt(const real _dt) {
 		dt = _dt;
-		for(auto pole : poles) {
-			pole->set_dt(dt);
+		for(auto item : e_poles) {
+			item->set_dt(dt);
+			e_poles_ref.push_back(new Pole_Ref{item->get_ref()});
+		}
+		
+		for(auto item : m_poles) {
+			item->set_dt(dt);
+			m_poles_ref.push_back(new Pole_Ref{item->get_ref()});
 		}
 	}
 	
-	void Medium_Type::set_id(const int _id) {
-		id = _id;
+	real Medium::get_e_inf() const {
+		return e_inf;
 	}
 	
-	Medium_Internal Medium_Type::get_medium_internal() const {
-		Medium_Internal res;
+	real Medium::get_u_inf() const {
+		return u_inf;
+	}
+	
+	real Medium::get_c() const {
+		return c0 / sqrt(e_inf * u_inf);
+	}
+	
+	real Medium::get_z() const {
+		return z0 * sqrt(u_inf / e_inf);
+	}
+	
+	Medium_Ref Medium::get_e_medium_ref() const {
+		Medium_Ref res;
 		
-		real omega1 = 2 * e0 * epsilon_inf / dt + sigma * e0;
-		real omega2 = 2 * e0 * epsilon_inf / dt - sigma * e0;
-		real omega3 = 0;
+		res.weights.resize(e_poles_ref.size(), 1);
+		res.d1 = 2 * e_inf / dt + sigma_e / e0;
+		res.d2 = -2 * e_inf / dt + sigma_e / e0;
+		res.d3 = 0;
 		
-		for(auto pole : poles) {
-			omega1 += pole->get_sigma1();
-			omega2 += pole->get_sigma2();
-			omega3 += pole->get_sigma3();
-			
-			res.poles.push_back(pole->get_pole_internal());
+		for(auto& pole : e_poles_ref) {
+			res.d1 += pole->b0;
+			res.d2 += pole->b1;
+			res.d3 += pole->b2;
+			res.poles.push_back(pole);
 		}
+		return res;
+	}
+	
+	Medium_Ref Medium::get_m_medium_ref() const {
+		Medium_Ref res;
 		
-		res.set_d(omega1, omega2, omega3);
+		res.weights.resize(m_poles_ref.size(), 1);
+		res.d1 = 2 * u_inf / dt + sigma_u / u0;
+		res.d2 = -2 * u_inf / dt + sigma_u / u0;
+		res.d3 = 0;
+		
+		for(auto& pole : m_poles_ref) {
+			res.d1 += pole->b0;
+			res.d2 += pole->b1;
+			res.d3 += pole->b2;
+			res.poles.push_back(pole);
+		}
 		
 		return res;
 	}
 	
 	
-	/* medium factory */
-	size_t top = 0;
-	std::vector<Medium_Type> electric_medium_type_holder;
-	std::vector<Medium_Type> magnetic_medium_type_holder;
-	std::vector<Medium_Internal> electric_medium_internal_holder;
-	std::vector<Medium_Internal> magnetic_medium_internal_holder;
+	/* medium factory, needs to add garbage collecting for poles*/
+	std::vector<std::unique_ptr<Medium>> medium;
+	std::vector<std::unique_ptr<Medium_Ref>> e_medium_ref;
+	std::vector<std::unique_ptr<Medium_Ref>> m_medium_ref;
 	
-	int make_medium(const real epsilon_inf, const real sigma_epsilon, const real mu_inf, const real sigma_mu) {
-		
-		electric_medium_type_holder.push_back(Medium_Type(epsilon_inf, sigma_epsilon, e0));
-		electric_medium_type_holder.back().set_id(top);
-		
-		magnetic_medium_type_holder.push_back(Medium_Type(mu_inf, sigma_mu, -u0));
-		magnetic_medium_type_holder.back().set_id(top);
-		
-		return top++;
+	void prepare_medium(const real _dt) {
+		for(auto& item : medium) {
+			item->set_dt(_dt);
+			e_medium_ref.push_back(std::make_unique<Medium_Ref>(item->get_e_medium_ref()));
+			m_medium_ref.push_back(std::make_unique<Medium_Ref>(item->get_m_medium_ref()));
+		}
 	}
 	
-	Medium_Internal* get_medium_internal(const std::vector<real>& weights, const bool is_electric_point) {
+	std::vector<real> get_zero_weights() {
+		return std::vector<real>(medium.size(), 0);
+	}
+	
+	Medium_Ref const* get_medium_ref(const bool is_electric_point, const std::vector<real>& weights) {
+		
 		constexpr real tol = 1e-4;
 		int nonzeros = 0;
 		real total = 0;
-		Medium_Internal* res = nullptr;
+		Medium_Ref* res = nullptr;
+		auto& medium_ref = is_electric_point? e_medium_ref : m_medium_ref;
 		
-		if(weights.size() != top)
+		if(weights.size() != medium.size())
 			throw std::runtime_error("Mixing numbers have wrong length");
 		
 		/* rounding down parameters*/
@@ -271,41 +304,26 @@ namespace ffip {
 			}
 		}
 		
-		auto& medium_internal_holder = is_electric_point? electric_medium_internal_holder : magnetic_medium_internal_holder;
-		
 		if(nonzeros > 1) {								//for the case of mixing more than 1 material
-			medium_internal_holder.push_back(Medium_Internal{});			//generate a mixing material at the back
+			medium_ref.push_back(std::unique_ptr<Medium_Ref>{});			//generate a mixing material at the back
 			for(int i = 0; i < weights.size(); ++i)
 				if (weights[i] > tol){
-					medium_internal_holder.back() += medium_internal_holder[i] * (weights[i] / total);
+					*medium_ref.back() += *medium_ref[i] * (weights[i] / total);
 				}
-			res = &medium_internal_holder.back();
+			res = medium_ref.back().get();
 		}
 		else if (nonzeros == 1){						//for the case of only 1 material
 			for(int i = 0; i < weights.size(); ++i) {
 				if (weights[i] > tol) {
-					res = &medium_internal_holder[i];
+					res = medium_ref[i].get();
 					break;
 				}
 			}
 		}
+		
+		if (res == nullptr)
+			throw std::runtime_error("Illegal weights");
+		
 		return res;
 	}
-	
-	std::vector<real> get_zero_weights() {
-		return std::vector<real>(top, 0);
-	}
-	
-	void prepare_medium_internal(const real _dt) {
-		for(auto& item : electric_medium_type_holder) {
-			item.set_dt(_dt);
-			electric_medium_internal_holder.push_back(item.get_medium_internal());
-		}
-		
-		for(auto& item : magnetic_medium_type_holder) {
-			item.set_dt(_dt);
-			magnetic_medium_internal_holder.push_back(item.get_medium_internal());
-		}
-	}
-
 }

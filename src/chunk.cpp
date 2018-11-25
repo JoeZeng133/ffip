@@ -1,7 +1,7 @@
 #include <chunk.hpp>
 
 namespace ffip {
-	Chunk::Chunk(const iVec3& _sim_p1, const iVec3& _sim_p2, const iVec3& _ch_p1, const iVec3& _ch_p2, real _dx, real _dt):  sim_p1(_sim_p1), sim_p2(_sim_p2), ch_p1(_ch_p1), ch_p2(_ch_p2), dx(_dx), dt(_dt) {
+	Chunk::Chunk(const iVec3& _sim_p1, const iVec3& _sim_p2, const iVec3& _ch_p1, const iVec3& _ch_p2, real _dx, real _dt):  ch_p1(_ch_p1), ch_p2(_ch_p2), sim_p1(_sim_p1), sim_p2(_sim_p2), dx(_dx), dt(_dt) {
 		
 		ch_origin = ch_p1 - iVec3{1, 1, 1};
 		ch_dim = ch_p2 - ch_p1 + iVec3{3, 3, 3};
@@ -16,6 +16,8 @@ namespace ffip {
 		medium_chunk.resize(eh.size(), nullptr);
 		dispersive_field_chunk.resize(eh.size(), nullptr);
 		
+		for(int i = 0; i < 8; ++i)
+			jump[i ^ 0b111] = 1 << (!(i & 1) + !(i & 2) + !(i & 4));
 	}
 	
 	iVec3 Chunk::get_dim() const{
@@ -38,9 +40,16 @@ namespace ffip {
 		return (p.x - ch_origin.x) * ch_jump_x + (p.y - ch_origin.y) * ch_jump_y + (p.z - ch_origin.z) * ch_jump_z;
 	}
 	
-	void Chunk::set_medium_point(const iVec3 &point, Medium_Internal * const medium_internal) {
+	void Chunk::set_medium_point(const iVec3 &point, Medium_Ref const* medium_ref) {
 		int index = get_index_ch(point);
-		medium_chunk[index] = medium_internal;
+		medium_chunk[index] = medium_ref;
+		
+		size_t num_poles = medium_ref->get_size_poles();
+		if (num_poles > 0) {
+			dispersive_field_chunk[index] = new Dispersive_Field{};
+			dispersive_field_chunk[index]->jp.resize(num_poles);
+			dispersive_field_chunk[index]->jp1.resize(num_poles);
+		}
 	}
 	
 	void Chunk::add_source_internal(Source_Internal *const source) {
@@ -200,12 +209,18 @@ namespace ffip {
 		auto tmp = get_component_interior(ch_p1, ch_p2, F);
 		auto p1_ch = tmp.first - ch_origin;
 		auto p2_ch = tmp.second - ch_origin;
+		real modifier;							//normalize fields er*E = D/e0, ur * H = B/u0;
+		
+		if (is_E_point(F))
+			modifier = 1 / e0;
+		else
+			modifier = -1 / u0;
 		
 		for(auto itr = my_iterator(p1_ch, p2_ch, p1_ch.get_type()); !itr.is_end(); itr.advance()) {
 					int index = itr.x * ch_jump_x + itr.y * ch_jump_y + itr.z * ch_jump_z;
 					real tmp = eh[index];
 					
-					eh[index] = medium_chunk[index]->update_field(eh[index], eh1[index], jmd[index], dispersive_field_chunk[index]);
+					eh[index] = medium_chunk[index]->update_field(eh[index], eh1[index], modifier * jmd[index], dispersive_field_chunk[index]);
 					eh1[index] = tmp;
 				}
 	}
@@ -256,7 +271,7 @@ namespace ffip {
 	}
 
 	template<>
-	int Chunk::ave_helper(const int bit, const int index, const int jump) const{
+	real Chunk::ave_helper(const int bit, const int index, const int jump) const{
 		if(bit & 1) {
 			return eh[index - jump] + eh[index + jump];
 		}else{
@@ -264,8 +279,8 @@ namespace ffip {
 		}
 	}
 	
-	int Chunk::ave(const int bit, const int index) const{
-		return ave_helper(bit, index, ch_jump_x, ch_jump_y, ch_jump_z) / jump[bit].size();
+	real Chunk::ave(const int bit, const int index) const{
+		return ave_helper(bit, index, ch_jump_z, ch_jump_y, ch_jump_x) / jump[bit];
 	}
 	
 }

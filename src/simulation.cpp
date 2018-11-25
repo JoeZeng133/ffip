@@ -2,58 +2,47 @@
 #include <iostream>
 
 namespace ffip {
-	N2F_Face_Base::N2F_Face_Base(const iVec3& _p1, const iVec3& _p2, const Side _side, const real _omega, const real _dx, const real _dt, const fVec3& _center): p1(_p1), p2(_p2), side(_side), omega(_omega), dx(_dx), dt(_dt), center(_center) {
-		if ((p1.x == p2.x) + (p1.y == p2.y) + (p1.z == p2.z) == 2 && ElementWise_Less_Eq(p1, p2))
-			is_face = true;
-	}
-	
 	Simulation::Simulation(const real _dx, const real _dt, const iVec3 _dim): dt(_dt), dx(_dx), sim_dim(_dim) {}
 
 	void Simulation::probe_init() {}
 
 	void Simulation::N2F_init() {
-		auto center = sim_dim * (dx / 2 / 2);
-		iVec3 N2F_p1s[6] = { 
-			iVec3{ N2F_p1.x, N2F_p1.y, N2F_p1.z } ,		//x-
-			iVec3{ N2F_p2.x, N2F_p1.y, N2F_p1.z } ,		//x+
-			iVec3{ N2F_p1.x, N2F_p1.y, N2F_p1.z } ,		//y-
-			iVec3{ N2F_p1.x, N2F_p2.y, N2F_p1.z } ,		//y+
-			iVec3{ N2F_p1.x, N2F_p1.y, N2F_p1.z } ,		//z-
-			iVec3{ N2F_p1.x, N2F_p1.y, N2F_p2.z } };	//z+
-
-		iVec3 N2F_p2s[6] = {
-			iVec3{ N2F_p1.x, N2F_p2.y, N2F_p2.z } ,
-			iVec3{ N2F_p2.x, N2F_p2.y, N2F_p2.z } ,
-			iVec3{ N2F_p2.x, N2F_p1.y, N2F_p2.z } ,
-			iVec3{ N2F_p2.x, N2F_p2.y, N2F_p2.z } ,
-			iVec3{ N2F_p2.x, N2F_p2.y, N2F_p1.z } ,
-			iVec3{ N2F_p2.x, N2F_p2.y, N2F_p2.z } };
-
+		//make frequency unique
+		N2F_omega_unique = N2F_omega;
+		std::sort(N2F_omega_unique.begin(), N2F_omega_unique.end());
+		auto it = std::unique(N2F_omega_unique.begin(), N2F_omega_unique.end());
+		N2F_omega_unique.resize(std::distance(N2F_omega_unique.begin(), it));
+		
+		//generate six N2F_surfaces
+		auto center = (N2F_p1 + N2F_p2) * (dx / 4);
 		std::pair<iVec3, iVec3> faces[6];
-
-		for (int i = 0; i < 6; ++i) {
-			faces[i] = get_intersection(N2F_p1s[i], N2F_p2s[i], ch_p1, ch_p2);
+		faces[0] = get_face<dir_x_tag, side_low_tag>(N2F_p1, N2F_p2);
+		faces[1] = get_face<dir_x_tag, side_high_tag>(N2F_p1, N2F_p2);
+		faces[2] = get_face<dir_y_tag, side_low_tag>(N2F_p1, N2F_p2);
+		faces[3] = get_face<dir_y_tag, side_high_tag>(N2F_p1, N2F_p2);
+		faces[4] = get_face<dir_z_tag, side_low_tag>(N2F_p1, N2F_p2);
+		faces[5] = get_face<dir_z_tag, side_high_tag>(N2F_p1, N2F_p2);
+		
+		for(int i = 0; i < 6; ++i) {
+			faces[i] = get_intersection(faces[i].first, faces[i].second, ch_p1, ch_p2);
+			faces[i] = get_component_interior(faces[i].first, faces[i].second, N2F_p1.get_type());
 		}
-
-		for (auto omega : N2F_freq) {
-			if (N2F_faces.find(omega) == N2F_faces.end()) {
-				
-				N2F_faces[omega] = {
-					new N2F_Face<dir_x_tag>{ faces[0].first, faces[0].second, Side::Low, omega, dx, dt, center },
-					new N2F_Face<dir_x_tag>{ faces[1].first, faces[1].second, Side::High, omega, dx, dt, center },
-					new N2F_Face<dir_y_tag>{ faces[2].first, faces[2].second, Side::Low, omega, dx, dt, center },
-					new N2F_Face<dir_y_tag>{ faces[3].first, faces[3].second, Side::High, omega, dx, dt, center },
-					new N2F_Face<dir_z_tag>{ faces[4].first, faces[4].second, Side::Low, omega, dx, dt, center },
-					new N2F_Face<dir_z_tag>{ faces[5].first, faces[5].second, Side::High, omega, dx, dt, center } };
-				}
-			}
+		
+		N2F_faces = {
+			new N2F_Face<dir_x_tag>{ N2F_p1, N2F_p2, faces[0].first, faces[0].second, Side::Low, N2F_omega_unique, dx, dt, center, bg_medium},
+			new N2F_Face<dir_x_tag>{ N2F_p1, N2F_p2, faces[1].first, faces[1].second, Side::High, N2F_omega_unique, dx, dt, center, bg_medium},
+			new N2F_Face<dir_y_tag>{ N2F_p1, N2F_p2, faces[2].first, faces[2].second, Side::Low, N2F_omega_unique, dx, dt, center, bg_medium},
+			new N2F_Face<dir_y_tag>{ N2F_p1, N2F_p2, faces[3].first, faces[3].second, Side::High, N2F_omega_unique, dx, dt, center, bg_medium},
+			new N2F_Face<dir_z_tag>{ N2F_p1, N2F_p2, faces[4].first, faces[4].second, Side::Low, N2F_omega_unique, dx, dt, center, bg_medium},
+			new N2F_Face<dir_z_tag>{ N2F_p1, N2F_p2, faces[5].first, faces[5].second, Side::High, N2F_omega_unique, dx, dt, center, bg_medium}
+		};
 	}
 
 	void Simulation::medium_init() {
-		if (background_medium_id == -1)
-			background_medium_id = make_medium(1, 0, 1, 0);
+		if (bg_medium == nullptr)
+			bg_medium = make_medium(1, 0, 1, 0);
 		
-		prepare_medium_internal(dt);
+		prepare_medium(dt);
 		const int N = 3;
 		real delta = dx / (2 * N);
 		std::vector<fVec3> sampled_points;
@@ -68,7 +57,7 @@ namespace ffip {
 			auto p = itr.get_vec();
 			auto ctype = p.get_type();
 			
-			if (ctype == Coord_Type::Null || ctype == Coord_Type::Center || ctype == Coord_Type::Corner)			//exclude non-material points
+			if (!is_H_point(ctype) && !is_E_point(ctype))			//exclude non-material points
 				continue;
 			
 			/* spatial averaging to get materials
@@ -91,13 +80,14 @@ namespace ffip {
 				}
 			
 				if (!assigned)			//assign background medium;
-					weights[background_medium_id] += 1;
+					weights[bg_medium->index] += 1;
 			}
 			
-			if (ctype == Ex || ctype == Ey || ctype == Ez)
-				chunk->set_medium_point(p, get_medium_internal(weights, 1));
+			
+			if (is_E_point(ctype))
+				chunk->set_medium_point(p, get_medium_ref(1, weights));
 			else
-				chunk->set_medium_point(p, get_medium_internal(weights, 0));
+				chunk->set_medium_point(p, get_medium_ref(0, weights));
 		}
 	}
 	
@@ -108,7 +98,7 @@ namespace ffip {
 		}
 		
 		for(auto item : eigen_sources) {
-			item->init({0, 0, 0}, sim_dim, chunk->get_dim(), chunk->get_origin(), ch_p1, ch_p2);
+			item->init(tf_p1, tf_p2, chunk->get_dim(), chunk->get_origin(), ch_p1, ch_p2, dx);
 			chunk->add_source_internal(item->get_source_internal());
 		}
 	}
@@ -146,26 +136,24 @@ namespace ffip {
 	}
 	
 	void Simulation::chunk_init() {
+		//dimension is in computational units, so they are two times the original values
 		sim_dim = sim_dim * 2;
 		
-		// TMz simulation
-//		sim_p1 = {0, 0, 1};
-//		sim_p2 = {sim_dim.x, sim_dim.y, 1};
-
 		sim_p1 = {0, 0, 0};
 		sim_p2 = sim_dim;
-		//dimension is in computational units, so they are two times the original values
 		
 		//add TFSF faces
 		if (!eigen_sources.empty()) {
+			tf_p1 = sim_p1;
+			tf_p2 = sim_p2;
 			sim_p1 = sim_p1 - iVec3{ 1, 1, 1 };
 			sim_p2 = sim_p2 + iVec3{ 1, 1, 1 };
 		}
 
 		//implementations of N2F faces
 		if (!N2F_pos.empty()) {
-			N2F_p1 = sim_p1 - iVec3{ 1, 1, 1 };
-			N2F_p2 = sim_p2 + iVec3{ 1, 1, 1 };
+			N2F_p1 = sim_p1 - iVec3{1,1,1};
+			N2F_p2 = sim_p2 + iVec3{1,1,1};
 			sim_p1 = sim_p1 - iVec3{ 2, 2, 2 };
 			sim_p2 = sim_p2 + iVec3{ 2, 2, 2 };
 		}
@@ -190,6 +178,8 @@ namespace ffip {
 		PML_init();
 		source_init();
 		medium_init();
+		N2F_init();
+		udf_unit();
 		step = 0;
 	}
 	
@@ -201,7 +191,7 @@ namespace ffip {
 		if (eigen_cast) eigen_sources.push_back(eigen_cast);
 	}
 	
-	void Simulation::add_solid(Solid *solid) {
+	void Simulation::add_solid(Solid const* solid) {
 		solids.push_back(solid);
 	}
 	
@@ -212,24 +202,23 @@ namespace ffip {
 			PMLs[PML->get_dir()][0] = *PML;
 	}
 	
-	void Simulation::set_background_medium(const int id) {
-		if (id >= 0)
-			background_medium_id = id;
+	void Simulation::set_background_medium(Medium const*  m) {
+		if (m)
+			bg_medium = m;
 	}
 
 	void Simulation::add_probe(Probe* probe) {
 		probes.push_back(probe);
 	}
 
-	void Simulation::add_farfield_probe(const real freq, const fVec3& p) {
-		N2F_freq.push_back(freq);
-		N2F_pos.push_back(p);
+	void Simulation::add_farfield_probe(const real freq, const fVec3& pos) {
+		N2F_omega.push_back(2 * pi * freq);
+		N2F_pos.push_back(pos);
 	}
 	
 	void Simulation::advance(std::ostream& os) {
 		std::cout << "Stepping from" << step << " to " << step + 1 << std::endl;
 		real time = (step ++ ) * dt;
-		//std::cout << "testing inside simulation" << dt << std::endl;
 		chunk->update_Md(time);
 		chunk->update_B2H(time);
 		
@@ -238,11 +227,14 @@ namespace ffip {
 		
 		chunk->update_padded_E(time);
 		chunk->update_padded_H(time);
-
+		
 		for (auto item : probes)
 			item->update(*this);
 		
+		for (auto item : N2F_faces)
+			item->update(chunk, step);
 		
+		udf_advance();
 	}
 
 	real Simulation::at(const fVec3& p, const Coord_Type ctype) const{
@@ -269,9 +261,77 @@ namespace ffip {
 		return dt;
 	}
 	
-	void Simulation::output(std::ostream &o) {
+	void Simulation::output(std::ostream &os) {
 		for(auto item : probes) {
-			item->output(o);
+			item->output(os);
+		}
+	}
+	
+	void Simulation::output_farfield(std::ostream &os) {
+		//get impedance of the non-absorbing background medium
+		real imped = bg_medium->get_z();
+		os << std::scientific;
+		
+		for(int i = 0; i < N2F_pos.size(); ++i) {
+			real omega = N2F_omega[i];
+			real k = omega / bg_medium->get_c();		//get the wavenumber
+			real th = N2F_pos[i].x;
+			real phi = N2F_pos[i].y;
+			real rho = N2F_pos[i].z;
+			fVec3 proj_th = {cos(th) * cos(phi), cos(th) * sin(phi), -sin(th)};
+			fVec3 proj_phi = {-sin(phi), cos(phi), 0};
+			Vec3<complex_num> N{0, 0, 0}, L{0, 0, 0};
+			
+			for(auto item : N2F_faces) {
+				auto tmp = item->get_NL(th, phi, omega);
+				N = N + tmp.first;
+				L = L + tmp.second;
+			}
+			
+			complex_num Nth = inner_prod(proj_th, N);
+			complex_num Nphi = inner_prod(proj_phi, N);
+			complex_num Lth = inner_prod(proj_th, L);
+			complex_num Lphi = inner_prod(proj_phi, L);
+			
+			complex_num arg = k / (4 * pi * rho) * complex_num{sin(k * rho), cos(k * rho)};
+			complex_num Eth = -(Lphi + imped * Nth) * arg;
+			complex_num Ephi = (Lth - imped * Nphi) * arg;
+			complex_num Hth = (Nphi - Lth / imped) * arg;
+			complex_num Hphi = -(Nth + Lphi / imped) * arg;
+			
+			os << Eth << " " << Ephi << " " << Hth << " " << Hphi << std::endl;
+		}
+	}
+	
+	std::fstream os[6];
+	
+	void Simulation::udf_unit() {
+		for(int i = 0; i < 6; ++i) {
+			std::string idx = std::to_string(i);
+			os[i].open("face" + idx + ".out", std::fstream::out);
+		}
+		
+		for(int i = 0; i < 6; ++i) {
+			os[i] << N2F_faces[i]->get_p1() << "\n" << N2F_faces[i]->get_p2() << "\n";
+			os[i] << N2F_faces[i]->get_norm_vec() << "\n";
+			os[i] << std::scientific;
+		}
+	}
+	
+	void Simulation::udf_advance() {
+		for(int i = 0; i < 6; ++i) {
+			auto face = N2F_faces[i];
+			
+			for(auto itr = my_iterator(face->get_p1(), face->get_p2(), face->get_p1().get_type()); !itr.is_end(); itr.advance()) {
+				auto pos = itr.get_vec();
+				os[i] << (*chunk)(pos, Ex) << " "
+				<< (*chunk)(pos, Ey) << " "
+				<< (*chunk)(pos, Ez) << " "
+				<< (*chunk)(pos, Hx) << " "
+				<< (*chunk)(pos, Hy) << " "
+				<< (*chunk)(pos ,Hz) << "\n";
+				
+			}
 		}
 	}
 }

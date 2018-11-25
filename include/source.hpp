@@ -14,18 +14,13 @@ namespace ffip {
 		// constructor parameters
 		real dx, dt;
 		int n;
-		
-		real excite_p{0};
-		PML PML_pos, PML_neg;
-		
+		PML pml;
 		real amp;
 		Direction polorization;
 		
 		std::function<real(const real)> f; //excitation functor
-		
 		real courant;
-		int n_neg, n_pos, n_tot;
-		int excite_p1, excite_p2, c1, c2;
+		int dim, origin;
 		
 		int time_step{0};
 		
@@ -46,12 +41,9 @@ namespace ffip {
 		Plane_Wave(Plane_Wave&&) = default;							//move
 		Plane_Wave& operator=(Plane_Wave&&) = default;
 		
-		void set_excitation(const std::function<real(const real)>& _f,
-							const real phys_excite_p = 0,
-							const real _amp = 1,
-							const Direction _polorization = Direction::X);	//set up excitation position, function choice, amplitude, excitation position
-		void set_PML_neg(const PML& _PML_neg);							//set up PML layer in x-
-		void set_PML_pos(const PML& _PML_pos);							//set up PML layer in x+
+		void set_excitation(const std::function<real(const real)>& _f, const real _amp = 1, const Direction _polorization = Direction::X);	//set up excitation position, function choice, amplitude, excitation position
+
+		void set_PML(const PML& _pml);							//set up PML layer in x+
 		void init();														//after set-up, it has to be initialized
 		void set_medium(const real er, const real ur);
 		
@@ -62,7 +54,7 @@ namespace ffip {
 		real operator()(const iVec3& p) const;								//raw access
 		
 		void hard_E(real time);		//hard E source to excite wave
-		void advance();		//H(t-0.5dt), E(t) -> H(t+0.5dt), E(t+dt)
+		void advance(std::ostream& os);		//H(t-0.5dt), E(t) -> H(t+0.5dt), E(t+dt)
 		void update_H();			//update Hy field
 		void update_E();			//update Ex field
 		int get_time_step();
@@ -79,8 +71,7 @@ namespace ffip {
 		void TF2SF();					//transit from TF surface to a SF surface
 		
 		TFSF_Surface(const iVec3& _d1, const iVec3& _d2, const Direction _dir, const Side side, int _sign_correction);
-		
-		static iVec3 vec3_base[3];	//bases vector in 3 dimension
+		TFSF_Surface(const std::pair<iVec3, iVec3>& d, const Direction dir, const Side side, int sign_correction);
 	};
 	
 	/* source interfaces for use in chunk*/
@@ -166,13 +157,14 @@ namespace ffip {
 	public:
 		Eigen_Source(const Plane_Wave& _projector);
 		Source_Internal* get_source_internal() override;
-		void init(const iVec3 _tf1, const iVec3 _tf2,
+		void init(const iVec3& _tf1, const iVec3& _tf2,
 				  const iVec3& _ch_dim, const iVec3& _ch_origin,
-				  const iVec3 _ch_p1, const iVec3 _ch_p2);
+				  const iVec3& _ch_p1, const iVec3& _ch_p2, const real _dx);
 		
 	private:
 		Plane_Wave projector;
 		iVec3 ch_p1, ch_p2, tf1, tf2, ch_dim, ch_origin;
+		real dx;
 	};
 	
 	/* Eigen source used in chunk*/
@@ -180,8 +172,7 @@ namespace ffip {
 		static int TFSF_Mat[3][3];
 		
 	public:
-		Eigen_Internal(const std::vector<TFSF_Surface> _tsfs_list, const Plane_Wave& _projector,
-					   const iVec3& _ch_dim, const iVec3& _ch_origin);	//copy every thing inside
+		Eigen_Internal(const std::vector<TFSF_Surface>& _tsfs_list, const Plane_Wave& _projector, const iVec3& _ch_dim, const iVec3& _ch_origin, const real _dx);	//copy every thing inside
 		Eigen_Internal(const Eigen_Internal&) = delete; //no copy
 		Eigen_Internal& operator=(const Eigen_Internal&) = delete;
 		Eigen_Internal(Eigen_Internal&&) = delete; //no move
@@ -199,6 +190,7 @@ namespace ffip {
 		Plane_Wave projector;
 		iVec3 ch_dim, ch_origin;	//information about chunk
 		int jump_x, jump_y, jump_z;
+		real dx;
 	};
 }
 

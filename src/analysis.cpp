@@ -53,12 +53,7 @@ namespace ffip {
 		}
 		
 		o << std::scientific;
-		o <<
-		ex.real() << " " << ex.imag() << " " <<
-		ey.real() << " " << ey.imag() << " " <<
-		ez.real() << " " << ez.imag() << " " <<
-		hx.real() << " " << hx.imag() << " " <<
-		hy.real() << " " << hy.imag() << " " <<
-		hz.real() << " " << hz.imag() << " " << std::endl;
+		o << ex << " " << ey << " " << ez << " "
+		<< hx << " " << hy << " " << hz << std::endl;
 	}
 }

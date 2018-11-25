@@ -72,16 +72,18 @@ namespace ffip {
 		real get_radius();
 	};
 	
-	/* Constructive Solid Geometry structure*/
+	/* Constructive Solid Geometry structure
+	   it does not own any resources
+	 */
 	struct Geometry_Node : public Primitive{
 		enum class operation {plus, minus, mult};
 		
 		operation op;
-		Geometry_Node* left{nullptr};
-		Geometry_Node* right{nullptr};
-		Primitive* val{nullptr};
+		Geometry_Node const* left{nullptr};
+		Geometry_Node const* right{nullptr};
+		Primitive const* val{nullptr};
 		
-		Geometry_Node(Primitive* const _val);
+		Geometry_Node(Primitive const* _val);
 		Geometry_Node(const operation op, Geometry_Node const& left, Geometry_Node const& right);	//make copy of left, right nodes
 		
 		Geometry_Node(const Geometry_Node&) = default;				//copy
@@ -94,7 +96,6 @@ namespace ffip {
 		bool is_in_exterior(const fVec3& p) const override;
 	};
 	
-	void reset(Geometry_Node* x);			//release memory
 	
 	Geometry_Node operator*(Geometry_Node const& l, Geometry_Node const& r);	//intersection
 	Geometry_Node operator+(Geometry_Node const& l, Geometry_Node const& r);	//union
@@ -110,11 +111,13 @@ namespace ffip {
 	/* a box region with inhomogeneous material property specified by e = rho * e1 + (1 - rho) * e2*/
 	class Inhomogeneous_Box : public Solid, public Box {
 	private:
-		int medium1_id, medium2_id;
+		Medium const* medium1;
+		Medium const* medium2;
+		
 		GriddedInterp interp;
 		
 	public:
-		Inhomogeneous_Box(const int id1, const int id2, const std::string& filename);	//given medium1, give medium2 and filename of the interpolation data of rho
+		Inhomogeneous_Box(Medium const* m1, Medium const*  m2,  const std::string& filename);	//given medium1, give medium2 and filename of the interpolation data of rho
 		
 		real get_density(const fVec3& p) const;			//return rho at a given point
 		/* override functions*/
@@ -123,24 +126,28 @@ namespace ffip {
 	
 	class Homogeneous_Object : public Solid, public Geometry_Node {
 	private:
-		int medium_id;
+		Medium const* medium;
 		
 	public:
-		Homogeneous_Object(const int id, const Geometry_Node& _base);
+		Homogeneous_Object(Medium const*  m, const Geometry_Node& _base);
 		bool update_weights(const fVec3& p, std::vector<real>& weights) const override;
 	};
 	
 	/* geometry factory */
+	extern std::vector<Primitive*> primitive_holder;
+	
 	template<typename... Args>
 	Geometry_Node make_sphere(Args&&... args) {
-		return Geometry_Node{new Sphere{std::forward<Args>(args)...}};
+		primitive_holder.push_back(new Sphere{std::forward<Args>(args)...});
+		return Geometry_Node{primitive_holder.back()};
 	}
 	
 	template<typename... Args>
 	Geometry_Node make_box(Args&&... args) {
-		return Geometry_Node{new Box{std::forward<Args>(args)...}};
+		primitive_holder.push_back(new Box{std::forward<Args>(args)...});
+		return Geometry_Node{primitive_holder.back()};
 	}
 	
-	Solid* make_solid(const int id1, const int id2, const std::string& filename);	//make inhomogeneous regions
-	Solid* make_solid(const int id, const Geometry_Node& geom);											//make homogeneous regions
+	Solid const* make_solid(Medium const* m1, Medium const* m2, const std::string& filename);	//make inhomogeneous regions
+	Solid const* make_solid(Medium const* m, const Geometry_Node& geom);											//make homogeneous regions
 }

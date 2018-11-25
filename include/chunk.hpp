@@ -12,7 +12,7 @@ namespace ffip {
 		std::vector<real> jmd;			//Jd(t), M(t - 0.5dt)
 		
 		std::vector<Dispersive_Field*> dispersive_field_chunk;	//array of dispersive_field
-		std::vector<Medium_Internal*> medium_chunk;				//place holder for medium_internal
+		std::vector<Medium_Ref const*> medium_chunk;				//place holder for medium_internal
 		
 		/* PML members*/
 		std::vector<PML_Point> e_PML, h_PML;
@@ -22,7 +22,7 @@ namespace ffip {
 		int ch_jump_x, ch_jump_y, ch_jump_z;
 		iVec3 ch_dim, ch_p1, ch_p2, ch_origin, sim_p1, sim_p2;
 		
-		std::vector<int> jump[8];
+		int jump[8];
 		
 		/* source */
 		std::vector<Source_Internal*> source_list;				//
@@ -30,7 +30,7 @@ namespace ffip {
 	public:
 		//given start, end domain_comp coord and initialize an empty Chunk
 		Chunk(const iVec3& _sim_p1, const iVec3& _sim_p2, const iVec3& _ch_p1, const iVec3& _ch_p2, real _dx, real _dt);
-		void set_medium_point(const iVec3& point, Medium_Internal* const  medium_internal);
+		void set_medium_point(const iVec3& point, Medium_Ref const* medium_internal);
 		void add_source_internal(Source_Internal* const source);
 		void PML_init(const real_arr& kx, const real_arr& ky, const real_arr& kz,
 					  const real_arr& bx, const real_arr& by, const real_arr& bz,
@@ -81,15 +81,16 @@ namespace ffip {
 		 take advantage of generic programming to efficiently compute the average without too much overhead
 		 */
 		template<typename... Args>
-		int ave_helper(const int bit, const int index, const int jump, Args... args) const{
-			if(bit && (1 << sizeof...(Args))) {
+		real ave_helper(const int bit, const int index, const int jump, Args... args) const{
+			constexpr int bit_N =1 << sizeof...(Args);
+			if(bit & bit_N) {
 				return ave_helper(bit, index + jump, args...) + ave_helper(bit, index - jump, args...);
 			}else {
 				return ave_helper(bit, index, args...);
 			}
 		}
 		
-		int ave(const int bit, const int index) const;
+		real ave(const int bit, const int index) const;
 
 		/* interpolation helper functions*/
 		real interp_helper(const real* data, const real w) const;

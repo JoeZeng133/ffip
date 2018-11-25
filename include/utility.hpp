@@ -27,10 +27,22 @@ namespace ffip {
 	enum Side {Low = -1, High = 1};
 	enum Coord_Type {Ex = 0b001, Ey = 0b010, Ez = 0b100, Hx = 0b110, Hy = 0b101, Hz = 0b011, Corner = 0b000, Center = 0b111, Null = -1};
 	
+	int Ctype2DirInt(const Coord_Type ctype);
+	
+	constexpr bool is_E_point(const Coord_Type ctype) {
+		return (ctype == Ex || ctype == Ey || ctype == Ez);
+	}
+	
+	constexpr bool is_H_point(const Coord_Type ctype) {
+		return (ctype == Hx || ctype == Hy || ctype == Hz);
+	}
 	/* forward declrations */
 	template<typename T> struct Vec3;
 
     /* tags */
+	struct side_low_tag;
+	struct side_high_tag;
+	
 	struct dir_x_tag;
 	struct dir_y_tag;
 	struct dir_z_tag;
@@ -47,18 +59,28 @@ namespace ffip {
 	
 	/* lower than something */
     struct side_low_tag{
+		using opposite_side = side_high_tag;
 		static const int val;
 		static int get_next_int(int x);
 		static int round(real x);
-//		static int round_wtol(real x);
+		
+		template<typename T>
+		static T& choose_between(T& a, T& b) {
+			return a;
+		}
 	};
 
 	/* higher than sth */
     struct side_high_tag{
+		using opposite_side = side_low_tag;
 		static const int val;
 		static int get_next_int(int x);
 		static int round(real x);
-//		static int round_wtol(real x);
+		
+		template<typename T>
+		static T& choose_between(T& a, T& b) {
+			return b;
+		}
 	};
 
 	/* odd number, val = 1 */
@@ -178,24 +200,45 @@ namespace ffip {
 	struct choose {
 		
 		template<typename T>
-		static typename T::value_type get(const T&);
+		static typename T::value_type& get(T&);
+		
+		template<typename T>
+		static typename T::value_type const& get(const T&);
 	};
 	
 	template<>
 		template<typename T>
-	typename T::value_type choose<dir_x_tag>::get(const T& v) {
+	typename T::value_type& choose<dir_x_tag>::get(T& v) {
 		return v.x;
 	}
 	
 	template<>
 	template<typename T>
-	typename T::value_type choose<dir_y_tag>::get(const T& v) {
+	typename T::value_type& choose<dir_y_tag>::get(T& v) {
 		return v.y;
 	}
 	
 	template<>
 	template<typename T>
-	typename T::value_type choose<dir_z_tag>::get(const T& v) {
+	typename T::value_type& choose<dir_z_tag>::get(T& v) {
+		return v.z;
+	}
+	
+	template<>
+	template<typename T>
+	typename T::value_type const& choose<dir_x_tag>::get(const T& v) {
+		return v.x;
+	}
+	
+	template<>
+	template<typename T>
+	typename T::value_type const& choose<dir_y_tag>::get(const T& v) {
+		return v.y;
+	}
+	
+	template<>
+	template<typename T>
+	typename T::value_type const& choose<dir_z_tag>::get(const T& v) {
 		return v.z;
 	}
 	
@@ -205,83 +248,89 @@ namespace ffip {
 	
 	/* point wise less */
 	template<typename T1, typename T2>
-	inline bool ElementWise_Less(const Vec3<T1>& a, const Vec3<T2>& b) {
+	constexpr bool ElementWise_Less(const Vec3<T1>& a, const Vec3<T2>& b) {
 		return a.x < b.x && a.y < b.y && a.z < b.z;
 	}
 	
 	/* point wise less than*/
 	template<typename T1, typename T2>
-	inline bool ElementWise_Less_Eq(const Vec3<T1>& a, const Vec3<T2>& b) {
+	constexpr bool ElementWise_Less_Eq(const Vec3<T1>& a, const Vec3<T2>& b) {
 		return a.x <= b.x && a.y <= b.y && a.z <= b.z;
 	}
 	
 	/* dot product */
 	template<typename T1, typename T2>
-	inline Vec3<decltype(T1{} * T2{})> operator*(const Vec3<T1>& a, const Vec3<T2>& b) {
+	constexpr Vec3<decltype(T1{} * T2{})> operator*(const Vec3<T1>& a, const Vec3<T2>& b) {
 		return {a.x * b.x, a.y * b.y, a.z * b.z};
+	}
+	
+	/* inner product*/
+	template<typename T1, typename T2>
+	constexpr decltype(T1{} * T2{}) inner_prod(const Vec3<T1>& a, const Vec3<T2>& b) {
+		return a.x * b.x + a.y * b.y +a.z * b.z;
 	}
 	
 	/* right scalar product */
 	template<typename T1, typename T2>
-	inline Vec3<decltype(T1{} * T2{})> operator*(const Vec3<T1>& a, const T2 b) {
+	constexpr Vec3<decltype(T1{} * T2{})> operator*(const Vec3<T1>& a, const T2 b) {
 		return {a.x * b, a.y * b, a.z * b};
 	}
 	/* left scalar product*/
 	template<typename T1, typename T2>
-	inline Vec3<decltype(T1{} * T2{})> operator*(const T1 b, const Vec3<T2>& a) {
+	constexpr Vec3<decltype(T1{} * T2{})> operator*(const T1 b, const Vec3<T2>& a) {
 		return {a.x * b, a.y * b, a.z * b};
 	}
 	
 	/* point wise addtion */
 	template<typename T1, typename T2>
-	inline Vec3<decltype(T1{} + T2{})> operator+(const Vec3<T1>& a, const Vec3<T2>& b) {
+	constexpr Vec3<decltype(T1{} + T2{})> operator+(const Vec3<T1>& a, const Vec3<T2>& b) {
 		return {a.x + b.x, a.y + b.y, a.z + b.z};
 	}
 	
 	/* point wise substraction */
 	template<typename T1, typename T2>
-	inline Vec3<decltype(T1{} - T2{})> operator-(const Vec3<T1>& a, const Vec3<T2>& b) {
+	constexpr Vec3<decltype(T1{} - T2{})> operator-(const Vec3<T1>& a, const Vec3<T2>& b) {
 		return {a.x - b.x, a.y - b.y, a.z - b.z};
 	}
 	
 	/* right scaler division*/
 	template<typename T1, typename T2>
-	inline Vec3<decltype(T1{} / T2{})> operator/(const Vec3<T1>& a, const T2 b) {
+	constexpr Vec3<decltype(T1{} / T2{})> operator/(const Vec3<T1>& a, const T2 b) {
 		return {a.x / b, a.y / b, a.z / b};
 	}
 	
 	/* make dir_x_tag the x3 axis */
 	template<typename T>
-	inline Vec3<T> rotate_frame(const Vec3<T>& p, dir_x_tag) {
+	constexpr Vec3<T> rotate_frame(const Vec3<T>& p, dir_x_tag) {
 		return {p.y, p.z, p.x};
 	}
 	
 	/* make dir_y_tag the x3 axis */
 	template<typename T>
-	inline Vec3<T> rotate_frame(const Vec3<T>& p, dir_y_tag) {
+	constexpr Vec3<T> rotate_frame(const Vec3<T>& p, dir_y_tag) {
 		return {p.z, p.x, p.y};
 	}
 	
 	/* make dir_z_tag the x3 axis */
 	template<typename T>
-	inline Vec3<T> rotate_frame(const Vec3<T>& p, dir_z_tag) {
+	constexpr Vec3<T> rotate_frame(const Vec3<T>& p, dir_z_tag) {
 		return p;
 	}
 	
 	/* return the nearest integer (self included) that is even or odd*/
 	template<typename S, typename T>
-	inline int get_nearest_int(const int x) {
+	constexpr int get_nearest_int(const int x) {
 		return ((x & 1) ^ T::val)? S::get_next_int(x) : x;
 	}
 	
 	template<typename S, typename T>
-	inline int get_nearest_int(const real x) {
+	constexpr int get_nearest_int(const real x) {
 		return get_nearest_int<S, T>(S::round(x));
 	}
 	
 	/* get the nearest point of coord_type to a global computation point on side S (low or high)*/
 	template<typename S, typename T>
-	inline iVec3 get_nearest_point(const Vec3<T>& p, const Coord_Type type) {
+	constexpr iVec3 get_nearest_point(const Vec3<T>& p, const Coord_Type type) {
 		iVec3 res;
 		if (type & 1) {
 			res.x = get_nearest_int<S, odd_tag>(p.x);
@@ -329,6 +378,13 @@ namespace ffip {
 	std::pair<Vec3<T>, Vec3<T>> get_intersection(const Vec3<T>& p1, const Vec3<T>& p2, const Vec3<T>& q1, const Vec3<T>& q2) {
 		return std::make_pair<Vec3<T>, Vec3<T>>({std::max(p1.x, q1.x), std::max(p1.y, q1.y), std::max(p1.z, q1.z)},
 									{std::min(p2.x, q2.x),std::min(p2.y, q2.y), std::min(p2.z, q2.z)});
+	}
+	
+	/* return a particular face of a box region specified by (p1, p2), very nasty*/
+	template<typename D, typename S, typename T>
+	std::pair<Vec3<T>, Vec3<T>> get_face(Vec3<T> p1, Vec3<T> p2) {
+		choose<D>::get(S::choose_between(p2, p1)) = choose<D>::get(S::choose_between(p1, p2));
+		return {p1, p2};
 	}
 
     /* source functions */
@@ -527,7 +583,7 @@ namespace ffip {
 	class PML {
 	private:
 		int d{0};
-		real sigma_max{0}, k_max{1}, a_max{0};	//it was found out a_max is critical in absorbing waves in 1D simulation
+		real sigma_max{0}, k_max{1}, a_max{0.1};	//it was found out a_max is critical in absorbing waves in 1D simulation
 		real m_a{1}, m{3};
 		Direction dir;
 		Side side;
@@ -598,4 +654,15 @@ namespace ffip {
 		size_t size() const;
 		
 	};
+	
+	extern iVec3 vec3_base[3];
+	
+	//output overloading
+	std::ostream& operator<<(std::ostream& os, const complex_num& c);
+	
+	template<typename T>
+	std::ostream& operator<<(std::ostream& os, const Vec3<T>& c) {
+		os << c.x << " " << c.y << " " << c.z;
+		return os;
+	}
 }

@@ -9,6 +9,14 @@ namespace ffip {
 	const real z0 = 376.73031346;
 	const real c0 = 3e8;
 	
+	int Ctype2DirInt(const Coord_Type ctype) {
+		static int look_up_table[8] = {-1, 0, 1, 2, 2, 1, 0, -1}; //000, 001, 010, 011, 100, 101, 110, 111
+		if (ctype == Null)
+			throw runtime_error("Ctype cannot be Null");
+		
+		return look_up_table[static_cast<int>(ctype)];
+	}
+	
 	const int side_low_tag::val = -1;
 	
 	int side_low_tag::get_next_int(int x) {
@@ -19,14 +27,6 @@ namespace ffip {
 		return floor(x);
 	}
 	
-//	int side_low_tag::round_wtol(real x) {
-//		int res = floor(x);
-//		if(x - res < 0.99)
-//			return res;
-//		else
-//			return res + 1;
-//	}
-	
 	const int side_high_tag::val = 1;
 	
 	int side_high_tag::get_next_int(int x) {
@@ -36,14 +36,6 @@ namespace ffip {
 	int side_high_tag::round(real x) {
 		return ceil(x);
 	}
-	
-//	int side_high_tag::round_wtol(real x) {
-//		int res = ceil(x);
-//		if(res - x < 0.99)
-//			return res;
-//		else
-//			return res - 1;
-//	}
 	
 	const int odd_tag::val = 1;
 	const int even_tag::val = 0;
@@ -385,5 +377,15 @@ namespace ffip {
 	iVec3 my_iterator::get_vec() const {
 		return {x, y, z};
 	}
-
+	
+	iVec3 vec3_base[3] = {
+		{1, 0, 0},
+		{0, 1, 0},
+		{0, 0, 1}
+	};
+	
+	std::ostream& operator<<(std::ostream& os, const complex_num& c) {
+		os << c.real() << " " << c.imag();
+		return os;
+	}
 }

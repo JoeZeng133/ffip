@@ -3,144 +3,176 @@
 #include <utility.hpp>
 
 namespace ffip {
-	// forward declarations
-	
-	/* medium and pole for internal use*/
-	struct Pole_Internal {
-		real a1, a2, b0, b1, b2, c1, c2;			//J(n+1) = a1 * J(n) + a2 * J(n - 1) + b0 * F(n + 1) + b1 * F(n) + b2 * F(n - 1), sum(J) = c1 * J(n) + c2 * J(n - 1)
+	/* compact Poles structure for computation*/
+	struct Pole_Ref {
+		real a1, a2, b0, b1, b2;
 	};
 	
-	class Medium_Internal {
-//		friend Medium_Type;
-	public:
-		std::vector<Pole_Internal> poles;
-		/* F(n+1) = d1 * F(n) + d2 * F(n - 1) + d3 * (G(n + 0.5) - sum(J))
-		 inf means there is no material, sigma = epsilon = 0;
-		 */
-		real d1{INFINITY}, d2{INFINITY}, d3{INFINITY};
-		
-	public:
-		Medium_Internal() = default;
-		Medium_Internal(const Medium_Internal&)= default;				//copy
-		Medium_Internal& operator=(const Medium_Internal&) = default;
-		Medium_Internal(Medium_Internal&&) = default;					//move
-		Medium_Internal& operator=(Medium_Internal&&) = default;
-		
-		real update_field(real eh, real eh1, real jmd, Dispersive_Field* f2) const;	//F(n) -> F(n+1), retunr F(n + 1)
-		Medium_Internal operator+(const Medium_Internal& other) const;
-		Medium_Internal operator*(const real f) const;
-		
-		Medium_Internal& operator+=(const Medium_Internal& other);
-		Medium_Internal& operator*=(const real f);
-		
-		real get_omega1() const;
-		real get_omega2() const;
-		real get_omega3() const;
-		void set_d(const real omega1, const real omega2, const real omega3);	//from omegas to d1,d2,d3
-	};
-	
-	/* Poles used to derive Pole_Internal*/
+	/* Poles for scripting*/
 	struct Pole_Base {
-		virtual real get_sigma1() = 0;			//sigmas used for calculating omegas
-		virtual real get_sigma2() = 0;
-		virtual real get_sigma3() = 0;
-		virtual Pole_Internal get_pole_internal() = 0;
+		virtual real get_a1() const = 0;
+		virtual real get_a2() const = 0;
+		virtual real get_b0() const = 0;
+		virtual real get_b1() const = 0;
+		virtual real get_b2() const = 0;
 		virtual ~Pole_Base() {}
 		
-		void set_dt(real _dt);
-		void set_e0(real _e0);			//e0 = e0 or u0 depending on whether it is a magnetic point or an electric point
-		real dt, e0;
+		void set_dt(const real _dt);
+		void set_index(const int _index);
+		Pole_Ref get_ref() const;
+		real dt;
+		int index;
 	};
 	
-	struct Lorents_Pole : public Pole_Base{
-		static int id;
-		
+	struct Lorentz_Pole : public Pole_Base{
 		real epsilon, omega, delta;
 		
-		/* derived members*/
-		real get_alpha();
-		real get_xi();
-		real get_gamma();
-		
-		Lorents_Pole(real _epsilon, real _omega, real _delta);
-		~Lorents_Pole() = default;
+		Lorentz_Pole(real rel_perm, real freq, real damp);
+		~Lorentz_Pole() = default;
 		
 		/* override functions*/
-		real get_sigma1() override;
-		real get_sigma2() override;
-		real get_sigma3() override;
-		Pole_Internal get_pole_internal() override;
+		real get_a1() const override;
+		real get_a2() const override;
+		real get_b0() const override;
+		real get_b1() const override;
+		real get_b2() const override;
 	};
 	
 	struct Deybe_Pole : public Pole_Base{
-		static int id;
-		
 		real epsilon, tau;
-		/* derived members */
-		real get_kappa();
-		real get_beta();
 		
-		Deybe_Pole(real _epsilon, real _tau);
+		Deybe_Pole(real rel_perm, real relaxation);
 		~Deybe_Pole() = default;
 		
 		/* override functions*/
-		real get_sigma1() override;
-		real get_sigma2() override;
-		real get_sigma3() override;
-		Pole_Internal get_pole_internal() override;
+		real get_a1() const override;
+		real get_a2() const override;
+		real get_b0() const override;
+		real get_b1() const override;
+		real get_b2() const override;
+		
 	};
 	
 	struct Drude_Pole : public Pole_Base{
-		static int id;
-		
 		real omega, gamma;
 		
-		/* */
-		real get_kappa();
-		real get_beta();
+		Drude_Pole(real freq, real inv_relaxation);
+		~Drude_Pole() = default;
 		
 		/* override functions*/
-		Drude_Pole(real _omega, real _gamma);
-		~Drude_Pole() = default;
-		real get_sigma1() override;
-		real get_sigma2() override;
-		real get_sigma3() override;
-		Pole_Internal get_pole_internal() override;
+		real get_a1() const override;
+		real get_a2() const override;
+		real get_b0() const override;
+		real get_b1() const override;
+		real get_b2() const override;
 	};
 	
-	class Medium_Type {
-	private:
-		std::vector<Pole_Base*> poles;
-		real dt;
-		real epsilon_inf{1}, sigma{0}, e0;
-
+	/* medium reference for use in actual computation
+	   it may hold information of several material allowing mixed material
+	 */
+	class Medium_Ref {
 	public:
-		int id;					//id of the medium
+		std::vector<Pole_Ref const*> poles;
+		std::vector<real> weights;
+		/* d1 * E(n + 1) + d2 * E(n) + d3 * E(n - 1) = 2 * D(n + 0.5) - sum_J
+		 d1 = 0 means no material
+		 */
+		real d1{0}, d2{0}, d3{0};
+	public:
+		Medium_Ref() = default;
+		Medium_Ref(const Medium_Ref&)= default;				//copy
+		Medium_Ref& operator=(const Medium_Ref&) = default;
+		Medium_Ref(Medium_Ref&&) = default;					//move
+		Medium_Ref& operator=(Medium_Ref&&) = default;
 		
-		Medium_Type(real _epsilon_inf, real _simga, real _e0);
-		Medium_Type() = default;
-		Medium_Type(const Medium_Type&) = default; //copy
-		Medium_Type& operator=(const Medium_Type&) = default;
-		Medium_Type(Medium_Type&&) = default; //move
-		Medium_Type& operator=(Medium_Type&&) = default;
-		~Medium_Type();
+		real update_field(real eh, real eh1, real norm_db, Dispersive_Field* f2) const;	//F(n) -> F(n+1), retunr F(n + 1), norm_jmd = jmd / e0
+		Medium_Ref& operator+=(const Medium_Ref& other);
+		Medium_Ref& operator*=(const real f);
 		
-		//add poles based on given parameters, all parameters are specified in Hz instead of rad/s in accordance with Meep. But internal calculation are all based on rad/s, so there is unit conversion
-		Medium_Internal get_medium_internal() const;
-		void add_Lorentz_pole(real epsilon, real fp, real delta);
-		void add_Deybe_pole(real epsilon, real tau);
-		void add_Drude_pole(real fp, real gamma);
-		void set_id(const int id);
-		void set_dt(real _dt);
+		real get_d1() const;
+		real get_d2() const;
+		real get_d3() const;
+		size_t get_size_poles() const;
 	};
 	
+	Medium_Ref operator+(const Medium_Ref& A, const Medium_Ref& B);
 	
-	 /* medium factory */
-	int make_medium(const real epsilon_inf, const real sigma_epsilon, const real mu_inf, const real sigma_mu);	//make a medium and return the id of the material
+	Medium_Ref operator*(const Medium_Ref& A, const real f);
 	
-	Medium_Internal* get_medium_internal(const std::vector<real>& weights, const bool is_electric_point); //make medium_internal of mixing materials
+	Medium_Ref operator*(const real f, const Medium_Ref& A);
 	
+	class Medium {
+	private:
+		real e_inf{1}, sigma_e{0};
+		real u_inf{1}, sigma_u{0};
+		real dt;
+		
+		std::vector<Pole_Base*> e_poles;
+		std::vector<Pole_Base*> m_poles;
+		std::vector<Pole_Ref*> e_poles_ref;
+		std::vector<Pole_Ref*> m_poles_ref;
+	public:
+		int index;					//idex of the medium
+		~Medium();
+		Medium() = default;
+		Medium(const Medium&) = default; //copy
+		Medium& operator=(const Medium&) = default;
+		Medium(Medium&&) = default; //move
+		Medium& operator=(Medium&&) = default;
+		
+		//constructors
+		Medium(const real _e_inf, const real _sigma_e);
+		Medium(const real _e_inf, const real _sigma_e, const real _u_inf, const real _sigma_u);
+		
+		//add e or m poles to the material
+		void add_e_poles(Pole_Base* const pole);
+		template<typename... Args>
+		void add_e_poles(Pole_Base* const pole, Args... args);
+		
+		void add_m_poles(Pole_Base* const pole);
+		template<typename... Args>
+		void add_m_poles(Pole_Base* const pole, Args... args);
+		
+		//for use in simulation class
+		Medium_Ref get_e_medium_ref() const;
+		Medium_Ref get_m_medium_ref() const;
+		void set_index(const int index);
+		void set_dt(const real dt);
+		real get_e_inf() const;
+		real get_u_inf() const;
+		real get_c() const;			//light speed
+		real get_z() const;			//impedence
+	};
+	
+	template<typename... Args>
+	void Medium::add_e_poles(Pole_Base* const pole, Args... args) {
+		add_e_poles(pole);
+		add_e_poles(args...);
+	}
+	
+	template<typename... Args>
+	void Medium::add_m_poles(Pole_Base* const pole, Args... args) {
+		add_m_poles(pole);
+		add_m_poles(args...);
+	}
+	
+	/* medium factory */
+	extern std::vector<std::unique_ptr<Medium>> medium;
+	extern std::vector<std::unique_ptr<Medium_Ref>> e_medium_ref;
+	extern std::vector<std::unique_ptr<Medium_Ref>> m_medium_ref;
+	
+	template<typename... Args>
+	Medium* make_medium(Args&&... args) {
+		size_t top = medium.size();
+	
+		medium.push_back(std::make_unique<Medium>(std::forward<Args>(args)...));
+		medium.back()->set_index(top);
+		return medium.back().get();
+	}
+	
+	Medium_Ref const* get_medium_ref(const bool is_electric_point, const std::vector<real>& weights);
 	std::vector<real> get_zero_weights();
-	void prepare_medium_internal(const real _dt);
+	void prepare_medium(const real _dt);
+	
 }
 
