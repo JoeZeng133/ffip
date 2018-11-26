@@ -62,7 +62,7 @@ axis tight
 %% numerical fields
 data = load('../data.out');
 make_complex = @(x, y) x + 1j * y;
-ricker = @(t, d, fp) (1 - 2 * (pi * fp * (t - d)).^2) .* exp(-(pi * fp * (t - d)).^2);
+ricker = @(t, fp, d) (1 - 2 * (pi * fp * (t - d)).^2) .* exp(-(pi * fp * (t - d)).^2);
 t = (1:step) * dt;
 
 ref_signal = load('../ref.out')';

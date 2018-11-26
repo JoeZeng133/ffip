@@ -305,7 +305,7 @@ namespace ffip {
 		}
 		
 		if(nonzeros > 1) {								//for the case of mixing more than 1 material
-			medium_ref.push_back(std::unique_ptr<Medium_Ref>{});			//generate a mixing material at the back
+			medium_ref.push_back(std::make_unique<Medium_Ref>(Medium_Ref{}));			//generate a mixing material at the back
 			for(int i = 0; i < weights.size(); ++i)
 				if (weights[i] > tol){
 					*medium_ref.back() += *medium_ref[i] * (weights[i] / total);

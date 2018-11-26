@@ -7,6 +7,8 @@ namespace ffip {
 	void Simulation::probe_init() {}
 
 	void Simulation::N2F_init() {
+		if (N2F_pos.empty()) return;
+
 		//make frequency unique
 		N2F_omega_unique = N2F_omega;
 		std::sort(N2F_omega_unique.begin(), N2F_omega_unique.end());
@@ -152,8 +154,8 @@ namespace ffip {
 
 		//implementations of N2F faces
 		if (!N2F_pos.empty()) {
-			N2F_p1 = sim_p1 - iVec3{1,1,1};
-			N2F_p2 = sim_p2 + iVec3{1,1,1};
+			N2F_p1 = sim_p1 - iVec3{ 1, 1, 1 };
+			N2F_p2 = sim_p2 + iVec3{ 1, 1, 1 };
 			sim_p1 = sim_p1 - iVec3{ 2, 2, 2 };
 			sim_p2 = sim_p2 + iVec3{ 2, 2, 2 };
 		}
@@ -306,7 +308,7 @@ namespace ffip {
 	std::fstream os[6];
 	
 	void Simulation::udf_unit() {
-		for(int i = 0; i < 6; ++i) {
+		/*for(int i = 0; i < 6; ++i) {
 			std::string idx = std::to_string(i);
 			os[i].open("face" + idx + ".out", std::fstream::out);
 		}
@@ -315,10 +317,12 @@ namespace ffip {
 			os[i] << N2F_faces[i]->get_p1() << "\n" << N2F_faces[i]->get_p2() << "\n";
 			os[i] << N2F_faces[i]->get_norm_vec() << "\n";
 			os[i] << std::scientific;
-		}
+		}*/
 	}
 	
 	void Simulation::udf_advance() {
+
+		/* output fields at N2F face each (position, time step)
 		for(int i = 0; i < 6; ++i) {
 			auto face = N2F_faces[i];
 			
@@ -332,7 +336,13 @@ namespace ffip {
 				<< (*chunk)(pos ,Hz) << "\n";
 				
 			}
-		}
+		}*/
+	}
+
+	void Simulation::udf_output() {
+	/*	output currents at each (position, frequency)
+		for (int i = 0; i < 6; ++i)
+			N2F_faces[i]->output_JM(os[i]);*/
 	}
 }
 

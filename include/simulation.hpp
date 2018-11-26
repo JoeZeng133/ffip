@@ -23,6 +23,7 @@ namespace ffip {
 		virtual iVec3 get_norm_vec() const = 0;
 		virtual iVec3 get_p1() const = 0;
 		virtual iVec3 get_p2() const = 0;
+		virtual void output_JM(std::ostream& os) const = 0;
 	};
 	
 	/* D in {dir_x_tag, dir_y_tag, dir_z_tag}
@@ -55,7 +56,26 @@ namespace ffip {
 		
 		iVec3 get_p1() const override {return rotate_frame(p1, typename D::z{});}
 		iVec3 get_p2() const override {return rotate_frame(p2, typename D::z{});}
+
+		//debugging function
+		void output_JM(std::ostream& os) const override{
+			os << std::scientific;
+			for (int i = 0;  i < omega.size(); ++i) {
+				auto& j1 = j1_list[i];
+				auto& j2 = j2_list[i];
+				auto& m1 = m1_list[i];
+				auto& m2 = m2_list[i];
+
+				for (int k = 0; k < j1.size(); ++k) {
+					auto J = cVec3{ j1[k], j2[k], 0 };
+					auto M = cVec3{ m1[k], m2[k], 0 };
+					os << rotate_frame(J, typename D::z{}) << " " << rotate_frame(M, typename D::z{}) << "\n";
+				}
+			}
+		}
 	};
+
+
 	
 	
 	template<typename D>
@@ -130,6 +150,8 @@ namespace ffip {
 	template<typename D>
 	void N2F_Face<D>::update(Chunk* const chunk, const int n) {
 		int index, k = p1.z;
+		/*int side_int = static_cast<int>(side);*/
+
 		for(int f = 0; f < omega.size(); ++f) {
 			complex_num exp_omega_n(cos(omega[f] * n * dt), -sin(omega[f] * n * dt));
 			index = 0;
@@ -192,7 +214,7 @@ namespace ffip {
 		Vec3<complex_num> L{0, 0, 0};
 		
 		real z = p1.z * dx / 2 - center.z;	//z
-		real k = omega[f] / bg_medium->get_c();		//wave number, er = 1 assumed
+		real k = omega[f] / bg_medium->get_c();		//wave number assumed
 		int index = 0;
 		
 		for(auto y : fx2)
@@ -260,6 +282,7 @@ namespace ffip {
 		
 		void udf_unit();
 		void udf_advance();
+		void udf_output();
 
 		/* field access functions*/
 		real at(const fVec3& p, const Coord_Type ctype) const;					//access at float physical coordinates

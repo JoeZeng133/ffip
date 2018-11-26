@@ -20,8 +20,8 @@ namespace ffip {
 		lenx = _lenx;
 		leny = _leny;
 		lenz = _lenz;
-		p1 = center - Vec3{lenx / 2, leny / 2, lenz / 2};
-		p2 = center + Vec3{lenx / 2, leny / 2, lenz / 2};
+		p1 = center - Vec3<>{lenx / 2, leny / 2, lenz / 2};
+		p2 = center + Vec3<>{lenx / 2, leny / 2, lenz / 2};
 	}
 	
 	void Box::init(const fVec3 &_p1, const fVec3 &_p2) {

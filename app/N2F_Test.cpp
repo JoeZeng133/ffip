@@ -37,8 +37,8 @@ int main(int argc, char const *argv[]) {
 	//add Ez dipole source in the center
 	int Np = 20;
 	double fp = c / (Np * dx);
-	auto ricker_source = Rickerwavelet_Func(fp, 1 / fp);
-	auto sin_source = Sinuosuidal_Func(fp);
+	auto ricker_source = Rickerwavelet_Func(fp, 1/fp);
+
 	auto phase = ricker_source.get_functor();
 	GriddedInterp interp({1, 1, 1}, dim * (dx / 2), {0, 0, 0}, {1.0});
 	sim.add_source(new Current_Source(interp, phase, Ez));
@@ -71,7 +71,8 @@ int main(int argc, char const *argv[]) {
 		sim.advance(fo);
 	}
 	
-//	sim.output_farfield(fo);
+	sim.udf_output();
+	sim.output_farfield(fo);
 	//output results
 	
 	fo.close();
