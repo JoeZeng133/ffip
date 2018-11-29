@@ -28,7 +28,7 @@ namespace ffip {
 		update_E();
 		hard_E((++time_step) * dt);
 		
-		os << operator()(fVec3(1, 0, n), Ex) << "\n";
+		//os << operator()(fVec3(1, 0, n), Ex) << "\n";
 	}
 	
 	int Plane_Wave::get_time_step() {

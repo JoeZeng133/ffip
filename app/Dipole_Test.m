@@ -42,8 +42,8 @@ lorentz = @(w, rel_e, fp, delta) rel_e ./ (1 + 1j * (w / (2 * pi * fp)) * (delta
 drude = @(w, fp, gamma) (2 * pi * fp)^2 ./ (1j * w * (2 * pi * gamma) - w.^2);
 
 % er_func = @(w) (1 + drude(w, 5e14, 2e14));
-% er_func = @(w) (1 + lorentz(w, 3, 3e14, 0.5e14) + lorentz(w, 3, 5e14, 1e14));
-er_func = @(w) (1 + drude(w, 2e14, 0.5e14) + lorentz(w, 3, 5e14, 1e14));
+er_func = @(w) (1 + lorentz(w, 3, 3e14, 0.5e14) + lorentz(w, 3, 5e14, 1e14));
+% er_func = @(w) (1 + drude(w, 2e14, 0.5e14) + lorentz(w, 3, 5e14, 1e14));
 
 testf = linspace(0.5 * fp, 2 * fp, 1000);
 tester = er_func(2 * pi * testf);
@@ -94,33 +94,39 @@ figure(3)
 subplot(1, 2, 1)
 plot(real(Er(:)), real(Er_p(:)), '*')
 axis equal
-title('real E_r')
+axis tight
+title('Re E_r')
 
 subplot(1, 2, 2)
 plot(imag(Er(:)), imag(Er_p(:)), '*')
 axis equal
-title('imag E_r')
+axis tight
+title('Im E_r')
 
 figure(4)
 subplot(1, 2, 1)
 plot(real(Eth(:)), real(Eth_p(:)), '*')
 axis equal
-title('real E_\theta')
+axis tight
+title('Re E_\theta')
 
 subplot(1, 2, 2)
 plot(imag(Eth(:)), imag(Eth_p(:)), '*')
 axis equal
-title('imag E_\theta')
+axis tight
+title('Im E_\theta')
 
 figure(5)
 subplot(1, 2, 1)
 plot(real(Hphi(:)), real(Hphi_p(:)), '*')
 axis equal
-title('real H_\phi')
+axis tight
+title('Re H_\phi')
 
 subplot(1, 2, 2)
 plot(imag(Hphi(:)), imag(Hphi_p(:)), '*')
 axis equal
-title('imag H_\phi')
+axis tight
+title('Im H_\phi')
 
 

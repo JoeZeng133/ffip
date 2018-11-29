@@ -12,13 +12,13 @@ int main(int argc, char const *argv[]) {
 	double c = c0 / sqrt(ur * er);
 	
 	double courant = 1 / sqrt(3);
-	double dt = 7.2e-17;
+	double dt = 2e-17 / 50;
 	double dx = c * dt / courant;
-	iVec3 dim{30, 30, 30};
+	iVec3 dim{50, 50, 50};
 	
 	Plane_Wave projector(dx, dt, dim.z);
 	Simulation sim(dx, dt, dim);
-	int step = 600;
+	int step = 1500;
 	
 	//add PML layers
 	double sigma_max = PML::optimal_sigma_max(3, dx, er, ur);
@@ -33,7 +33,7 @@ int main(int argc, char const *argv[]) {
 	projector.set_PML(PML(Z, High, 6, sigma_max));
 	
 	//add plane wave source
-	int Np = 20;
+	int Np = 30;
 	double fp = c / (Np * dx);
 	auto ricker_source = Rickerwavelet_Func(fp, 1 / fp);
 	auto sin_source = Sinuosuidal_Func(fp);
@@ -48,7 +48,7 @@ int main(int argc, char const *argv[]) {
 	
 	//set sphere and its medium
 	auto sph_medium = make_medium(er, 0, ur, 0);
-	sph_medium->add_e_poles(new Lorentz_Pole(3, fp, fp / 4));
+	sph_medium->add_e_poles(new Lorentz_Pole(0.8, 4e16, 1e16), new Lorentz_Pole(0.5, 6e16, 1e16));
 	auto sph1 = make_sphere(dim * (dx / 2), 10 * dx);
 	sim.add_solid(make_solid(sph_medium, sph1));
 	
