@@ -1,4 +1,3 @@
-%% near-field dipole test
 clear
 clc
 close all
@@ -11,7 +10,11 @@ eta0 = sqrt(u0 / e0);
 Sc = 1 / sqrt(3);
 dt = 7.2e-17;
 dx = c0 * dt / Sc;
-dim = [30, 30, 30];
+sim_dim = [30, 30, 30];
+inhom_dim = [20, 20, 20];
+p1 = 0.5 * (sim_dim - inhom_dim);
+p2 = 0.5 * (sim_dim + inhom_dim);
+num_samples = 200;
 step = 600;
 
 Np = 20;                            %center frequency of the rickerwavelet
@@ -20,21 +23,22 @@ ricker = @(t, d, fp) (1 - 2 * (pi * fp * (t - d)).^2) .* exp(-(pi * fp * (t - d)
 t = (0:step) * dt;
 ref_signal = ricker(t, 0, fp);
 
-rho = linspace(10, 15, 10) * dx;
-phi = linspace(0, 2 * pi, 10);
-th = linspace(1 / 4 * pi, 3 / 4 * pi, 10);
-ft = fp;
+[X, Y, Z] = ndgrid(0:sim_dim(1), 0:sim_dim(2), 0:sim_dim(3));
+X = X(X < p1(1) | X > p2(1));
+Y = Y(Y < p1(2) | Y > p2(2));
+Z = Z(Z < p1(3) | Z > p2(3));
 
-[Rho, Phi, Th, Ft] = ndgrid(rho, phi, th, ft);
-[Xo, Yo, Zo] = sph2cart(Phi, pi / 2 - Th, Rho);
-
-output = [[Xo(:), Yo(:), Zo(:)] + dim * dx / 2, Ft(:)];
-
+output = datasample([[X(:), Y(:), Z(:)] * dx, fp * ones(size(X(:)))], num_samples, 1, 'Replace', false);
 fileID = fopen('request.in', 'w');
 fprintf(fileID, '%d\n', size(output, 1));
 fprintf(fileID, '%e %e %e %e\n', output');
 fclose(fileID);
 
+fileID = fopen('geometry.in', 'w');
+fprintf(fileID, '1\n');                         %1 geometry
+fprintf(fileID, 'sphere\n');                     %inhomogeneous region
+
+fclose(fileID);
 
 %% theoretical fields
 Omega = 2 * pi * Ft;
@@ -61,17 +65,6 @@ plot(testf / (1e12), -imag(tester), '--'), hold off
 legend({['Re ', char(949), '_r'], ['Im ', char(949), '_r']}, 'FontSize', 15)
 xlabel('f [THz]')
 
-er =  er_func(Omega);
-e = e0 * er;
-
-u = u0;
-c = 1 ./ sqrt(e * u);
-eta = sqrt(u ./ e);
-K = Omega ./ c;
-
-Hphi_p = 1 / (4 * pi) * exp(-1j * K .* Rho) .* (1j * K ./ Rho + 1 ./ Rho.^2) .* sin(Th);
-Er_p = 1 / (4 * pi) * exp(-1j * K .* Rho) .* (2 * eta ./ Rho.^2 + 2 ./ (1j * Omega .* e .* Rho.^3)) .* cos(Th);
-Eth_p = 1 / (4 * pi) * exp(-1j * K .* Rho) .* (1j * Omega .* u ./ Rho + 1 ./ (1j * Omega .* e .* Rho.^3) + eta ./ Rho.^2) .* sin(Th);
 
 
 %% simulated fields
@@ -81,58 +74,5 @@ ref = sum(ref_signal .* exp(-1j * 2 * pi * Ft(:) * t), 2);
 
 E = [make_complex(data(:, 1), data(:, 2)), make_complex(data(:, 3), data(:, 4)), make_complex(data(:, 5), data(:, 6))];
 H = [make_complex(data(:, 7), data(:, 8)), make_complex(data(:, 9), data(:, 10)), make_complex(data(:, 11), data(:, 12))];
-
-proj_r = [sin(Th(:)) .* cos(Phi(:)), sin(Th(:)) .* sin(Phi(:)), cos(Th(:))];
-proj_th = [cos(Th(:)) .* cos(Phi(:)), cos(Th(:)) .* sin(Phi(:)), -sin(Th(:))];
-proj_phi = [-sin(Phi(:)), cos(Phi(:)), zeros(size(Phi(:)))];
-
-Er = sum(E .* proj_r, 2) ./ ref;
-Eth = sum(E .* proj_th, 2) ./ ref;
-Hphi = sum(H .* proj_phi, 2) ./ ref;
-
-%% comparisons
-figure(2)
-plot(abs(Er(:))), hold on
-plot(abs(Er_p(:)))
-
-%% correlation comparisons
-figure(3)
-subplot(1, 2, 1)
-plot(real(Er(:)), real(Er_p(:)), '*')
-axis equal
-axis tight
-title('Re E_r')
-
-subplot(1, 2, 2)
-plot(imag(Er(:)), imag(Er_p(:)), '*')
-axis equal
-axis tight
-title('Im E_r')
-
-figure(4)
-subplot(1, 2, 1)
-plot(real(Eth(:)), real(Eth_p(:)), '*')
-axis equal
-axis tight
-title('Re E_\theta')
-
-subplot(1, 2, 2)
-plot(imag(Eth(:)), imag(Eth_p(:)), '*')
-axis equal
-axis tight
-title('Im E_\theta')
-
-figure(5)
-subplot(1, 2, 1)
-plot(real(Hphi(:)), real(Hphi_p(:)), '*')
-axis equal
-axis tight
-title('Re H_\phi')
-
-subplot(1, 2, 2)
-plot(imag(Hphi(:)), imag(Hphi_p(:)), '*')
-axis equal
-axis tight
-title('Im H_\phi')
 
 

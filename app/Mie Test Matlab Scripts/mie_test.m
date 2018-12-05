@@ -11,7 +11,7 @@ eta0 = sqrt(u0 / e0);
 Sc = 1 / sqrt(3);
 dt = 2e-17 / 50;
 dx = c0 * dt / Sc;
-dim = [30, 30, 30];
+dim = [50, 50, 50];
 step = 1500;
 
 Np = 30;                            %center frequency of the rickerwavelet
@@ -53,6 +53,22 @@ er = er_func(Omega);
 m = sqrt(conj(er(:))); %exp(-jwt) dependence, use the conjugate
 a = 10 * dx;
 size_param = K * a;
+
+% inhomogeneous geometry file generation
+
+fileID = fopen('../geometry.in', 'w');
+vspan = 30;
+center = dim * dx / 2;
+st = center - 0.5 * vspan * dx;
+v = (0:vspan) * dx + st(1);
+[X, Y, Z] = ndgrid(v, v, v);
+V = ((X - center(1)).^2 + (Y - center(2)).^2 + (Z - center(3)).^2) < a^2;
+fprintf(fileID, '%d %d %d\n', [vspan+1, vspan+1, vspan+1]);
+fprintf(fileID, '%e %e\n', [st(1), dx]);
+fprintf(fileID, '%e %e\n', [st(2), dx]);
+fprintf(fileID, '%e %e\n', [st(2), dx]);
+fprintf(fileID, '%e ', V(:));
+fclose(fileID);
 
 figure(1)
 ft_samples = linspace(0.5 * fp, 1.5 * fp, 100);

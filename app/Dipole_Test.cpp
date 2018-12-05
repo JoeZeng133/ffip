@@ -57,9 +57,10 @@ int main(int argc, char const *argv[]) {
 	fin.close();
 	
 	//set background materials
-	auto medium1 = make_medium(er, 0, ur, 0);
+	auto medium1 = make_medium(2, 4.4610e+03, ur, 0);
+	//medium1->add_e_poles(new Deybe_Pole(2, 3.9696e-17));
 	//medium1->add_e_poles(new Drude_Pole(5e14, 2e14));
-	medium1->add_e_poles(new Lorentz_Pole(3, 3e14, 0.5e14), new Lorentz_Pole(3, 5e14, 1e14));
+	//medium1->add_e_poles(new Lorentz_Pole(3, 3e14, 0.5e14), new Lorentz_Pole(3, 5e14, 1e14));
 	//medium1->add_e_poles(new Lorentz_Pole(3, 5e14, 1e14), new Drude_Pole(2e14, 0.5e14));
 	sim.set_background_medium(medium1);
 	

@@ -1,0 +1,58 @@
+basic[string] {
+	dt[double] dx[double], 
+	dimx[int] dimy[int] dimz[int]
+	time_step
+	PML_thickness[int] sigma_max[double]
+}
+
+medium[string] number_of_medium[integer]{
+	{
+		er[double] sigma_e[double] ur[double] sigma_u[double]
+		number_of_poles[integer]
+		{
+			{
+				Lorentz[string] rel_perm[double] freq[double] damp[double]
+			}
+			{
+				Drude[string] freq[double] inv_relaxation[double]
+			}
+			{
+				Deybe[string] rel_perm[double] relaxation[double]
+			}
+			...
+		}
+	}
+	...
+}
+	
+	
+geometry[string] number_of_geometry[int] {
+	{bg[string] medium_idx[int]}
+	{sphere[string] medium_idx[int] radius[double] x[double] y[double] z[double]}
+	{box[string] medium_idx[int] p1x[double] p1y[double] p1z[double] p2x[double] p2y[double] p2z[double]}
+	...
+}
+		
+source[string] number_of_sources[integer] {
+	{eigen[string] {plane_wave[string] {ricker[string] fp d}}}
+	{dipole[string] x[double] y[double] z[double] amp[double] {ricker[string] fp d} ctype[int]}
+	...
+}
+
+analysis[string] number_of_analysis[integer] {
+	{probe[string] x[double] y[double] z[double] freq[double]}
+	{farfield[string] theta[double] phi[double] rho[double] freq[double]}
+	...
+}
+		
+
+	
+	
+
+
+	
+	
+
+	
+
+

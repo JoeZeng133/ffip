@@ -1,4 +1,3 @@
-%% near-field dipole test
 clear
 clc
 close all
