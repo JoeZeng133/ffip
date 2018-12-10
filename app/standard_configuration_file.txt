@@ -1,8 +1,9 @@
 basic[string] {
-	dt[double] dx[double], 
+	dt[double] dx[double],
 	dimx[int] dimy[int] dimz[int]
 	time_step
-	PML_thickness[int] sigma_max[double]
+	er[double] ur[double]
+	PML_thickness[int]
 }
 
 medium[string] number_of_medium[integer]{
@@ -24,35 +25,17 @@ medium[string] number_of_medium[integer]{
 	}
 	...
 }
-	
-	
+
 geometry[string] number_of_geometry[int] {
-	{bg[string] medium_idx[int]}
 	{sphere[string] medium_idx[int] radius[double] x[double] y[double] z[double]}
-	{box[string] medium_idx[int] p1x[double] p1y[double] p1z[double] p2x[double] p2y[double] p2z[double]}
-	...
+	{inhom[string] medium_idx1[int] medium_idx2[int] filename[string]}
 }
-		
+
 source[string] number_of_sources[integer] {
-	{eigen[string] {plane_wave[string] {ricker[string] fp d}}}
-	{dipole[string] x[double] y[double] z[double] amp[double] {ricker[string] fp d} ctype[int]}
+	{eigen[string] n[int] fp[double] d[double]}
+	{dipole[string] filename}
 	...
 }
 
-analysis[string] number_of_analysis[integer] {
-	{probe[string] x[double] y[double] z[double] freq[double]}
-	{farfield[string] theta[double] phi[double] rho[double] freq[double]}
-	...
-}
-		
-
-	
-	
-
-
-	
-	
-
-	
-
-
+probe[string] input_file[string] output_file[string]
+farfield[string] input_file[string] output_file[string]

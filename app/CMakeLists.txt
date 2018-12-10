@@ -14,3 +14,6 @@ target_link_libraries(Plane_Wave_Test ffip)
 
 add_executable(Mie_Test Mie_Test.cpp)
 target_link_libraries(Mie_Test ffip)
+
+add_executable(std_config std_config.cpp)
+target_link_libraries(std_config ffip)

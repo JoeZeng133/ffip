@@ -51,7 +51,7 @@ int main(int argc, char const *argv[]) {
 	sph_medium->add_e_poles(new Lorentz_Pole(0.8, 4e16, 1e16), new Lorentz_Pole(0.5, 6e16, 1e16));
 	auto sph1 = make_sphere(dim * (dx / 2), 10 * dx);
 	//sim.add_solid(make_solid(sph_medium, sph1));						//geometry model
-	sim.add_solid(make_solid(sph_medium, bg_medium,  "geometry.in"));	//inhomgeneous model
+	sim.add_solid(make_solid(sph_medium, bg_medium,  "objective_geometry.in"));	//inhomgeneous model
 	
 	//read far field probes
 	fstream fin{"request.in", ios::in};

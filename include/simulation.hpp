@@ -234,7 +234,6 @@ namespace ffip {
 	
 	class Simulation {
 	private:
-
 		real dt, dx;
 		iVec3 sim_dim;
 		
@@ -270,7 +269,10 @@ namespace ffip {
 		void chunk_init();
 		
 	public:
+		Simulation() = default;
 		Simulation(const real _dx, const real _dt, const iVec3 _dim);
+		
+		void setup(const real _dx, const real _dt, const iVec3 _dim);
 		void advance(std::ostream& os);
 		void add_solid(Solid const* solid);
 		void add_source(Source* source);
@@ -292,9 +294,13 @@ namespace ffip {
 		real operator()(const iVec3& p, const Coord_Type ctype) const;		//access at integer computation coordinates
 		real operator()(const iVec3& p) const;								//raw access	
 
-		/* */
+		/* getter */
 		int get_step() const;
 		real get_dt() const;
+		real get_dx() const;
+		iVec3 get_dim() const;
+		Medium const* get_bg_medium() const;
+		
 		void output(std::ostream& os);
 		void output_farfield(std::ostream& os);
 	};

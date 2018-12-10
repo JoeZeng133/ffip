@@ -3,6 +3,12 @@
 
 namespace ffip {
 	Simulation::Simulation(const real _dx, const real _dt, const iVec3 _dim): dt(_dt), dx(_dx), sim_dim(_dim) {}
+	
+	void Simulation::setup(const real _dx, const real _dt, const iVec3 _dim) {
+		dx = _dx;
+		dt = _dt;
+		sim_dim = _dim;
+	}
 
 	void Simulation::probe_init() {}
 
@@ -261,6 +267,18 @@ namespace ffip {
 	
 	real Simulation::get_dt() const {
 		return dt;
+	}
+	
+	real Simulation::get_dx() const {
+		return dx;
+	}
+	
+	iVec3 Simulation::get_dim() const {
+		return sim_dim / 2;
+	}
+	
+	Medium const* Simulation::get_bg_medium() const {
+		return bg_medium;
 	}
 	
 	void Simulation::output(std::ostream &os) {
