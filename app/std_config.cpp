@@ -2,6 +2,7 @@
  */
 #include <iostream>
 #include <simulation.hpp>
+#include <chrono>
 
 using namespace std;
 using namespace ffip;
@@ -202,6 +203,8 @@ void read_farfield(istream& fin, Simulation& sim) {
 }
 
 int main(int argc, char const *argv[]) {
+	auto start = std::chrono::system_clock::now();
+	
 	int time_step;
 	Simulation sim;
 	vector<Medium*> medium_gather;
@@ -286,11 +289,15 @@ int main(int argc, char const *argv[]) {
 	
 	sim.init();
 	for(int i = 0; i < time_step; ++i) {
-		sim.advance(fo, 6);
+		sim.advance(fo, 4);
 	}
 	
 	sim.output(probes_output_file);
 	sim.output_farfield(farfield_output_file);
 
+	auto end = std::chrono::system_clock::now();
+	std::chrono::duration<double> elapsed_seconds = end-start;
+	cout << "\nRunning Time: " << elapsed_seconds.count() << endl;
+	
 	return 0;
 }

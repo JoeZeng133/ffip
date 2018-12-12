@@ -55,12 +55,12 @@ lorentz = @(w, rel_e, fp, delta) rel_e ./ (1 + 1j * (w / (2 * pi * fp)) * (delta
 drude = @(w, fp, gamma) (2 * pi * fp)^2 ./ (1j * w * (2 * pi * gamma) - w.^2);
 deybe = @(w, rel_e, tau) rel_e ./ (1 + 1j * w * tau);
 
-er_const = 2 - 0.2i;
-sig_const = -imag(er_const) * (2 * pi * fp * e0);
-er_func = @(w) (real(er_const) - 1j * sig_const ./ (w * e0));
+% er_const = 2 - 0.2i;
+% sig_const = -imag(er_const) * (2 * pi * fp * e0);
+% er_func = @(w) (real(er_const) - 1j * sig_const ./ (w * e0));
 % er_func = @(w) (1 + deybe(w, rel_e, tau));
 % er_func = @(w) (1 + drude(w, 5e14, 2e14));
-% er_func = @(w) (1 + lorentz(w, 3, 3e14, 0.5e14) + lorentz(w, 3, 5e14, 1e14));
+er_func = @(w) (1 + lorentz(w, 3, 3e14, 0.5e14) + lorentz(w, 3, 5e14, 1e14));
 % er_func = @(w) (1 + drude(w, 2e14, 0.5e14) + lorentz(w, 3, 5e14, 1e14));
 
 testf = linspace(0.5 * fp, 2 * fp, 1000);
@@ -99,9 +99,9 @@ fprintf(fileID, "}\n");
 fprintf(fileID, "medium 1{\n");
 % medium 0, scatterer medium
 fprintf(fileID, "{ ");
-fprintf(fileID, "%e %e %e %e 0\n", real(er_const), sig_const, ur_bg, 0);
-% fprintf(fileID, "{ Lorentz %e %e %e }\n", 3, 3e14, 0.5e14);
-% fprintf(fileID, "{ Lorentz %e %e %e }\n", 3, 5e14, 1e14);
+fprintf(fileID, "%e %e %e %e 2\n", er_bg, 0, ur_bg, 0);
+fprintf(fileID, "{ Lorentz %e %e %e }\n", 3, 3e14, 0.5e14);
+fprintf(fileID, "{ Lorentz %e %e %e }\n", 3, 5e14, 1e14);
 fprintf(fileID, " }\n");
 fprintf(fileID, "}\n");
 

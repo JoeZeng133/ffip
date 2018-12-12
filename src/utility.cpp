@@ -347,8 +347,27 @@ namespace ffip {
 		y1 = tmp.second.y;
 		z1 = tmp.second.z;
 		
-		if (is_empty())			//so that is_end is always true
+		size = get_size();
+		if (size == 0)
 			z = z1 + 1;
+	}
+	
+	my_iterator::my_iterator(const iVec3& p1, const iVec3& p2, const Coord_Type ctype, const int rank, const int num): my_iterator(p1, p2, ctype) {
+		if (rank >= num)
+			throw std::runtime_error("Rank is larger than number of threads");
+		
+		if (size <= num)
+			throw std::runtime_error("Region is too small to divide");
+		
+		int idx1 = (rank * size) / num;
+		int idx2 = ((rank + 1) * size) / num;
+		size = idx2 - idx1;
+		
+		x = x0 + (idx1 % ((x1 - x0) / jump + 1)) * jump;
+		idx1 /= (x1 - x0) / jump + 1;
+		y = y0 + (idx1 % ((y1 - y0) / jump + 1)) * jump;
+		idx1 /= ((y1 - y0) / jump + 1);
+		z = z0 + (idx1 % ((z1 - z0) / jump + 1)) * jump;
 	}
 	
 	void my_iterator::advance() {
@@ -363,14 +382,14 @@ namespace ffip {
 	}
 	
 	bool my_iterator::is_end() const{
-		return z > z1;
+		return index >= size;
 	}
 	
 	bool my_iterator::is_empty() const{
 		return x0 > x1 || y0 > y1 || z0 > z1;
 	}
 	
-	size_t my_iterator::size() const{
+	size_t my_iterator::get_size() const{
 		return is_empty()? 0 : (size_t)((x1 - x0) / jump + 1) * ((y1 - y0) / jump + 1) * ((z1 - z0) / jump + 1);
 	}
 	

@@ -54,12 +54,12 @@ namespace ffip {
 		void update_Md(const real time, const int num_proc);		//B(n + 1) - B(n) = Md(n + 0.5) = -(curl(H(n + 0.5)) + Mi(n + 0.5))
 		
 		template<typename T>
-		void update_JMd_helper(const iVec3 p1, const iVec3 p2);
+		void update_JMd_helper(const iVec3 p1, const iVec3 p2, const int num_proc);
 		
 		/* Material updates */
 		void update_D2E(const real time, const int num_proc);
 		void update_B2H(const real time, const int num_proc);
-		void update_DEHB_helper(const Coord_Type F, const iVec3 p1, const iVec3 p2);
+		void update_DEHB_helper(const Coord_Type F, const iVec3 p1, const iVec3 p2, const int num_proc);
 		
 		/* MPI updates of the boundary */
 		void update_padded_H(const real time);
@@ -106,7 +106,7 @@ namespace ffip {
 	
 	
 	template<typename T>
-	void Chunk::update_JMd_helper(const iVec3 p1, const iVec3 p2) {
+	void Chunk::update_JMd_helper(const iVec3 p1, const iVec3 p2, const int num_proc) {
 		/* Curl updates without PML */
 		using dir_base = typename T::dir_base;
 		using x1 = typename dir_base::x1;
@@ -118,10 +118,20 @@ namespace ffip {
 		int ch_jump_x1 = get_ch_jump<x1>();
 		int ch_jump_x2 = get_ch_jump<x2>();
 		
-		for(auto itr = my_iterator(p1_ch, p2_ch, p1_ch.get_type()); !itr.is_end(); itr.advance()) {
-			int index = itr.x * ch_jump_x + itr.y * ch_jump_y + itr.z * ch_jump_z;
-			
-			jmd[index] = (eh[index + ch_jump_x1] - eh[index - ch_jump_x1]) / dx / get_k<x1>(choose<x1>::get(itr)) - (eh[index + ch_jump_x2] - eh[index - ch_jump_x2]) / dx / get_k<x2>(choose<x2>::get(itr));
+		auto func = [&](my_iterator itr) {
+			for(; !itr.is_end(); itr.advance()) {
+				int index = itr.x * ch_jump_x + itr.y * ch_jump_y + itr.z * ch_jump_z;
+				
+				jmd[index] = (eh[index + ch_jump_x1] - eh[index - ch_jump_x1]) / dx / get_k<x1>(choose<x1>::get(itr)) - (eh[index + ch_jump_x2] - eh[index - ch_jump_x2]) / dx / get_k<x2>(choose<x2>::get(itr));
+			}
+		};
+		
+		std::vector<std::thread> threads;
+		for(int i = 1; i < num_proc; ++i) {
+			threads.push_back(std::thread(func, my_iterator(p1_ch, p2_ch, p1_ch.get_type(), i, num_proc)));
 		}
+		threads.push_back(std::thread(func, my_iterator(p1_ch, p2_ch, p1_ch.get_type(), 0, num_proc)));
+		for(auto& item : threads)
+			item.join();
 	}
 }

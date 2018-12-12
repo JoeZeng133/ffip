@@ -152,11 +152,11 @@ namespace ffip {
 	
 	
 	void Chunk::update_Jd(const real time, const int num_proc) {
-		update_JMd_helper<ex_tag>(ch_p1, ch_p2);
-		update_JMd_helper<ey_tag>(ch_p1, ch_p2);
-		update_JMd_helper<ez_tag>(ch_p1, ch_p2);
+		update_JMd_helper<ex_tag>(ch_p1, ch_p2, num_proc);
+		update_JMd_helper<ey_tag>(ch_p1, ch_p2, num_proc);
+		update_JMd_helper<ez_tag>(ch_p1, ch_p2, num_proc);
 		
-		for(auto& item : e_PML) {
+		auto PML_update = [&, this](PML_Point& item) {
 			if(item.c_pos != 0)
 				item.psi_pos = item.b_pos * item.psi_pos + item.c_pos * (eh[item.index + item.jump_pos] - eh[item.index - item.jump_pos]) / dx;
 			
@@ -164,20 +164,24 @@ namespace ffip {
 				item.psi_neg = item.b_neg * item.psi_neg + item.c_neg * (eh[item.index + item.jump_neg] - eh[item.index - item.jump_neg]) / dx;
 			
 			jmd[item.index] += item.psi_pos - item.psi_neg;
-		}
+		};
 		
-		for(auto& x : source_list) {
+		task_divider(e_PML, PML_update, num_proc);
+		
+		auto source_update = [&, this](Source_Internal* x) {
 			x->get_Jd(time);
 			x->update_Jd(jmd);
-		}
+		};
+		
+		task_divider(source_list, source_update, num_proc);
 	}
 	
 	void Chunk::update_Md(const real time, const int num_proc) {
-		update_JMd_helper<hx_tag>(ch_p1, ch_p2);
-		update_JMd_helper<hy_tag>(ch_p1, ch_p2);
-		update_JMd_helper<hz_tag>(ch_p1, ch_p2);
+		update_JMd_helper<hx_tag>(ch_p1, ch_p2, num_proc);
+		update_JMd_helper<hy_tag>(ch_p1, ch_p2, num_proc);
+		update_JMd_helper<hz_tag>(ch_p1, ch_p2, num_proc);
 		
-		for(auto& item : h_PML) {
+		auto PML_update = [&, this](PML_Point& item) {
 			if(item.c_pos != 0)
 				item.psi_pos = item.b_pos * item.psi_pos + item.c_pos * (eh[item.index + item.jump_pos] - eh[item.index - item.jump_pos]) / dx;
 			
@@ -185,27 +189,31 @@ namespace ffip {
 				item.psi_neg = item.b_neg * item.psi_neg + item.c_neg * (eh[item.index + item.jump_neg] - eh[item.index - item.jump_neg]) / dx;
 			
 			jmd[item.index] += item.psi_pos - item.psi_neg;
-		}
+		};
 		
-		for(auto& x : source_list) {
+		task_divider(h_PML, PML_update, num_proc);
+		
+		auto source_update = [&, this](Source_Internal* x) {
 			x->get_Md(time);
 			x->update_Md(jmd);
-		}
+		};
+		
+		task_divider(source_list, source_update, num_proc);
 	}
 	
 	void Chunk::update_B2H(const real time, const int num_proc) {
-		update_DEHB_helper(Hx, ch_p1, ch_p2);
-		update_DEHB_helper(Hy, ch_p1, ch_p2);
-		update_DEHB_helper(Hz, ch_p1, ch_p2);
+		update_DEHB_helper(Hx, ch_p1, ch_p2, num_proc);
+		update_DEHB_helper(Hy, ch_p1, ch_p2, num_proc);
+		update_DEHB_helper(Hz, ch_p1, ch_p2, num_proc);
 	}
 	
 	void Chunk::update_D2E(const real time, const int num_proc) {
-		update_DEHB_helper(Ex, ch_p1, ch_p2);
-		update_DEHB_helper(Ey, ch_p1, ch_p2);
-		update_DEHB_helper(Ez, ch_p1, ch_p2);
+		update_DEHB_helper(Ex, ch_p1, ch_p2, num_proc);
+		update_DEHB_helper(Ey, ch_p1, ch_p2, num_proc);
+		update_DEHB_helper(Ez, ch_p1, ch_p2, num_proc);
 	}
 	
-	void Chunk::update_DEHB_helper(const Coord_Type F, const iVec3 p1, const iVec3 p2) {
+	void Chunk::update_DEHB_helper(const Coord_Type F, const iVec3 p1, const iVec3 p2, const int num_proc) {
 		auto tmp = get_component_interior(p1, p2, F);
 		auto p1_ch = tmp.first - ch_origin;
 		auto p2_ch = tmp.second - ch_origin;
@@ -216,13 +224,24 @@ namespace ffip {
 		else
 			modifier = -1 / u0;
 		
-		for(auto itr = my_iterator(p1_ch, p2_ch, p1_ch.get_type()); !itr.is_end(); itr.advance()) {
-					int index = itr.x * ch_jump_x + itr.y * ch_jump_y + itr.z * ch_jump_z;
-					real tmp = eh[index];
-					
-					eh[index] = medium_chunk[index]->update_field(eh[index], eh1[index], modifier * jmd[index], dispersive_field_chunk[index]);
-					eh1[index] = tmp;
-				}
+		auto func = [&, this](my_iterator itr) {
+			for(;!itr.is_end(); itr.advance()) {
+				int index = itr.x * ch_jump_x + itr.y * ch_jump_y + itr.z * ch_jump_z;
+				real tmp = eh[index];
+				
+				eh[index] = medium_chunk[index]->update_field(eh[index], eh1[index], modifier * jmd[index], dispersive_field_chunk[index]);
+				eh1[index] = tmp;
+			}
+		};
+		
+		std::vector<std::thread> threads;
+		for (int i = 1; i < num_proc; ++i)
+			threads.push_back(std::thread{func, my_iterator{p1_ch, p2_ch, p1_ch.get_type(), i, num_proc}});
+				
+		func(my_iterator{p1_ch, p2_ch, p1_ch.get_type(), 0, num_proc});
+		
+		for (auto& item : threads)
+			item.join();
 	}
 	
 	void Chunk::update_padded_E(const real time) {}
@@ -255,7 +274,7 @@ namespace ffip {
 		if (!ElementWise_Less_Eq(ch_p1, p) || !ElementWise_Less_Eq(p, ch_p2))
 			return 0;
 
-		static real f[8];
+		real f[8];
 		
 		auto tmp = get_nearest_point<side_low_tag>(p, ctype);
 		int base_index_ch = get_index_ch(tmp);

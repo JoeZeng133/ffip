@@ -638,26 +638,68 @@ namespace ffip {
 	/* an iterator to iterate through a box region specified by two corner regions [p1, p2]
 	 it allows iteration of particular coord_type points: ex, ..., ez, hx, ..., hz
 	 for null, it will loop through all points
+	 it allows looping through a particular part of the region
 	 */
 	struct my_iterator {
 		using value_type = int;
 		
+		size_t size{0};
 		int x0, y0, z0, x1, y1, z1;
 		int x, y, z, index{0};
 		int jump;
 		
 		my_iterator(const iVec3& p1, const iVec3& p2, const Coord_Type ctype);
+		my_iterator(const iVec3& p1, const iVec3& p2, const Coord_Type ctype, const int rank, const int num);
 		
 		void advance();
 		bool is_end() const;
 		bool is_empty() const;
 		iVec3 get_vec() const;
-		size_t size() const;
-		
+		size_t get_size() const;
 	};
 
-	std::pair<iVec3, iVec3> divide_region(iVec3 p1, iVec3 p2, const int r, const int n);
+	template<typename T, typename F>
+	void task_divider(std::vector<T>& list, F& func, const int num_proc) {
+		if (list.size() < num_proc)
+			for(auto& item : list) {
+				func(item);
+			}
+		else {
+			std::vector<std::thread> threads;
+			for(int i = 1; i < num_proc; ++i) {
+				auto itr1 = list.begin() + (i * list.size()) / num_proc;
+				auto itr2 = list.begin() + ((i + 1) * list.size()) / num_proc;
+				threads.push_back(std::thread(std::for_each<decltype(itr1), F>, itr1, itr2, func));
+			}
+			auto itr1 = list.begin() + (0 * list.size()) / num_proc;
+			auto itr2 = list.begin() + (1 * list.size()) / num_proc;
+			std::for_each(itr1, itr2, func);
+			
+			for(auto& item : threads)
+				item.join();
+		}
+	}
 	
+//	template<typename T, typename F>
+//	void region_divider(const iVec3& p1, const iVec3& p2, F& func, const int num_proc) {
+//		std::vector<std::thread> threads;
+//		for (int i = 1; i < num_proc; ++i)
+//			threads.push_back(std::thread{func, my_iterator{p1, p2, p1.get_type(), i, num_proc}});
+//
+//		func(my_iterator{p1_ch, p2_ch, p1_ch.get_type(), 0, num_proc});
+//
+//		for (auto& item : threads)
+//			item.join();
+//	}
+	
+//	template<typename T, typename F>
+//	void task_divider(std::vector<T*>& list, F& func, const int num_proc) {
+//		for(auto item : list) {
+//			func(item);
+//		}
+//	}
+	
+	std::pair<iVec3, iVec3> divide_region(iVec3 p1, iVec3 p2, const int r, const int n);
 	extern iVec3 vec3_base[3];
 	
 	//output overloading

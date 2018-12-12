@@ -236,12 +236,17 @@ namespace ffip {
 		chunk->update_padded_E(time);
 		chunk->update_padded_H(time);
 		
-		for (auto item : probes)
+		auto probes_update = [&, this](Probe* item) {
 			item->update(*this);
+		};
 		
-		for (auto item : N2F_faces)
+		task_divider(probes, probes_update, num_proc);
+		
+		auto N2F_update = [&, this](N2F_Face_Base* item) {
 			item->update(chunk, step);
+		};
 		
+		task_divider(N2F_faces, N2F_update, num_proc);
 		udf_advance();
 	}
 
