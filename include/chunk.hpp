@@ -50,18 +50,18 @@ namespace ffip {
 		int get_index_ch(const iVec3& p) const;			//get index relative to chunk origin
 		
 		/* Jd, Md (currenst, curl) updates*/
-		void update_Jd(const real time);		//D(n + 1) - D(n) = Jd(n + 0.5) = curl(H(n + 0.5)) - Ji(n + 0.5)
-		void update_Md(const real time);		//B(n + 1) - B(n) = Md(n + 0.5) = -(curl(H(n + 0.5)) + Mi(n + 0.5))
+		void update_Jd(const real time, const int num_proc);		//D(n + 1) - D(n) = Jd(n + 0.5) = curl(H(n + 0.5)) - Ji(n + 0.5)
+		void update_Md(const real time, const int num_proc);		//B(n + 1) - B(n) = Md(n + 0.5) = -(curl(H(n + 0.5)) + Mi(n + 0.5))
 		
 		template<typename T>
-		void update_JMd_helper();
+		void update_JMd_helper(const iVec3 p1, const iVec3 p2);
 		
 		/* Material updates */
-		void update_D2E(const real time);
-		void update_B2H(const real time);
-		void update_DEHB_helper(const Coord_Type F);
+		void update_D2E(const real time, const int num_proc);
+		void update_B2H(const real time, const int num_proc);
+		void update_DEHB_helper(const Coord_Type F, const iVec3 p1, const iVec3 p2);
 		
-		/* MPI members */
+		/* MPI updates of the boundary */
 		void update_padded_H(const real time);
 		void update_padded_E(const real time);
 		
@@ -106,13 +106,13 @@ namespace ffip {
 	
 	
 	template<typename T>
-	void Chunk::update_JMd_helper() {
+	void Chunk::update_JMd_helper(const iVec3 p1, const iVec3 p2) {
 		/* Curl updates without PML */
 		using dir_base = typename T::dir_base;
 		using x1 = typename dir_base::x1;
 		using x2 = typename dir_base::x2;
 		
-		auto tmp = get_component_interior(ch_p1, ch_p2, T::ctype);
+		auto tmp = get_component_interior(p1, p2, T::ctype);
 		auto p1_ch = tmp.first - ch_origin;
 		auto p2_ch = tmp.second - ch_origin;
 		int ch_jump_x1 = get_ch_jump<x1>();

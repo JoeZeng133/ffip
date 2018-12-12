@@ -28,12 +28,13 @@ medium[string] number_of_medium[integer]{
 
 geometry[string] number_of_geometry[int] {
 	{sphere[string] medium_idx[int] radius[double] x[double] y[double] z[double]}
+	{box[string] medium_idx[int] x0[double] y0[double] z0[double] x1[double] y1[double] z1[double]}
 	{inhom[string] medium_idx1[int] medium_idx2[int] filename[string]}
 }
 
 source[string] number_of_sources[integer] {
 	{eigen[string] n[int] fp[double] d[double]}
-	{dipole[string] filename}
+	{dipole[string] filename[string]}
 	...
 }
 

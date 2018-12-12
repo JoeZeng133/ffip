@@ -273,7 +273,7 @@ namespace ffip {
 		Simulation(const real _dx, const real _dt, const iVec3 _dim);
 		
 		void setup(const real _dx, const real _dt, const iVec3 _dim);
-		void advance(std::ostream& os);
+		void advance(std::ostream& os, const int num_proc);
 		void add_solid(Solid const* solid);
 		void add_source(Source* source);
 		void add_PML_layer(PML* PML);

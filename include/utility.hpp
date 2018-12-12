@@ -8,6 +8,7 @@
 #include <iostream>
 #include <fstream>
 #include <functional>
+#include <thread>
 #include <boost/math/constants/constants.hpp>
 
 namespace ffip {
@@ -654,6 +655,8 @@ namespace ffip {
 		size_t size() const;
 		
 	};
+
+	std::pair<iVec3, iVec3> divide_region(iVec3 p1, iVec3 p2, const int r, const int n);
 	
 	extern iVec3 vec3_base[3];
 	

@@ -224,14 +224,14 @@ namespace ffip {
 		N2F_pos.push_back(pos);
 	}
 	
-	void Simulation::advance(std::ostream& os) {
+	void Simulation::advance(std::ostream& os, const int num_proc) {
 		std::cout << "Stepping from" << step << " to " << step + 1 << std::endl;
 		real time = (step ++ ) * dt;
-		chunk->update_Md(time);
-		chunk->update_B2H(time);
+		chunk->update_Md(time, num_proc);
+		chunk->update_B2H(time, num_proc);
 		
-		chunk->update_Jd(time + 0.5 * dt);
-		chunk->update_D2E(time + 0.5 * dt);
+		chunk->update_Jd(time + 0.5 * dt, num_proc);
+		chunk->update_D2E(time + 0.5 * dt, num_proc);
 		
 		chunk->update_padded_E(time);
 		chunk->update_padded_H(time);

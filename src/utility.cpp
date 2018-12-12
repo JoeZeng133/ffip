@@ -94,7 +94,7 @@ namespace ffip {
 	
 	auto Gaussian_Func::get_functor() -> std::function<real(const real)> const {
 		
-		return [=](const real time) -> real {
+		return [a=this->a](const real time) -> real {
 			return exp(-a * time * time);
 		};
 	}
@@ -117,7 +117,7 @@ namespace ffip {
 	}
 	
 	auto Sinuosuidal_Func::get_functor() -> std::function<real(const real)> const {
-		return [=](const real time) -> real {
+		return [a=this->a](const real time) -> real {
 			return sin(a * time);
 		};
 	}
@@ -143,7 +143,7 @@ namespace ffip {
 	}
 	
 	auto Rickerwavelet_Func::get_functor() -> std::function<real(const real)> const {
-		return [=](const real time) -> real {
+		return [a = this->a, d = this->d](const real time) -> real {
 			real arg = a * (time - d) * (time - d);
 			return (1 - 2 * arg) * exp(-arg);
 		};
@@ -387,5 +387,37 @@ namespace ffip {
 	std::ostream& operator<<(std::ostream& os, const complex_num& c) {
 		os << c.real() << " " << c.imag();
 		return os;
+	}
+
+	std::pair<iVec3, iVec3> divide_region(iVec3 p1, iVec3 p2, const int r, const int n) {
+		if (!ElementWise_Less_Eq(p1, p2))
+			throw std::runtime_error("The region cannot be divided");
+
+		iVec3 dp = (p2 - p1) + iVec3{ 1, 1, 1 };
+		if (dp.z >= dp.y && dp.z >= dp.x) {
+			if (n > dp.z)
+				throw std::runtime_error("The region cannot be divided");
+
+			p2.z = ((r + 1) * dp.z) / n - 1 + p1.z;
+			p1.z = (r * dp.z) / n + p1.z;
+			
+		}
+		else if (dp.y >= dp.x && dp.y >= dp.z) {
+			if (n > dp.y)
+				throw std::runtime_error("The region cannot be divided");
+
+			p2.y = ((r + 1) * dp.y) / n - 1 + p1.y;
+			p1.y = (r * dp.y) / n + p1.y;
+			
+		}
+		else {
+			if (n > dp.x)
+				throw std::runtime_error("The region cannot be divided");
+
+			p2.x = ((r + 1) * dp.x) / n - 1 + p1.x;
+			p1.x = (r * dp.x) / n + p1.x;
+		}
+
+		return { p1, p2 };
 	}
 }

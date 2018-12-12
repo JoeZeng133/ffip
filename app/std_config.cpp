@@ -8,14 +8,14 @@ using namespace ffip;
 
 int read_basic_config(istream& fin, Simulation& sim) {
 	char c;
-	fin >> c;
 	double dt, dx;
 	int dimx, dimy, dimz;
-	double er, ur;
 	int time_step;
+	double er, ur;
 	int PML_thickness;
 	double sigma_max;
-	
+
+	fin >> c;
 	if (c != '{')
 		throw runtime_error("basic format is not right");
 	
@@ -97,7 +97,7 @@ Medium* read_medium(istream& fin) {
 	return res;
 }
 
-void read_geometry(istream& fin, Simulation& sim, vector<Medium*>& medium_gather) {
+void read_geometry(istream& fin, Simulation& sim, const vector<Medium*>& medium_gather) {
 	char c;
 	string type;
 	fin >> c;
@@ -118,6 +118,13 @@ void read_geometry(istream& fin, Simulation& sim, vector<Medium*>& medium_gather
 		double radius, x, y, z;
 		fin >> idx >> radius >> x >> y >> z;
 		sim.add_solid(make_solid(medium_gather[idx], make_sphere(fVec3{x, y, z}, radius)));
+	}
+
+	if (type == "box") {
+		int idx;
+		double x0, y0, z0, x1, y1, z1;
+		fin >> idx >> x0 >> y0 >> z0 >> x1 >> y1 >> z1;
+		sim.add_solid(make_solid(medium_gather[idx], make_box(fVec3{ x0, y0, z0 }, fVec3{ x1, y1, z1 })));
 	}
 	
 	fin >> c;
@@ -142,9 +149,9 @@ void read_source(istream& fin, Simulation& sim) {
 		Medium const* bg_medium = sim.get_bg_medium();
 		Plane_Wave projector(sim.get_dx(), sim.get_dt(), n);
 		auto ricker_source = Rickerwavelet_Func(fp, d);
-		
+		double sigma_max = PML::optimal_sigma_max(3, sim.get_dx(), bg_medium->get_e_inf(), bg_medium->get_u_inf());
 		projector.set_medium(bg_medium->get_e_inf(), bg_medium->get_u_inf());
-		projector.set_PML(PML(Direction::Z, High, 10, PML::optimal_sigma_max(3, sim.get_dx(), bg_medium->get_e_inf(), bg_medium->get_u_inf())));
+		projector.set_PML(PML(Direction::Z, High, 6, sigma_max));
 		projector.set_excitation(ricker_source.get_functor());
 		
 		sim.add_source(new Eigen_Source(projector));
@@ -279,7 +286,7 @@ int main(int argc, char const *argv[]) {
 	
 	sim.init();
 	for(int i = 0; i < time_step; ++i) {
-		sim.advance(fo);
+		sim.advance(fo, 6);
 	}
 	
 	sim.output(probes_output_file);

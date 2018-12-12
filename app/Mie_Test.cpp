@@ -35,7 +35,7 @@ int main(int argc, char const *argv[]) {
 	//add plane wave source
 	int Np = 30;
 	double fp = c / (Np * dx);
-	auto ricker_source = Rickerwavelet_Func(fp, 1 / fp);
+	auto ricker_source = Rickerwavelet_Func(fp, 1/fp);
 	auto sin_source = Sinuosuidal_Func(fp);
 	auto phase = ricker_source.get_functor();
 	projector.set_medium(er, ur);
@@ -54,7 +54,7 @@ int main(int argc, char const *argv[]) {
 	sim.add_solid(make_solid(sph_medium, bg_medium,  "objective_geometry.in"));	//inhomgeneous model
 	
 	//read far field probes
-	fstream fin{"request.in", ios::in};
+	fstream fin{"probes.in", ios::in};
 	if (!fin.is_open())
 		throw runtime_error("fail to open request.in");
 	
@@ -62,7 +62,7 @@ int main(int argc, char const *argv[]) {
 	fin >> r;
 	for (int i = 0; i < r; ++i) {
 		double f, th, phi, rho;
-		fin >> f >> th >> phi >> rho;
+		fin >> th >> phi >> rho >> f;
 		sim.add_farfield_probe(f, {th, phi, rho});
 	}
 	fin.close();
@@ -71,14 +71,11 @@ int main(int argc, char const *argv[]) {
 	sim.init();
 	projector.init();
 	
-	fstream fo{"data.out", ios::out};
-	fstream f_ref{"ref.out", ios::out};
+	fstream fo{"output.out", ios::out};
 	//run simulation
 	for(int i = 0; i < step; ++i) {
 		sim.advance(fo);
-		projector.advance(f_ref);
 	}
-	f_ref.close();
 	
 	//output results
 	sim.output_farfield(fo);

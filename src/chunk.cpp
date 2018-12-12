@@ -151,10 +151,10 @@ namespace ffip {
 	}
 	
 	
-	void Chunk::update_Jd(const real time) {
-		update_JMd_helper<ex_tag>();
-		update_JMd_helper<ey_tag>();
-		update_JMd_helper<ez_tag>();
+	void Chunk::update_Jd(const real time, const int num_proc) {
+		update_JMd_helper<ex_tag>(ch_p1, ch_p2);
+		update_JMd_helper<ey_tag>(ch_p1, ch_p2);
+		update_JMd_helper<ez_tag>(ch_p1, ch_p2);
 		
 		for(auto& item : e_PML) {
 			if(item.c_pos != 0)
@@ -172,10 +172,10 @@ namespace ffip {
 		}
 	}
 	
-	void Chunk::update_Md(const real time) {
-		update_JMd_helper<hx_tag>();
-		update_JMd_helper<hy_tag>();
-		update_JMd_helper<hz_tag>();
+	void Chunk::update_Md(const real time, const int num_proc) {
+		update_JMd_helper<hx_tag>(ch_p1, ch_p2);
+		update_JMd_helper<hy_tag>(ch_p1, ch_p2);
+		update_JMd_helper<hz_tag>(ch_p1, ch_p2);
 		
 		for(auto& item : h_PML) {
 			if(item.c_pos != 0)
@@ -193,20 +193,20 @@ namespace ffip {
 		}
 	}
 	
-	void Chunk::update_B2H(const real time) {
-		update_DEHB_helper(Hx);
-		update_DEHB_helper(Hy);
-		update_DEHB_helper(Hz);
+	void Chunk::update_B2H(const real time, const int num_proc) {
+		update_DEHB_helper(Hx, ch_p1, ch_p2);
+		update_DEHB_helper(Hy, ch_p1, ch_p2);
+		update_DEHB_helper(Hz, ch_p1, ch_p2);
 	}
 	
-	void Chunk::update_D2E(const real time) {
-		update_DEHB_helper(Ex);
-		update_DEHB_helper(Ey);
-		update_DEHB_helper(Ez);
+	void Chunk::update_D2E(const real time, const int num_proc) {
+		update_DEHB_helper(Ex, ch_p1, ch_p2);
+		update_DEHB_helper(Ey, ch_p1, ch_p2);
+		update_DEHB_helper(Ez, ch_p1, ch_p2);
 	}
 	
-	void Chunk::update_DEHB_helper(const Coord_Type F) {
-		auto tmp = get_component_interior(ch_p1, ch_p2, F);
+	void Chunk::update_DEHB_helper(const Coord_Type F, const iVec3 p1, const iVec3 p2) {
+		auto tmp = get_component_interior(p1, p2, F);
 		auto p1_ch = tmp.first - ch_origin;
 		auto p2_ch = tmp.second - ch_origin;
 		real modifier;							//normalize fields er*E = D/e0, ur * H = B/u0;

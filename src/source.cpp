@@ -180,6 +180,9 @@ namespace ffip {
 			if (ctype == Coord_Type::Ex || ctype == Coord_Type::Ey || ctype == Coord_Type::Ez)		//Jd = curl - Js, Md = curl + Ms
 				temp = -temp;
 			
+			if(isnan(temp * interp_ratio))
+				throw std::runtime_error("Current amplitidu is nan");
+
 			amp.push_back(temp * interp_ratio);
 		}
 	}

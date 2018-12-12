@@ -15,13 +15,14 @@ Sc = 1 / sqrt(3);
 dt = 2e-17 / 50;
 dx = c0 * dt / Sc;
 dim = [50, 50, 50];
-step = 1500;
+step = 600;
 
 Np = 30;                            %center frequency of the rickerwavelet
 fp = c0 / (Np * dx);
 ricker = @(t, fp, d) (1 - 2 * (pi * fp * (t - d)).^2) .* exp(-(pi * fp * (t - d)).^2);
 t = (0:step) * dt;
-ref_signal = ricker(t, fp, 1/fp);
+d = 0;
+ref_signal = ricker(t, fp, d);
 
 % rho = linspace(1000, 2000, 11) * (Np * dx);
 % phi = linspace(0, 2 * pi, 10);
@@ -47,11 +48,12 @@ fclose(fileID);
 
 
 %%
-Omega = 2 * pi * Ft;
-K = Omega / c0;
-
 lorentz = @(w, rel_e, fp, delta) rel_e ./ (1 + 1j * (w / (2 * pi * fp)) * (delta / fp) - (w / (2 * pi * fp)).^2);
 drude = @(w, fp, gamma) (2 * pi * fp)^2 ./ (1j * w * (2 * pi * gamma) - w.^2);
+
+
+Omega = 2 * pi * Ft;
+K = Omega / c0;
 er_func = @(w) (1 + lorentz(w, 0.8, 4e16, 1e16) + lorentz(w, 0.5, 6e16, 1e16));
 er = er_func(Omega);
 
@@ -72,7 +74,7 @@ V = ((X - center(1)).^2 + (Y - center(2)).^2 + (Z - center(3)).^2) <= a^2;
 fprintf(fileID, '%d %d %d\n', [vspan+1, vspan+1, vspan+1]);
 fprintf(fileID, '%e %e\n', [st(1), dx]);
 fprintf(fileID, '%e %e\n', [st(2), dx]);
-fprintf(fileID, '%e %e\n', [st(2), dx]);
+fprintf(fileID, '%e %e\n', [st(3), dx]);
 fprintf(fileID, '%e ', V(:));
 fclose(fileID);
 
@@ -121,7 +123,7 @@ fprintf(fileID, "}\n");
 % plane wave source
 fprintf(fileID, "source 1 {\n");
 fprintf(fileID, "{ ");
-fprintf(fileID, "eigen %d %e %e", dim(3), fp, 0);
+fprintf(fileID, "eigen %d %e %e", dim(3), fp, d);
 fprintf(fileID, " }\n");
 fprintf(fileID, "}\n");
 
@@ -139,6 +141,8 @@ Eth = make_complex(data(:, 1), data(:, 2)) ./ ref;
 Ephi = make_complex(data(:, 3), data(:, 4)) ./ ref;
 Hth = make_complex(data(:, 5), data(:, 6)) ./ ref;
 Hphi = make_complex(data(:, 7), data(:, 8)) ./ ref;
+
+disp('Numerical Fields Extracted');
 
 %% theoretical fields
 Eth_phy = zeros(size(m));

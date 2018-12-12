@@ -4,3 +4,4 @@ build_xcode/*
 *.in
 *.out
 *.mat
+*.exe
