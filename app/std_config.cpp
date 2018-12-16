@@ -289,7 +289,7 @@ int main(int argc, char const *argv[]) {
 	
 	sim.init();
 	for(int i = 0; i < time_step; ++i) {
-		sim.advance(fo, 4);
+		sim.advance(fo, 6);
 	}
 	
 	sim.output(probes_output_file);

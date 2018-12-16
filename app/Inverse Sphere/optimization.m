@@ -64,6 +64,7 @@ file_output_probes_forward = 'forward_output.out';
 fprintf(fileID, "probe %s %s\n", file_probes_input_forward, file_output_probes_forward);
 fclose(fileID);
 
+disp('forward simulation configuration complete');
 %% forward simulation results
 data = load(['../', file_output_probes_forward]);
 
@@ -87,18 +88,23 @@ Ez = 4;
 dipoles = 2 * (abs(E_forward_probes) - abs(E_target_probes)) .* (E_forward_probes) ./ abs(E_forward_probes);
 amp = abs(dipoles);
 delay = (angle(dipoles) + pi) / (2 * pi * fp) + d;
-output_dipoles = [...
-    probes_pos * dx, amp(:, 1), fp * ones([num_probes, 1]), delay(:, 1), Ex * ones([num_probes, 1]);...
-    probes_pos * dx, amp(:, 2), fp * ones([num_probes, 1]), delay(:, 2), Ey * ones([num_probes, 1]);...
-    probes_pos * dx, amp(:, 3), fp * ones([num_probes, 1]), delay(:, 3), Ez * ones([num_probes, 1]);];
+ctype = [Ex * ones([num_probes, 1]), Ey * ones([num_probes, 1]), Ez * ones([num_probes, 1])];
+dipoles_slice = (amp > 1e-3);
+dipoles_pos = [probes_pos;probes_pos;probes_pos] * dx;
+
+amp = amp(dipoles_slice);
+delay = delay(dipoles_slice);
+ctype = ctype(dipoles_slice);
+dipoles_pos = dipoles_pos(dipoles_slice(:), :);
+
+
+output_dipoles = [[15, 15, 40] * dx, amp(1), fp, delay(1), Ex];
 
 file_dipoles_adjoint = 'adjoint_dipoles.in';
 fileID = fopen(['../', file_dipoles_adjoint], 'w');
-fprintf(fileID, '%d\n', num_probes * 3);
+fprintf(fileID, '%d\n', size(output_dipoles, 1));
 fprintf(fileID, '%e %e %e %e %e %e %d\n', output_dipoles');
 fclose(fileID);
-
-disp('adjoint simulation dipoles file created');
 
 % basic configuration
 fileID = fopen('../config.in', 'w');
@@ -143,7 +149,7 @@ file_probes_output_adjoint = 'adjoint_output.out';
 fprintf(fileID, "probe %s %s\n", file_probes_input_forward, file_probes_output_adjoint );
 fclose(fileID);
 
-disp('adjoint config.in created');
+disp('adjoint simulation configuration complete');
 %% adjoint fields
 data = load(['../', file_probes_output_adjoint ]);
 E_adjoint = [make_complex(data(:, 1), data(:, 2)), make_complex(data(:, 3), data(:, 4)), make_complex(data(:, 5), data(:, 6))];
@@ -157,6 +163,7 @@ E_adjoint_inhom = E_adjoint(num_probes + 1:end, :);
 H_adjoint_inhom = H_adjoint(num_probes + 1:end, :);
 
 save("adjoint_results");
+disp('adjoint simulation results saved');
 %% Sensitivity Calculation
 int_weights = @(dim) [0.5, ones([1, dim - 2]), 0.5];
 [w_X, w_Y, w_Z] = ndgrid(int_weights(inhom_dim(1) + 1), int_weights(inhom_dim(2) + 1), int_weights(inhom_dim(3) + 1));
@@ -167,7 +174,9 @@ drho = e0 * (er_const - er_bg);
 A = real(Se .* w * drho);
 A = reshape(A, inhom_dim + 1);
 target_func = sum(sum((abs(E_forward_probes) - abs(E_target_probes)).^2, 2), 1);
+fprintf('Current Target value is %e\n', target_func);
 
+disp('sensitivity calculation complete')
 %% Visualizing Sensitivity
 for i = 1 : 4
     subplot(2, 2, i)
@@ -178,3 +187,7 @@ for i = 1 : 4
     title(num2str(level))
 end
 
+%% updates
+drho = (A(:) > 0) .* max(-rho, -0.05) + (A(:) <= 0) .* min(1 - rho, 0.05);
+delta_target = sum(A(:) .* drho);
+fprintf('The target value is expected to be %e\n', target_func + delta_target);

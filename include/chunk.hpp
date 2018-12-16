@@ -130,7 +130,8 @@ namespace ffip {
 		for(int i = 1; i < num_proc; ++i) {
 			threads.push_back(std::thread(func, my_iterator(p1_ch, p2_ch, p1_ch.get_type(), i, num_proc)));
 		}
-		threads.push_back(std::thread(func, my_iterator(p1_ch, p2_ch, p1_ch.get_type(), 0, num_proc)));
+
+		func(my_iterator(p1_ch, p2_ch, p1_ch.get_type(), 0, num_proc));
 		for(auto& item : threads)
 			item.join();
 	}

@@ -74,7 +74,7 @@ int main(int argc, char const *argv[]) {
 	fstream fo{"output.out", ios::out};
 	//run simulation
 	for(int i = 0; i < step; ++i) {
-		sim.advance(fo);
+		sim.advance(fo, 6);
 	}
 	
 	//output results

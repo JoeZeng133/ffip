@@ -46,8 +46,6 @@ fprintf(fileID, "%d\n", size(probes, 1));
 fprintf(fileID, "%e %e %e %e\n", probes');
 fclose(fileID);
 
-
-%%
 lorentz = @(w, rel_e, fp, delta) rel_e ./ (1 + 1j * (w / (2 * pi * fp)) * (delta / fp) - (w / (2 * pi * fp)).^2);
 drude = @(w, fp, gamma) (2 * pi * fp)^2 ./ (1j * w * (2 * pi * gamma) - w.^2);
 
@@ -86,7 +84,6 @@ xlabel('Frequency (PHz)')
 legend({'$\textrm{Re}(\varepsilon_r)$', '$\textrm{Im}(\varepsilon_r)$'}, 'interpreter', 'latex','fontsize', 15)
 axis tight
 
-%% write configurations
 % basic configuration
 fileID = fopen('../config.in', 'w');
 fprintf(fileID, "basic {\n");

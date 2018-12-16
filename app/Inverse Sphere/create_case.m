@@ -51,12 +51,12 @@ inhom_z = inhom_p1(3):inhom_p2(3);
 [inhom_X, inhom_Y, inhom_Z] = ndgrid(inhom_x, inhom_y, inhom_z);
 inhom_pos = [inhom_X(:), inhom_Y(:), inhom_Z(:)];
 num_inhom_pos = size(inhom_pos, 1);
-rho_target = geo_func(inhom_X, inhom_Y, inhom_Z);
+rho_target = geo_func(inhom_X, inhom_Y, inhom_Z) * 1;
 rho = ones(size(rho_target));                          %start with rho=1
 rho = rho(:);
 % rho = rho_target;
 
-num_probes = 500;
+num_probes = 1000;
 [sim_X, sim_Y, sim_Z] = ndgrid(0:dim(1), 0:dim(2), 0:dim(3));
 slice = ...
     (sim_X < inhom_p1(1) - 5 | sim_X > inhom_p2(1)) + 5 | ...
@@ -129,7 +129,7 @@ file_probes_output_target = 'target_output.out';
 fprintf(fileID, "probe %s %s\n", file_probes_input_target, file_probes_output_target);
 fclose(fileID);
 
-disp('config.in created');
+disp('objective configuration created');
 %% simulated fields
 data = load(['../', file_probes_output_target]);
 make_complex = @(x, y) x + 1j * y;
