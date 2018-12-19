@@ -1,7 +1,8 @@
-%% near-field dipole test
+                                                                                                                                                                                                                                                                         %% near-field dipole test
 clear
 clc
 close all
+
 
 e0 = 8.85418782e-12;
 u0 = 1.25663706e-6;
@@ -19,16 +20,16 @@ ur_bg = 1;
 
 Np = 20;                            %center frequency of the rickerwavelet
 fp = c0 / (Np * dx);
-d = 1 / fp;
+delay = 1 / fp;
 ricker = @(t, fp, d) (1 - 2 * (pi * fp * (t - d)).^2) .* exp(-(pi * fp * (t - d)).^2);
 t = (0:step) * dt;
-ref_signal = ricker(t, fp, d);
+ref_signal = ricker(t, fp, delay);
+G = 1 + 1j;                         %the point source is G
 
 rho = linspace(10, 15, 10) * dx;
 phi = linspace(0, 2 * pi, 10);
 th = linspace(1 / 4 * pi, 3 / 4 * pi, 10);
 ft = fp;
-
 
 [Rho, Phi, Th, Ft] = ndgrid(rho, phi, th, ft);
 [Xo, Yo, Zo] = sph2cart(Phi, pi / 2 - Th, Rho);
@@ -46,7 +47,7 @@ fclose(fileID);
 filename_dipoles = 'dipoles.in';
 fileID = fopen(filename_dipoles, 'w');
 fprintf(fileID, '1\n');
-fprintf(fileID, '%e %e %e %e %e %e 4', dim * dx / 2, 1, fp, d);
+fprintf(fileID, '%e %e %e %e %e %e 4', dim * dx / 2, abs(G), fp, delay - angle(G) / (2 * pi * fp));
 fclose(fileID);
 
 %% theoretical fields
@@ -80,9 +81,10 @@ c = 1 ./ sqrt(e * u);
 eta = sqrt(u ./ e);
 K = Omega ./ c;
 
-Hphi_p = 1 / (4 * pi) * exp(-1j * K .* Rho) .* (1j * K ./ Rho + 1 ./ Rho.^2) .* sin(Th);
-Er_p = 1 / (4 * pi) * exp(-1j * K .* Rho) .* (2 * eta ./ Rho.^2 + 2 ./ (1j * Omega .* e .* Rho.^3)) .* cos(Th);
-Eth_p = 1 / (4 * pi) * exp(-1j * K .* Rho) .* (1j * Omega .* u ./ Rho + 1 ./ (1j * Omega .* e .* Rho.^3) + eta ./ Rho.^2) .* sin(Th);
+
+Hphi_p = G * 1 / (4 * pi) * exp(-1j * K .* Rho) .* (1j * K ./ Rho + 1 ./ Rho.^2) .* sin(Th);
+Er_p = G * 1 / (4 * pi) * exp(-1j * K .* Rho) .* (2 * eta ./ Rho.^2 + 2 ./ (1j * Omega .* e .* Rho.^3)) .* cos(Th);
+Eth_p = G * 1 / (4 * pi) * exp(-1j * K .* Rho) .* (1j * Omega .* u ./ Rho + 1 ./ (1j * Omega .* e .* Rho.^3) + eta ./ Rho.^2) .* sin(Th);
 
 %% write configurations
 % basic configuration

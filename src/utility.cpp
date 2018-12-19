@@ -5,7 +5,7 @@ using namespace std;
 namespace ffip {
 	const real e0 = 8.854187817e-12;
 	const real u0 = 1.2566370614e-6;
-	const real pi = boost::math::constants::pi<double>();
+	const real pi = 3.141592653589793e+00;
 	const real z0 = 376.73031346;
 	const real c0 = 3e8;
 	
@@ -100,12 +100,10 @@ namespace ffip {
 	}
 	
 	/* Sinuosuidal Functions*/
-	Sinuosuidal_Func::Sinuosuidal_Func(real freq) {
-		a = 2 * pi * freq;
-	}
+	Sinuosuidal_Func::Sinuosuidal_Func(real freq, real d): a(2 * pi * freq), phase(d / (2 * pi * freq)) {}
 	
 	real Sinuosuidal_Func::operator()(real time) const{
-		return sin(a * time);
+		return sin(a * time - phase);
 	}
 	
 	real Sinuosuidal_Func::operator[](int time) const{
@@ -117,8 +115,8 @@ namespace ffip {
 	}
 	
 	auto Sinuosuidal_Func::get_functor() -> std::function<real(const real)> const {
-		return [a=this->a](const real time) -> real {
-			return sin(a * time);
+		return [a = this->a, phase = this->phase](const real time) -> real {
+			return sin(a * time - phase);
 		};
 	}
 	

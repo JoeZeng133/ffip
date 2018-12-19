@@ -16,34 +16,29 @@ Sc = 1 / sqrt(3);
 dt = 7.2e-17;
 dx = c0 * dt / Sc;
 dim = [50, 50, 50];
-step = 600;
+time_step = 600;
 PMl_d = 6;
 
 % excitation reference and frequency of interests (1 frequency)
 Np = 30;                           
 fp = c0 / (Np * dx);
-d = 1 / fp;
+delay = 1 / fp;
 ricker = @(t, fp, d) (1 - 2 * (pi * fp * (t - d)).^2) .* exp(-(pi * fp * (t - d)).^2);
-t = (0:step) * dt;
-ref_signal = ricker(t, fp, d);
+t = (0:time_step) * dt;
+ref_signal = ricker(t, fp, delay);
 ref_signal_fft = sum(ref_signal .* exp(-1j * 2 * pi * fp * t));
 
 % medium for the inhomogeneous region
 Omega = 2 * pi * fp;
-lorentz = @(w, rel_e, fp, delta) rel_e ./ (1 + 1j * (w / (2 * pi * fp)) * (delta / fp) - (w / (2 * pi * fp)).^2);
-drude = @(w, fp, gamma) (2 * pi * fp)^2 ./ (1j * w * (2 * pi * gamma) - w.^2);
-deybe = @(w, rel_e, tau) rel_e ./ (1 + 1j * w * tau);
-
 er_const = 2 - 0.2i;
 sig_const = -imag(er_const) * (2 * pi * fp * e0);
 er_func = @(w) (real(er_const) - 1j * sig_const ./ (w * e0));
 
 % Geometry for the inhomogeneous region
-sphere_func = @(X, Y, Z, r, center) ((X - center(1)).^2 + (Y - center(2)).^2 + (Z - center(3)).^2) <= r^2;
+sphere_func = @(X, Y, Z, r, center) ((X - center(1)).^2 + (Y - center(2)).^2) <= r^2;
 geo_func = @(X, Y, Z) sphere_func(X, Y, Z, 10, dim / 2);
-
-inhom_p1 = [15, 15, 15];
-inhom_dim = [20, 20, 20];
+inhom_p1 = [10, 10, 20];
+inhom_dim = [30, 30, 10];
 inhom_p2 = inhom_p1 + inhom_dim;
 inhom_x = inhom_p1(1):inhom_p2(1);
 inhom_y = inhom_p1(2):inhom_p2(2);
@@ -52,25 +47,26 @@ inhom_z = inhom_p1(3):inhom_p2(3);
 inhom_pos = [inhom_X(:), inhom_Y(:), inhom_Z(:)];
 num_inhom_pos = size(inhom_pos, 1);
 rho_target = geo_func(inhom_X, inhom_Y, inhom_Z) * 1;
-rho = ones(size(rho_target));                          %start with rho=1
-rho = rho(:);
-% rho = rho_target;
 
-num_probes = 1000;
-[sim_X, sim_Y, sim_Z] = ndgrid(0:dim(1), 0:dim(2), 0:dim(3));
-slice = ...
-    (sim_X < inhom_p1(1) - 5 | sim_X > inhom_p2(1)) + 5 | ...
-    (sim_Y < inhom_p1(2) - 5 | sim_Y > inhom_p2(2)) + 5 | ...
-    (sim_Z < inhom_p1(3) - 5 | sim_Z > inhom_p2(3)) + 5;
+% num_probes = 10;
+% [sim_X, sim_Y, sim_Z] = ndgrid(0:dim(1), 0:dim(2), 0:dim(3));
+% slice = ...
+%     (sim_X < inhom_p1(1) - 5 | sim_X > inhom_p2(1)) + 5 | ...
+%     (sim_Y < inhom_p1(2) - 5 | sim_Y > inhom_p2(2)) + 5 | ...
+%     (sim_Z < inhom_p1(3) - 5 | sim_Z > inhom_p2(3)) + 5;
+% 
+% sim_X = sim_X(slice);
+% sim_Y = sim_Y(slice);
+% sim_Z = sim_Z(slice);
+% probes_pos = datasample([sim_X(:), sim_Y(:), sim_Z(:)], num_probes, 1, 'Replace', false);
 
-sim_X = sim_X(slice);
-sim_Y = sim_Y(slice);
-sim_Z = sim_Z(slice);
-probes_pos = datasample([sim_X(:), sim_Y(:), sim_Z(:)], num_probes, 1, 'Replace', false);
+[sim_X, sim_Y, sim_Z] = ndgrid([10, 20, 30, 40], [10, 20, 30, 40], [5, 10]);
+probes_pos = [sim_X(:), sim_Y(:), sim_Z(:)];
+num_probes = size(probes_pos, 1);
 
 % write to geometry file
 file_geometry_target = 'target_geometry.in';
-fileID = fopen(['../', file_geometry_target], 'w');
+fileID = fopen(file_geometry_target, 'w');
 fprintf(fileID, '%d %d %d\n', inhom_dim + 1);
 fprintf(fileID, '%e %e\n', inhom_p1(1) * dx, dx);
 fprintf(fileID, '%e %e\n', inhom_p1(2) * dx, dx);
@@ -80,18 +76,18 @@ fclose(fileID);
 
 % write to probes file
 file_probes_input_target = 'target_probes.in';
-fileID = fopen(['../', file_probes_input_target], "w");
+fileID = fopen(file_probes_input_target, "w");
 fprintf(fileID, "%d\n", num_probes);
 fprintf(fileID, "%e %e %e %e\n", [probes_pos * dx, fp * ones([num_probes 1])]');
 fclose(fileID);
 
 disp('geometry, probes files created');
 % basic configuration
-fileID = fopen('../config.in', 'w');
+fileID = fopen('config.in', 'w');
 fprintf(fileID, "basic {\n");
 fprintf(fileID, "%e %e\n", dt, dx);
 fprintf(fileID, "%d %d %d\n", dim);
-fprintf(fileID, "%d\n", step);
+fprintf(fileID, "%d\n", time_step);
 fprintf(fileID, "%e %e\n", er_bg, ur_bg);
 fprintf(fileID, "%d\n", PMl_d);
 fprintf(fileID, "}\n");
@@ -110,6 +106,7 @@ fprintf(fileID, " }\n");
 fprintf(fileID, "}\n");
 
 % geometry configuration
+
 fprintf(fileID, "geometry 1 {\n");
 % geometry 0, the inhomogeneous region with mixed medium1 and medium0
 fprintf(fileID, "{ ");
@@ -120,7 +117,7 @@ fprintf(fileID, "}\n");
 % plane wave source
 fprintf(fileID, "source 1 {\n");
 fprintf(fileID, "{ ");
-fprintf(fileID, "eigen %d %e %e", dim(3), fp, d);
+fprintf(fileID, "eigen %d %e %e", dim(3), fp, delay);
 fprintf(fileID, " }\n");
 fprintf(fileID, "}\n");
 
@@ -131,7 +128,8 @@ fclose(fileID);
 
 disp('objective configuration created');
 %% simulated fields
-data = load(['../', file_probes_output_target]);
+!./std_config
+data = load(file_probes_output_target);
 make_complex = @(x, y) x + 1j * y;
 
 E_target_probes = [make_complex(data(:, 1), data(:, 2)), make_complex(data(:, 3), data(:, 4)), make_complex(data(:, 5), data(:, 6))];

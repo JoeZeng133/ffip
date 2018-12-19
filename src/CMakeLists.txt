@@ -11,5 +11,5 @@ analysis.cpp
 source.cpp
 )
 
-add_library(ffip ${SOURCE_FILES} ${HEADER_FILES})
-target_link_libraries(ffip ${Boost_LIBRARIES})
+add_library(ffip STATIC ${SOURCE_FILES} ${HEADER_FILES})
+# target_link_libraries(ffip ${Boost_LIBRARIES})

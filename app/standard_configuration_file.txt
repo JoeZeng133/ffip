@@ -40,3 +40,9 @@ source[string] number_of_sources[integer] {
 
 probe[string] input_file[string] output_file[string]
 farfield[string] input_file[string] output_file[string]
+
+
+
+*********************** dipole file
+number_of_dipoles
+x[double] y[double] z[double] amp[double] fp[double] delay[double] ctype[int]

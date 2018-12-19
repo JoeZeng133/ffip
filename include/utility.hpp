@@ -9,7 +9,7 @@
 #include <fstream>
 #include <functional>
 #include <thread>
-#include <boost/math/constants/constants.hpp>
+#include <complex>
 
 namespace ffip {
 	/* type aliases */
@@ -410,10 +410,11 @@ namespace ffip {
 
     struct Sinuosuidal_Func {
         real a; //sin(a * t)
+		real phase{0};
         real dt;
 
 		Sinuosuidal_Func() = delete;							//no default constructors
-        explicit Sinuosuidal_Func(real freq); 					//sin(2 * pi * freq * t)
+        Sinuosuidal_Func(real freq, real d = 0); 					//sin(2 * pi * freq * (t - d))
 		Sinuosuidal_Func(const Sinuosuidal_Func&) = default;	//copy
 		Sinuosuidal_Func& operator=(const Sinuosuidal_Func&) = default;
 

@@ -225,7 +225,7 @@ namespace ffip {
 	}
 	
 	void Simulation::advance(std::ostream& os, const int num_proc) {
-		std::cout << "Stepping from" << step << " to " << step + 1 << std::endl;
+//		std::cout << "\r Step: " << step << std::flush;
 		real time = (step ++ ) * dt;
 		chunk->update_Md(time, num_proc);
 		chunk->update_B2H(time, num_proc);

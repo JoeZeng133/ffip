@@ -150,6 +150,8 @@ void read_source(istream& fin, Simulation& sim) {
 		Medium const* bg_medium = sim.get_bg_medium();
 		Plane_Wave projector(sim.get_dx(), sim.get_dt(), n);
 		auto ricker_source = Rickerwavelet_Func(fp, d);
+		auto sin_source = Sinuosuidal_Func(fp, d);
+		
 		double sigma_max = PML::optimal_sigma_max(3, sim.get_dx(), bg_medium->get_e_inf(), bg_medium->get_u_inf());
 		projector.set_medium(bg_medium->get_e_inf(), bg_medium->get_u_inf());
 		projector.set_PML(PML(Direction::Z, High, 6, sigma_max));
@@ -170,6 +172,8 @@ void read_source(istream& fin, Simulation& sim) {
 		for (int i = 0; i < n; ++i) {
 			dipole_file >> x >> y >> z >> amp >> fp >> d >> ctype;
 			auto ricker_source = Rickerwavelet_Func(fp, d);
+			auto sin_source = Sinuosuidal_Func(fp, d);
+			
 			GriddedInterp interp({1, 1, 1}, {x, y, z}, {0, 0, 0}, {amp});
 			sim.add_source(new Current_Source(interp, ricker_source.get_functor(), (Coord_Type)ctype));
 		}
@@ -289,7 +293,7 @@ int main(int argc, char const *argv[]) {
 	
 	sim.init();
 	for(int i = 0; i < time_step; ++i) {
-		sim.advance(fo, 6);
+		sim.advance(fo, 4);
 	}
 	
 	sim.output(probes_output_file);
@@ -298,6 +302,6 @@ int main(int argc, char const *argv[]) {
 	auto end = std::chrono::system_clock::now();
 	std::chrono::duration<double> elapsed_seconds = end-start;
 	cout << "\nRunning Time: " << elapsed_seconds.count() << endl;
-	
+	cout << "Simulation Finished" << endl;
 	return 0;
 }

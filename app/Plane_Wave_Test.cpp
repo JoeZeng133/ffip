@@ -59,7 +59,7 @@ int main(int argc, char const *argv[]) {
 	
 	//run simulation
 	for(int i = 0; i < step; ++i) {
-		sim.advance(fo);
+		sim.advance(fo, 4);
 	}
 	//output results
 	
