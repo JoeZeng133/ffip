@@ -140,3 +140,13 @@ H_target_probes = H_target_probes / ref_signal_fft;
 
 save('case_configuration');
 disp('objective fields saved');
+
+figure
+v_rho_target = reshape(rho_target, inhom_dim + 1);
+v_rho_target = v_rho_target(:, :, 1);
+pcolor(v_rho_target)
+colorbar
+shading flat
+title('The original')
+xlabel('y')
+ylabel('x')

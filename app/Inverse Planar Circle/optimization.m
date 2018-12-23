@@ -204,33 +204,14 @@ while (itr < max_itr)
     % updates
     rho = reshape(delta_rho, size(rho)) + rho;
     disp('updated');
-    figure
-    mesh(rho)
-    title(['Iteration ', num2str(itr)])
-    getframe;
+    if (mod(itr - 1, 3) == 0)
+        figure
+        pcolor(rho)
+        colorbar
+        shading flat
+        title(['Iteration ', num2str(itr)])
+        xlabel('y')
+        ylabel('x')
+        getframe;
+    end
 end
-%%
-
-
-% figure(1)
-% dimz = size(v_A, 3);
-% for i = 1 : 4
-%     subplot(2, 2, i)
-%     h = floor(dimz / 4 * i);
-%     surf(v_A(:, :, h));
-%     xlabel('y')
-%     ylabel('x');
-%     title(['h = ', num2str(h)]);
-% end
-% 
-% v_rho = reshape(rho, size(v_A));
-% figure(2)
-% dimz = size(v_A, 3);
-% for i = 1 : 4
-%     subplot(2, 2, i)
-%     h = floor(dimz / 4 * i);
-%     surf(v_rho(:, :, h));
-%     xlabel('y')
-%     ylabel('x');
-%     title(['h = ', num2str(h)]);
-% end
