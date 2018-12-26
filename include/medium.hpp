@@ -160,6 +160,7 @@ namespace ffip {
 	extern std::vector<std::unique_ptr<Medium>> medium;
 	extern std::vector<std::unique_ptr<Medium_Ref>> e_medium_ref;
 	extern std::vector<std::unique_ptr<Medium_Ref>> m_medium_ref;
+	extern std::vector<std::unique_ptr<Medium_Ref>> syn_medium_ref;
 	
 	template<typename... Args>
 	Medium* make_medium(Args&&... args) {

@@ -241,6 +241,7 @@ namespace ffip {
 		iVec3 sim_p1, sim_p2;			//domain coordinates of lower, upper points
 		iVec3 ch_p1, ch_p2;		//domain coordinates of lower, upper points
 		
+		int num_proc{1};
 		Chunk* chunk;
 		Medium const* bg_medium{nullptr};
 		
@@ -273,13 +274,14 @@ namespace ffip {
 		Simulation(const real _dx, const real _dt, const iVec3 _dim);
 		
 		void setup(const real _dx, const real _dt, const iVec3 _dim);
-		void advance(std::ostream& os, const int num_proc);
+		void advance(std::ostream& os);
 		void add_solid(Solid const* solid);
 		void add_source(Source* source);
 		void add_PML_layer(PML* PML);
 		void add_probe(Probe* probe);
 		void add_farfield_probe(const real freq, const fVec3& pos);
 		void set_background_medium(Medium const* m);
+		void set_num_proc(const int _num_proc);
 		void init();
 		
 		void udf_unit();

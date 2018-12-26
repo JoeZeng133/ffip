@@ -211,6 +211,7 @@ int main(int argc, char const *argv[]) {
 	
 	int time_step;
 	Simulation sim;
+	sim.set_num_proc(4);
 	vector<Medium*> medium_gather;
 	fstream fin{"config.in", ios::in};
 	fstream fo{"output.out", ios::out};
@@ -292,8 +293,9 @@ int main(int argc, char const *argv[]) {
 	}
 	
 	sim.init();
+	
 	for(int i = 0; i < time_step; ++i) {
-		sim.advance(fo, 4);
+		sim.advance(fo);
 	}
 	
 	sim.output(probes_output_file);

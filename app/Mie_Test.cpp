@@ -68,13 +68,14 @@ int main(int argc, char const *argv[]) {
 	fin.close();
 	
 	//initializations
+	sim.set_num_proc(4);
 	sim.init();
 	projector.init();
 	
 	fstream fo{"output.out", ios::out};
 	//run simulation
 	for(int i = 0; i < step; ++i) {
-		sim.advance(fo, 4);
+		sim.advance(fo);
 	}
 	
 	//output results

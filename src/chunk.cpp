@@ -8,9 +8,9 @@ namespace ffip {
 		
 		ch_jump_x = 1;
 		ch_jump_y = ch_dim.x;
-		ch_jump_z = ch_dim.x * ch_dim.y;
+		ch_jump_z = (size_t)ch_dim.x * ch_dim.y;
 		
-		eh.resize(ch_dim.x * ch_dim.y * ch_dim.z, 0);
+		eh.resize((size_t)ch_dim.x * ch_dim.y * ch_dim.z, 0);
 		eh1.resize(eh.size(), 0);
 		jmd.resize(eh.size(), 0);
 		medium_chunk.resize(eh.size(), nullptr);
@@ -36,7 +36,7 @@ namespace ffip {
 		return ch_p2;
 	}
 	
-	int Chunk::get_index_ch(const iVec3& p) const {
+	size_t Chunk::get_index_ch(const iVec3& p) const {
 		return (p.x - ch_origin.x) * ch_jump_x + (p.y - ch_origin.y) * ch_jump_y + (p.z - ch_origin.z) * ch_jump_z;
 	}
 	

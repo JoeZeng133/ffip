@@ -1,4 +1,4 @@
-%% mie theory test, assuming vaccum background 
+%% check simulation setup using a Mie theory test
 clear
 clc
 close all
@@ -10,19 +10,21 @@ eta0 = sqrt(u0 / e0);
 
 er_bg = 1;
 ur_bg = 1;
-PML_d = 6;
-Sc = 1 / sqrt(3);
-dt = 2e-17 / 50;
-dx = c0 * dt / Sc;
-dim = [50, 50, 50];
-step = 600;
+c = c0 / sqrt(er_bg * ur_bg);
 
-Np = 30;                            %center frequency of the rickerwavelet
-fp = c0 / (Np * dx);
+PML_d = 6;
+dt = 4.5e-18;           
+dx = 2.5e-9;            %2.5nm discretization
+Sc = c * dt / dx;       %Sc < 1/sqrt(3) = 0.5774
+dim = [50, 50, 50];
+step = 1000;
+
+fp = 5.4e14;            %540 THz 
+Np = c / (fp * dx);     %Wavelength in background medium [normalized to dx]
 ricker = @(t, fp, d) (1 - 2 * (pi * fp * (t - d)).^2) .* exp(-(pi * fp * (t - d)).^2);
 t = (0:step) * dt;
-d = 0;
-ref_signal = ricker(t, fp, d);
+delay = 1 / fp;
+ref_signal = ricker(t, fp, delay);
 
 % rho = linspace(1000, 2000, 11) * (Np * dx);
 % phi = linspace(0, 2 * pi, 10);
@@ -30,7 +32,10 @@ ref_signal = ricker(t, fp, d);
 rho = 1;
 phi = pi / 4;
 th = pi / 4;
-ft = linspace(0.5 * fp, 1.5 * fp, 100);
+lam_min = 400e-9;
+lam_max = 900e-9;
+lam = linspace(lam_min, lam_max, 100);
+ft = c ./ lam;
 
 [Ft, Th, Phi, Rho] = ndgrid(ft, th, phi, rho);
 Ft = Ft(:);
@@ -48,41 +53,24 @@ fclose(fileID);
 
 lorentz = @(w, rel_e, fp, delta) rel_e ./ (1 + 1j * (w / (2 * pi * fp)) * (delta / fp) - (w / (2 * pi * fp)).^2);
 drude = @(w, fp, gamma) (2 * pi * fp)^2 ./ (1j * w * (2 * pi * gamma) - w.^2);
-
-
+ 
 Omega = 2 * pi * Ft;
 K = Omega / c0;
-er_func = @(w) (1 + lorentz(w, 0.8, 4e16, 1e16) + lorentz(w, 0.5, 6e16, 1e16));
+er_func = @(w) (1 + drude(w, 1.323e16 / (2 * pi), 1.26e14 / (2 * pi)));   %gold for l > 750nm
 er = er_func(Omega);
 
-% sphere parameters
-m = sqrt(conj(er(:))); %exp(-jwt) dependence, use the conjugate
-a = 10 * dx;
-size_param = K * a;
-
-% inhomogeneous geometry file generation
-filename_geometry_objective = 'objective_geometry.in';
-fileID = fopen(filename_geometry_objective, 'w');
-vspan = 30;
-center = dim * dx / 2;
-st = center - 0.5 * vspan * dx;
-v = (0:vspan) * dx + st(1);
-[X, Y, Z] = ndgrid(v, v, v);
-V = ((X - center(1)).^2 + (Y - center(2)).^2 + (Z - center(3)).^2) <= a^2;
-fprintf(fileID, '%d %d %d\n', [vspan+1, vspan+1, vspan+1]);
-fprintf(fileID, '%e %e\n', [st(1), dx]);
-fprintf(fileID, '%e %e\n', [st(2), dx]);
-fprintf(fileID, '%e %e\n', [st(3), dx]);
-fprintf(fileID, '%e ', V(:));
-fclose(fileID);
-
 figure(1)
-ft_samples = linspace(0.5 * fp, 1.5 * fp, 100);
-plot(ft_samples / 1e15, real(er_func(ft_samples * 2 * pi)), 'r-'), hold on
-plot(ft_samples / 1e15, -imag(er_func(ft_samples * 2 * pi)), 'b-')
-xlabel('Frequency (PHz)')
+plot(lam / 1e-9, real(er), 'r-'), hold on
+plot(lam / 1e-9, -imag(er), 'b-')
+xlabel('\lambda [nm]')
 legend({'$\textrm{Re}(\varepsilon_r)$', '$\textrm{Im}(\varepsilon_r)$'}, 'interpreter', 'latex','fontsize', 15)
 axis tight
+
+%%
+% sphere parameters
+m = sqrt(conj(er(:))); %exp(-jwt) dependence, use the conjugate
+a = 30e-9;
+size_param = K * a;
 
 % basic configuration
 fileID = fopen('config.in', 'w');
@@ -95,32 +83,26 @@ fprintf(fileID, "%d\n", PML_d);
 fprintf(fileID, "}\n");
 
 % medium configuration
-fprintf(fileID, "medium 2 {\n");
-% medium 0, background medium
+fprintf(fileID, "medium 1 {\n");
+% medium 0, Gold
 fprintf(fileID, "{ ");
-fprintf(fileID, "%e %e %e %e 0", er_bg, 0, ur_bg, 0);
-fprintf(fileID, " }\n");
-
-% medium 1, scatterer medium
-fprintf(fileID, "{ ");
-fprintf(fileID, "%e %e %e %e 2\n", er_bg, 0, ur_bg, 0);
-fprintf(fileID, "{ Lorentz %e %e %e }\n", 0.8, 4e16, 1e16);
-fprintf(fileID, "{ Lorentz %e %e %e }\n", 0.5, 6e16, 1e16);
+fprintf(fileID, "%e %e %e %e 1\n", er_bg, 0, ur_bg, 0);
+fprintf(fileID, "{ Drude %e %e }\n", 1.323e16 / (2 * pi), 1.26e14 / (2 * pi));
 fprintf(fileID, " }\n");
 fprintf(fileID, "}\n");
 
 % geometry configuration
 fprintf(fileID, "geometry 1 {\n");
-% geometry 0, the inhomogeneous region with mixed medium1 and medium0
+% geometry 0 gold sphere 60nm
 fprintf(fileID, "{ ");
-fprintf(fileID, "inhom %d %d %s", 1, 0, filename_geometry_objective);
+fprintf(fileID, "sphere 0 %e %e %e %e", a, dim * dx / 2);
 fprintf(fileID, " }\n");
 fprintf(fileID, "}\n");
 
 % plane wave source
 fprintf(fileID, "source 1 {\n");
 fprintf(fileID, "{ ");
-fprintf(fileID, "eigen %d %e %e", dim(3), fp, d);
+fprintf(fileID, "eigen %d %e %e", dim(3), fp, delay);
 fprintf(fileID, " }\n");
 fprintf(fileID, "}\n");
 
@@ -146,7 +128,7 @@ Eth_phy = zeros(size(m));
 Ephi_phy = zeros(size(m));
 
 for i = 1 : size(m, 1)
-    res = Mie_S12(m(i), size_param(i), cos(Th(i)));
+    res = Mie2_S12(m(i)^2, 1, size_param(i), cos(Th(i)));
     S1 = res(1); 
     S2 = res(2);
     Eth_phy(i) = exp(1j * K(i) * Rho(i)) / (-1j * K(i) * Rho(i)) * cos(Phi(i)) * S2;
@@ -157,16 +139,16 @@ end
 %% plots against one parameters (frequency)
 
 figure(3)
-plot(Ft(:)/1e15, abs(Eth(:)), 'sq'), hold on
-plot(Ft(:)/1e15, abs(Eth_phy(:)))
-xlabel('Frequency (PHz)')
+plot(lam / 1e-9, abs(Eth(:)), 'sq'), hold on
+plot(lam / 1e-9, abs(Eth_phy(:)))
+xlabel('\lambda [nm]')
 legend({'$Numerical |E_\theta|$', '$Analytical |E_\theta|$'}, 'interpreter', 'latex','fontsize', 15)
 
 
 figure(4)
-plot(Ft(:)/1e15, abs(Ephi(:)), 'sq-'), hold on
-plot(Ft(:)/1e15, abs(Ephi_phy(:)))
-xlabel('Frequency (PHz)')
+plot(lam / 1e-9, abs(Ephi(:)), 'sq-'), hold on
+plot(lam / 1e-9, abs(Ephi_phy(:)))
+xlabel('\lambda [nm]')
 legend({'$Numerical |E_\phi|$', '$Analytical |E_\phi|$'}, 'interpreter', 'latex','fontsize', 15)
 
 

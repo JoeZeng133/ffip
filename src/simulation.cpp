@@ -60,43 +60,53 @@ namespace ffip {
 					sampled_points.push_back({i * delta, j * delta, k * delta});
 				}
 	
-		for(auto itr = my_iterator(ch_p1, ch_p2, Null); !itr.is_end(); itr.advance()) {
-			/* assign material only when it is E or H*/
-			auto p = itr.get_vec();
-			auto ctype = p.get_type();
-			
-			if (!is_H_point(ctype) && !is_E_point(ctype))			//exclude non-material points
-				continue;
-			
-			/* spatial averaging to get materials
-			   naive sampling integration over a cube
-			   can be improved using adaptive quadrature
-			   and ray tracing
-			 */
-			fVec3 box_p1{(p.x - 1) * dx / 2, (p.y - 1) * dx / 2, (p.z - 1) * dx / 2};
-			auto weights = get_zero_weights();
-			
-			for(auto& item : sampled_points) {
-				auto sampled_point = box_p1 + item;
-				bool assigned = 0;
-			
-				for(auto item : solids) {
-					if (item->update_weights(sampled_point, weights)) {	//it is true when it is inside the solid
-						assigned = 1;
-						break;
+		auto func = [&, this](my_iterator itr) {
+			for(; !itr.is_end(); itr.advance()) {
+				/* assign material only when it is E or H*/
+				auto p = itr.get_vec();
+				auto ctype = p.get_type();
+				
+				if (!is_H_point(ctype) && !is_E_point(ctype))			//exclude non-material points
+					continue;
+				
+				/* spatial averaging to get materials
+				 naive sampling integration over a cube
+				 can be improved using adaptive quadrature
+				 and ray tracing
+				 */
+				fVec3 box_p1{(p.x - 1) * dx / 2, (p.y - 1) * dx / 2, (p.z - 1) * dx / 2};
+				auto weights = get_zero_weights();
+				
+				for(auto& item : sampled_points) {
+					auto sampled_point = box_p1 + item;
+					bool assigned = 0;
+					
+					for(auto item : solids) {
+						if (item->update_weights(sampled_point, weights)) {	//it is true when it is inside the solid
+							assigned = 1;
+							break;
+						}
 					}
+					
+					if (!assigned)			//assign background medium;
+						weights[bg_medium->index] += 1;
 				}
-			
-				if (!assigned)			//assign background medium;
-					weights[bg_medium->index] += 1;
+				
+				if (is_E_point(ctype))
+					chunk->set_medium_point(p, get_medium_ref(1, weights));
+				else
+					chunk->set_medium_point(p, get_medium_ref(0, weights));
 			}
-			
-			
-			if (is_E_point(ctype))
-				chunk->set_medium_point(p, get_medium_ref(1, weights));
-			else
-				chunk->set_medium_point(p, get_medium_ref(0, weights));
-		}
+		};
+		
+		std::vector<std::thread> threads;
+		for(int i = 1; i < num_proc; ++i)
+			threads.push_back(std::thread{func, my_iterator(ch_p1, ch_p2, Null, i, num_proc)});
+		
+		func(my_iterator(ch_p1, ch_p2, Null, 0, num_proc));
+		
+		for(auto& item : threads)
+			item.join();
 	}
 	
 	void Simulation::source_init() {
@@ -181,6 +191,10 @@ namespace ffip {
 		ch_p2 = chunk->get_p2();
 	}
 	
+	void Simulation::set_num_proc(const int _num_proc) {
+		num_proc = _num_proc;
+	}
+	
 	void Simulation::init() {
 		chunk_init();
 		PML_init();
@@ -189,6 +203,8 @@ namespace ffip {
 		N2F_init();
 		udf_unit();
 		step = 0;
+		std::cout << "Initialization Complete\n";
+//		std::cout << "Step = ";
 	}
 	
 	void Simulation::add_source(Source *source) {
@@ -224,8 +240,8 @@ namespace ffip {
 		N2F_pos.push_back(pos);
 	}
 	
-	void Simulation::advance(std::ostream& os, const int num_proc) {
-//		std::cout << "\r Step: " << step << std::flush;
+	void Simulation::advance(std::ostream& os) {
+		std::cout << "\r" << std::setfill('0') << std::setw(4) << step;
 		real time = (step ++ ) * dt;
 		chunk->update_Md(time, num_proc);
 		chunk->update_B2H(time, num_proc);

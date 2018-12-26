@@ -9,13 +9,15 @@ using namespace std;
 int  main(int argc, char const *argv[]) {
 	auto start = std::chrono::system_clock::now();
 	
-	ffip::iVec3 p1{ -11, 3, 20 };
-	ffip::iVec3 p2{ 22, 33, 40 };
+	ffip::iVec3 p1{ 0, 0, 0 };
+	ffip::iVec3 p2{ 4, 4, 4 };
 
-	int n = 10;
-	for (int i = 0; i < n; ++i) {
-		auto tmp = ffip::divide_region(p1, p2, i, n);
-		cout << tmp.first << " " << tmp.second << endl;
+	int n = 3;
+	for(int i = 0; i < n; ++i) {
+		auto itr = ffip::my_iterator(p1, p2, ffip::Null, i, n);
+		for(;!itr.is_end(); itr.advance()) {
+			cout << itr.x << " " << itr.y << " " << itr.z << "\n";
+		}
 	}
 
 	cout << thread::hardware_concurrency() << endl;

@@ -19,7 +19,7 @@ namespace ffip {
 		std::vector<real> kx, ky, kz;
 		
 		/* Coordinate Members*/
-		int ch_jump_x, ch_jump_y, ch_jump_z;
+		size_t ch_jump_x, ch_jump_y, ch_jump_z;
 		iVec3 ch_dim, ch_p1, ch_p2, ch_origin, sim_p1, sim_p2;
 		
 		int jump[8];
@@ -47,7 +47,7 @@ namespace ffip {
 		iVec3 get_origin() const;
 		iVec3 get_p1() const;
 		iVec3 get_p2() const;
-		int get_index_ch(const iVec3& p) const;			//get index relative to chunk origin
+		size_t get_index_ch(const iVec3& p) const;			//get index relative to chunk origin
 		
 		/* Jd, Md (currenst, curl) updates*/
 		void update_Jd(const real time, const int num_proc);		//D(n + 1) - D(n) = Jd(n + 0.5) = curl(H(n + 0.5)) - Ji(n + 0.5)

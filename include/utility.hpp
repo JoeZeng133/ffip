@@ -10,6 +10,7 @@
 #include <functional>
 #include <thread>
 #include <complex>
+#include <iomanip>
 
 namespace ffip {
 	/* type aliases */
@@ -644,9 +645,9 @@ namespace ffip {
 	struct my_iterator {
 		using value_type = int;
 		
-		size_t size{0};
+		size_t size{0}, index{0};
 		int x0, y0, z0, x1, y1, z1;
-		int x, y, z, index{0};
+		int x, y, z;
 		int jump;
 		
 		my_iterator(const iVec3& p1, const iVec3& p2, const Coord_Type ctype);

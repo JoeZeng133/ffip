@@ -65,14 +65,14 @@ int main(int argc, char const *argv[]) {
 	sim.set_background_medium(medium1);
 	
 	//initialization of simulation
+	sim.set_num_proc(4);
 	sim.init();
-	
 	fstream fo{"data.out", ios::out};
 	check_fstream(fo);
 	
 	//run simulation
 	for(int i = 0; i < step; ++i) {
-		sim.advance(fo, 4);
+		sim.advance(fo);
 	}
 	
 	//output results

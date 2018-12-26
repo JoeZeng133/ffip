@@ -268,10 +268,13 @@ namespace ffip {
 	}
 	
 	
-	/* medium factory, needs to add garbage collecting for poles*/
+	/* medium factory, needs to add garbage collecting for poles
+	  syn_medium_ref collects all synthesized medium references
+	 */
 	std::vector<std::unique_ptr<Medium>> medium;
 	std::vector<std::unique_ptr<Medium_Ref>> e_medium_ref;
 	std::vector<std::unique_ptr<Medium_Ref>> m_medium_ref;
+	std::vector<std::unique_ptr<Medium_Ref>> syn_medium_ref;
 	
 	void prepare_medium(const real _dt) {
 		for(auto& item : medium) {
@@ -305,12 +308,12 @@ namespace ffip {
 		}
 		
 		if(nonzeros > 1) {								//for the case of mixing more than 1 material
-			medium_ref.push_back(std::make_unique<Medium_Ref>(Medium_Ref{}));			//generate a mixing material at the back
+			res = new Medium_Ref();
 			for(int i = 0; i < weights.size(); ++i)
 				if (weights[i] > tol){
-					*medium_ref.back() += *medium_ref[i] * (weights[i] / total);
+					*res += *medium_ref[i] * (weights[i] / total);
 				}
-			res = medium_ref.back().get();
+//			syn_medium_ref.push_back(std::unique_ptr<Medium_Ref>(res));			//garbage collecting
 		}
 		else if (nonzeros == 1){						//for the case of only 1 material
 			for(int i = 0; i < weights.size(); ++i) {
