@@ -12,14 +12,17 @@ er_bg = 1;
 ur_bg = 1;
 c = c0 / sqrt(er_bg * ur_bg);
 
+lam_min = 500e-9;
+lam_max = 1000e-9;
+
 PML_d = 6;
-dt = 4.5e-18;           
-dx = 2.5e-9;            %2.5nm discretization
+dt = 4e-18;           
+dx = 5e-9;            %2.5nm discretization
 Sc = c * dt / dx;       %Sc < 1/sqrt(3) = 0.5774
 dim = [50, 50, 50];
-step = 1000;
+step = 3000;
 
-fp = 5.4e14;            %540 THz 
+fp = c / ((lam_min + lam_max) / 2);            %540 THz 
 Np = c / (fp * dx);     %Wavelength in background medium [normalized to dx]
 ricker = @(t, fp, d) (1 - 2 * (pi * fp * (t - d)).^2) .* exp(-(pi * fp * (t - d)).^2);
 t = (0:step) * dt;
@@ -32,8 +35,6 @@ ref_signal = ricker(t, fp, delay);
 rho = 1;
 phi = pi / 4;
 th = pi / 4;
-lam_min = 400e-9;
-lam_max = 900e-9;
 lam = linspace(lam_min, lam_max, 100);
 ft = c ./ lam;
 
@@ -56,7 +57,10 @@ drude = @(w, fp, gamma) (2 * pi * fp)^2 ./ (1j * w * (2 * pi * gamma) - w.^2);
  
 Omega = 2 * pi * Ft;
 K = Omega / c0;
-er_func = @(w) (1 + drude(w, 1.323e16 / (2 * pi), 1.26e14 / (2 * pi)));   %gold for l > 750nm
+% er_func = @(w) (1 + drude(w, 1.323e16 / (2 * pi), 1.26e14 / (2 * pi)));   %gold for l > 750nm
+
+%gold for [400, 800]
+er_func = @(w) (5.9673 + drude(w, 2113.6e12, 15.92e12) + lorentz(w, 1.09, 650.07e12, 104.86e12) );
 er = er_func(Omega);
 
 figure(1)
@@ -69,7 +73,7 @@ axis tight
 %%
 % sphere parameters
 m = sqrt(conj(er(:))); %exp(-jwt) dependence, use the conjugate
-a = 30e-9;
+a = 60e-9;
 size_param = K * a;
 
 % basic configuration

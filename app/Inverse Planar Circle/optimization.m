@@ -79,7 +79,7 @@ while (itr < max_itr)
     save("forward_results");
     disp('forward simulation configuration complete');
     % forward simulation results
-    !./std_config
+    !std_config.exe
     data = load(file_probes_output_forward);
 
     E_forward = [make_complex(data(:, 1), data(:, 2)), make_complex(data(:, 3), data(:, 4)), make_complex(data(:, 5), data(:, 6))];
@@ -167,7 +167,7 @@ while (itr < max_itr)
 
     disp('adjoint simulation configuration complete');
     % adjoint fields
-    !./std_config
+    !std_config.exe
     data = load(file_probes_output_adjoint);
     E_adjoint = [make_complex(data(:, 1), data(:, 2)), make_complex(data(:, 3), data(:, 4)), make_complex(data(:, 5), data(:, 6))];
     H_adjoint = [make_complex(data(:, 7), data(:, 8)), make_complex(data(:, 9), data(:, 10)), make_complex(data(:, 11), data(:, 12))];

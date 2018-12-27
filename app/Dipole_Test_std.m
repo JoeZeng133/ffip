@@ -24,7 +24,7 @@ delay = 1 / fp;
 ricker = @(t, fp, d) (1 - 2 * (pi * fp * (t - d)).^2) .* exp(-(pi * fp * (t - d)).^2);
 t = (0:step) * dt;
 ref_signal = ricker(t, fp, delay);
-G = 1 + 1j;                         %the point source is G
+G = 1;                         %the point source is G
 
 rho = linspace(10, 15, 10) * dx;
 phi = linspace(0, 2 * pi, 10);
@@ -144,9 +144,9 @@ Eth = sum(E .* proj_th, 2) ./ ref;
 Hphi = sum(H .* proj_phi, 2) ./ ref;
 
 %% comparisons
-figure(2)
-plot(abs(Er(:))), hold on
-plot(abs(Er_p(:)))
+% figure(2)
+% plot(abs(Er(:)), 'r'), hold on
+% plot(abs(Er_p(:)), 'b')
 
 %% correlation comparisons
 figure(3)

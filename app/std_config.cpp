@@ -208,7 +208,8 @@ void read_farfield(istream& fin, Simulation& sim) {
 
 int main(int argc, char const *argv[]) {
 	auto start = std::chrono::system_clock::now();
-	set_num_proc(32);
+	set_num_proc(thread::hardware_concurrency());
+	//set_num_proc(1);
 
 	int time_step;
 	Simulation sim;
@@ -292,6 +293,7 @@ int main(int argc, char const *argv[]) {
 		if (!assigned)
 			break;
 		fin >> field;
+
 	}
 	
 	sim.init();

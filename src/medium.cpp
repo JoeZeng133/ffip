@@ -327,6 +327,9 @@ namespace ffip {
 		if (res == nullptr)
 			throw std::runtime_error("Illegal weights");
 		
+	/*	if (res->poles.size() == 0) {
+			throw std::runtime_error("It happened");
+		}*/
 		return res;
 	}
 }

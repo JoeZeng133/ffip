@@ -128,7 +128,7 @@ fclose(fileID);
 
 disp('objective configuration created');
 %% simulated fields
-!./std_config
+!std_config.exe
 data = load(file_probes_output_target);
 make_complex = @(x, y) x + 1j * y;
 

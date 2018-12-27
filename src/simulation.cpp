@@ -288,11 +288,9 @@ namespace ffip {
 		for (auto& item : threads)
 			item.join();
 
-		/*auto N2F_update = [&, this](N2F_Face_Base* item) {
-			item->update(chunk, step);
-		};
+		/*for (auto item : probes)
+			item->update(*this);*/
 
-		task_divider(N2F_faces, N2F_update, num_proc);*/
 		udf_advance();
 	}
 

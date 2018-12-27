@@ -133,7 +133,7 @@ namespace ffip {
 		int ch_jump_x1 = get_ch_jump<x1>();
 		int ch_jump_x2 = get_ch_jump<x2>();
 		
-		for(auto itr = my_iterator(p1_ch, p2_ch, T::ctype, rank, num_proc); !itr.is_end(); itr.advance()) {
+		for(auto itr = my_iterator(p1_ch, p2_ch, p1_ch.get_type(), rank, num_proc); !itr.is_end(); itr.advance()) {
 			int index = itr.x * ch_jump_x + itr.y * ch_jump_y + itr.z * ch_jump_z;
 			jmd[index] = (eh[index + ch_jump_x1] - eh[index - ch_jump_x1]) / dx / get_k<x1>(choose<x1>::get(itr)) - (eh[index + ch_jump_x2] - eh[index - ch_jump_x2]) / dx / get_k<x2>(choose<x2>::get(itr));
 		}

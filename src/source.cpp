@@ -234,9 +234,9 @@ namespace ffip {
 	}
 	
 	void Current_Internal::get_Jd(real time, const size_t rank) {
-		//std::cout << "testing at get_Jd in current_internal";
-		//std::cout << phase(time) << std::endl;
 		cur_phase = phase(time);
+
+		//std::cout << cur_phase << std::endl;
 	}
 	
 	void Current_Internal::get_Md(real time, const size_t rank) {

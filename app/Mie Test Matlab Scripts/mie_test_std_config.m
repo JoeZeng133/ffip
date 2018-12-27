@@ -14,7 +14,7 @@ PML_d = 6;
 Sc = 1 / sqrt(3);
 dt = 2e-17 / 50;
 dx = c0 * dt / Sc;
-dim = [100, 100, 100];
+dim = [50, 50, 50];
 step = 600;
 
 Np = 30;                            %center frequency of the rickerwavelet
@@ -57,7 +57,7 @@ er = er_func(Omega);
 
 % sphere parameters
 m = sqrt(conj(er(:))); %exp(-jwt) dependence, use the conjugate
-a = 30 * dx;
+a = 10 * dx;
 size_param = K * a;
 
 % inhomogeneous geometry file generation
