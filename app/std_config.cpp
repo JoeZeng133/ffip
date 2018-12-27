@@ -208,10 +208,12 @@ void read_farfield(istream& fin, Simulation& sim) {
 
 int main(int argc, char const *argv[]) {
 	auto start = std::chrono::system_clock::now();
-	
+	set_num_proc(32);
+
 	int time_step;
 	Simulation sim;
-	sim.set_num_proc(4);
+	sim.set_num_proc(glob_barrier->get_num_proc());
+
 	vector<Medium*> medium_gather;
 	fstream fin{"config.in", ios::in};
 	fstream fo{"output.out", ios::out};

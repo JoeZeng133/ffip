@@ -11,6 +11,9 @@
 #include <thread>
 #include <complex>
 #include <iomanip>
+#include <atomic>
+#include <condition_variable>
+#include <mutex>
 
 namespace ffip {
 	/* type aliases */
@@ -595,17 +598,15 @@ namespace ffip {
 		/* constructors*/
 		PML() = default;
 		PML(Direction _dir, Side _side);
-		PML(Direction _dir, Side _side, real _d);
-		PML(Direction _dir, Side _side, real _d, real _sigma_max);
+		PML(Direction _dir, Side _side, int _d);
+		PML(Direction _dir, Side _side, int _d, real _sigma_max);
 
 		PML(const PML&) = default;				//copy
 		PML& operator=(const PML&) = default;
 		PML(PML&&) = default;						//move
-		PML& operator=(PML&&);
+		PML& operator=(PML&&) = default;
 
-		void set_dt(const real _dt);
-
-		real get_d() const;
+		int get_d() const;
 		real get_sigma(const real x) const;
 		real get_a(const real x) const;
 		
@@ -651,7 +652,7 @@ namespace ffip {
 		int jump;
 		
 		my_iterator(const iVec3& p1, const iVec3& p2, const Coord_Type ctype);
-		my_iterator(const iVec3& p1, const iVec3& p2, const Coord_Type ctype, const int rank, const int num);
+		my_iterator(const iVec3& p1, const iVec3& p2, const Coord_Type ctype, const size_t rank, const size_t num);
 		
 		void advance();
 		bool is_end() const;
@@ -668,10 +669,11 @@ namespace ffip {
 			}
 		else {
 			std::vector<std::thread> threads;
+
 			for(int i = 1; i < num_proc; ++i) {
 				auto itr1 = list.begin() + (i * list.size()) / num_proc;
 				auto itr2 = list.begin() + ((i + 1) * list.size()) / num_proc;
-				threads.push_back(std::thread(std::for_each<decltype(itr1), F>, itr1, itr2, func));
+				threads.push_back(std::thread(std::for_each<decltype(itr1), F>, itr1, itr2, std::ref(func)));
 			}
 			auto itr1 = list.begin() + (0 * list.size()) / num_proc;
 			auto itr2 = list.begin() + (1 * list.size()) / num_proc;
@@ -681,27 +683,52 @@ namespace ffip {
 				item.join();
 		}
 	}
-	
-//	template<typename T, typename F>
-//	void region_divider(const iVec3& p1, const iVec3& p2, F& func, const int num_proc) {
-//		std::vector<std::thread> threads;
-//		for (int i = 1; i < num_proc; ++i)
-//			threads.push_back(std::thread{func, my_iterator{p1, p2, p1.get_type(), i, num_proc}});
-//
-//		func(my_iterator{p1_ch, p2_ch, p1_ch.get_type(), 0, num_proc});
-//
-//		for (auto& item : threads)
-//			item.join();
-//	}
-	
-//	template<typename T, typename F>
-//	void task_divider(std::vector<T*>& list, F& func, const int num_proc) {
-//		for(auto item : list) {
-//			func(item);
-//		}
-//	}
-	
-	std::pair<iVec3, iVec3> divide_region(iVec3 p1, iVec3 p2, const int r, const int n);
+
+	/* Barrier implementation with reset at the end*/
+	class Barrier
+	{
+	private:
+		std::mutex m_mutex;
+		std::condition_variable m_cv;
+
+		size_t m_count;
+		const size_t m_initial;
+
+		enum State : unsigned char {
+			Up, Down
+		};
+		State m_state;
+		   
+	public:
+		explicit Barrier(std::size_t count);
+		Barrier& operator=(Barrier&&) = delete;
+		Barrier& operator=(const Barrier&) = delete;
+		/// Blocks until all N threads reach here
+		void Sync();
+		size_t get_num_proc() const;
+	};
+
+	/* Global Barrier for use in anywhere*/
+	extern Barrier* glob_barrier;
+	void set_num_proc(const size_t num_proc);
+
+	template<typename T>
+	inline void vector_divider(const std::vector<T>& list, const size_t rank, const size_t num_proc, size_t& idx1, size_t& idx2) {
+		if (num_proc > list.size()) {
+			if (rank >= list.size()) {
+				idx1 = idx2 = 0;
+			}
+			else {
+				idx1 = rank;
+				idx2 = rank + 1;
+			}
+		}
+		else {
+			idx1 = rank * list.size() / num_proc;
+			idx2 = (rank + 1) * list.size() / num_proc;
+		}
+		
+	}
 	extern iVec3 vec3_base[3];
 	
 	//output overloading

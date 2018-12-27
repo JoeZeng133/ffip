@@ -78,10 +78,10 @@ namespace ffip {
 	class Source_Internal {
 	public:
 		virtual ~Source_Internal() {}
-		virtual void update_Jd(std::vector<real>& jmd) = 0;
-		virtual void update_Md(std::vector<real>& jmd) = 0;
-		virtual void get_Jd(real time) = 0;
-		virtual void get_Md(real time) = 0;
+		virtual void update_Jd(std::vector<real>& jmd, const size_t rank) = 0;
+		virtual void update_Md(std::vector<real>& jmd, const size_t rank) = 0;
+		virtual void get_Jd(real time, const size_t rank) = 0;
+		virtual void get_Md(real time, const size_t rank) = 0;
 	};
 	
 	/*allow homogeneous storage of sources
@@ -131,10 +131,10 @@ namespace ffip {
 						 const iVec3 _p1, const iVec3 _p2);
 		
 		/* override functions*/
-		void update_Jd(std::vector<real>& jmd) override;
-		void update_Md(std::vector<real>& jmd) override;
-		void get_Jd(real time) override;
-		void get_Md(real time) override;
+		void update_Jd(std::vector<real>& jmd, const size_t rank) override;
+		void update_Md(std::vector<real>& jmd, const size_t rank) override;
+		void get_Jd(real time, const size_t rank) override;
+		void get_Md(real time, const size_t rank) override;
 		
 		void update_helper(std::vector<real> &jmd);	//update function
 		
@@ -179,12 +179,12 @@ namespace ffip {
 		Eigen_Internal& operator=(Eigen_Internal&&) = delete;
 		
 		/* overriding functions*/
-		void update_Jd(std::vector<real>& jmd) override;
-		void update_Md(std::vector<real>& jmd) override;
-		void get_Jd(double time) override;
-		void get_Md(double time) override;
+		void update_Jd(std::vector<real>& jmd, const size_t rank) override;
+		void update_Md(std::vector<real>& jmd, const size_t rank) override;
+		void get_Jd(real time, const size_t rank) override;
+		void get_Md(real time, const size_t rank) override;
 		
-		void update_helper(std::vector<real>& jmd, const TFSF_Surface face, Coord_Type type);	//helper functions for update_Jd, update_Md
+		void update_helper(std::vector<real>& jmd, const TFSF_Surface face, Coord_Type type, const size_t rank);	//helper functions for update_Jd, update_Md
 	private:
 		std::vector<TFSF_Surface> tfsf_list;
 		Plane_Wave projector;

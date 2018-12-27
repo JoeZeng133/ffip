@@ -18,7 +18,7 @@ namespace ffip {
 	class N2F_Face_Base {
 	public:
 		N2F_Face_Base() = default;
-		virtual void update(Chunk* const chunk, const int n) = 0;
+		virtual void update(Chunk* const chunk, const int time_step, const size_t rank, const size_t num_proc) = 0;
 		virtual std::pair<Vec3<complex_num>, Vec3<complex_num>> get_NL(const real theta, const real phi, const real w) const = 0;
 		virtual iVec3 get_norm_vec() const = 0;
 		virtual iVec3 get_p1() const = 0;
@@ -50,7 +50,7 @@ namespace ffip {
 	public:
 		N2F_Face(iVec3 N2F_p1, iVec3 N2F_p2, const iVec3& _p1, const iVec3& _p2, const Side _side, real_arr& _omega, const real _dx, const real _dt, const fVec3& _center, Medium const* _bg_medium);
 		
-		void update(Chunk* const chunk, const int time_step) override;
+		void update(Chunk* const chunk, const int time_step, const size_t rank, const size_t num_proc) override;
 		std::pair<Vec3<complex_num>, Vec3<complex_num>> get_NL(const real theta, const real phi, const real w) const override;
 		iVec3 get_norm_vec() const override;
 		
@@ -75,9 +75,6 @@ namespace ffip {
 		}
 	};
 
-
-	
-	
 	template<typename D>
 	iVec3 N2F_Face<D>::get_norm_vec() const {
 		return vec3_base[D::val] * (int)side;
@@ -148,32 +145,30 @@ namespace ffip {
 	}
 	
 	template<typename D>
-	void N2F_Face<D>::update(Chunk* const chunk, const int n) {
+	void N2F_Face<D>::update(Chunk* const chunk, const int n, const size_t rank, const size_t num_proc) {
 		int index, k = p1.z;
 		/*int side_int = static_cast<int>(side);*/
 
-		for(int f = 0; f < omega.size(); ++f) {
+		for (int f = 0; f < omega.size(); ++f) {
 			complex_num exp_omega_n(cos(omega[f] * n * dt), -sin(omega[f] * n * dt));
-			index = 0;
 			auto& j1 = j1_list[f];
 			auto& j2 = j2_list[f];
 			auto& m1 = m1_list[f];
 			auto& m2 = m2_list[f];
-			
-			for(auto j : x2)
-				for(auto i : x1){
-					iVec3 pos(i, j, k);
-					pos = rotate_frame(pos, typename D::z{});	//get fields using the coordinates in the original ref frame
-					
-					/* J = (0, 0, side) cross H, M = (0, 0, -side) cross E */
-					j1[index] += -side * (*chunk)(pos, dir_traits<D>::x2::H) * exp_omega_n;
-					j2[index] += side * (*chunk)(pos, dir_traits<D>::x1::H) * exp_omega_n;
-					
-					m1[index] += side * (*chunk)(pos, dir_traits<D>::x2::E) * exp_omega_n;
-					m2[index] += -side * (*chunk)(pos, dir_traits<D>::x1::E) * exp_omega_n;
-					
-					++index;
-				}
+
+			for (auto itr = my_iterator(iVec3( 0, 0, 0 ), iVec3( x1.size() - 1, x2.size() - 1, 0 ), Null, rank, num_proc); !itr.is_end(); itr.advance()) {
+				iVec3 pos(x1[itr.x], x2[itr.y], k);
+				pos = rotate_frame(pos, typename D::z{});
+
+				index = itr.index;
+
+				/* J = (0, 0, side) cross H, M = (0, 0, -side) cross E */
+				j1[index] += -side * (*chunk)(pos, dir_traits<D>::x2::H) * exp_omega_n;
+				j2[index] += side * (*chunk)(pos, dir_traits<D>::x1::H) * exp_omega_n;
+
+				m1[index] += side * (*chunk)(pos, dir_traits<D>::x2::E) * exp_omega_n;
+				m2[index] += -side * (*chunk)(pos, dir_traits<D>::x1::E) * exp_omega_n;
+			}
 		}
 	}
 	
@@ -261,6 +256,7 @@ namespace ffip {
 		PML PMLs[3][2];
 		std::vector<real> kx, ky, kz, bx, by, bz, cx, cy, cz;
 		
+
 		void probe_init();
 		void N2F_init();
 		void medium_init();

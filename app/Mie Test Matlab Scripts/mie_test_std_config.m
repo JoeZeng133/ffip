@@ -14,14 +14,14 @@ PML_d = 6;
 Sc = 1 / sqrt(3);
 dt = 2e-17 / 50;
 dx = c0 * dt / Sc;
-dim = [50, 50, 50];
+dim = [100, 100, 100];
 step = 600;
 
 Np = 30;                            %center frequency of the rickerwavelet
 fp = c0 / (Np * dx);
 ricker = @(t, fp, d) (1 - 2 * (pi * fp * (t - d)).^2) .* exp(-(pi * fp * (t - d)).^2);
 t = (0:step) * dt;
-d = 0;
+d = 1/fp;
 ref_signal = ricker(t, fp, d);
 
 % rho = linspace(1000, 2000, 11) * (Np * dx);
@@ -57,7 +57,7 @@ er = er_func(Omega);
 
 % sphere parameters
 m = sqrt(conj(er(:))); %exp(-jwt) dependence, use the conjugate
-a = 10 * dx;
+a = 30 * dx;
 size_param = K * a;
 
 % inhomogeneous geometry file generation
@@ -111,9 +111,9 @@ fprintf(fileID, "}\n");
 
 % geometry configuration
 fprintf(fileID, "geometry 1 {\n");
-% geometry 0, the inhomogeneous region with mixed medium1 and medium0
+% geometry 0 gold sphere 60nm
 fprintf(fileID, "{ ");
-fprintf(fileID, "inhom %d %d %s", 1, 0, filename_geometry_objective);
+fprintf(fileID, "sphere 1 %e %e %e %e", a, dim * dx / 2);
 fprintf(fileID, " }\n");
 fprintf(fileID, "}\n");
 

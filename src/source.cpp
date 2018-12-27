@@ -40,7 +40,7 @@ namespace ffip {
 		if (courant > 1)
 			throw std::runtime_error("Courant number has to be less than 1");
 		
-		dim = (n + pml.get_d() + 2) * 2;	//[-0.5, n + 0.5] padded to be [-1, n + 1 + pml]
+		dim = int((n + pml.get_d() + 2) * 2);	//[-0.5, n + 0.5] padded to be [-1, n + 1 + pml]
 		origin = 2;
 		
 		eh.resize(dim + 1, 0);
@@ -222,24 +222,24 @@ namespace ffip {
 		//std::cout << "testing inside current_internal" << amp[0] * cur_phase << " " << amp[0] * cur_phase << std::endl;
 	}
 	
-	void Current_Internal::update_Jd(std::vector<real> &jmd) {
+	void Current_Internal::update_Jd(std::vector<real> &jmd, const size_t rank) {
 		//std::cout << "testing phase at update_Jd" << phase(0) << std::endl;
 		if(ctype != Coord_Type::Ex && ctype != Coord_Type::Ey && ctype != Coord_Type::Ez) return;
 		update_helper(jmd);
 	}
 	
-	void Current_Internal::update_Md(std::vector<real> &jmd) {
+	void Current_Internal::update_Md(std::vector<real> &jmd, const size_t rank) {
 		if(ctype != Coord_Type::Hx && ctype != Coord_Type::Hy && ctype != Coord_Type::Hz) return;
 		update_helper(jmd);
 	}
 	
-	void Current_Internal::get_Jd(real time) {
+	void Current_Internal::get_Jd(real time, const size_t rank) {
 		//std::cout << "testing at get_Jd in current_internal";
 		//std::cout << phase(time) << std::endl;
 		cur_phase = phase(time);
 	}
 	
-	void Current_Internal::get_Md(real time) {
+	void Current_Internal::get_Md(real time, const size_t rank) {
 		cur_phase = phase(time);
 	}
 	
@@ -329,7 +329,7 @@ namespace ffip {
 		projector.init();
 	}
 	
-	void Eigen_Internal::update_helper(std::vector<real> &jmd, const TFSF_Surface face, Coord_Type ctype) {
+	void Eigen_Internal::update_helper(std::vector<real> &jmd, const TFSF_Surface face, Coord_Type ctype, const size_t rank) {
 		/* return if type is parellel to face direction*/
 		switch (face.dir) {
 			case Direction::X:
@@ -371,26 +371,27 @@ namespace ffip {
 		}
 	}
 	
-	void Eigen_Internal::update_Jd(std::vector<real> &jmd) {
+	void Eigen_Internal::update_Jd(std::vector<real> &jmd, const size_t rank) {
 		for(auto& face : tfsf_list) {
-			update_helper(jmd, face, Coord_Type::Ex);
-			update_helper(jmd, face, Coord_Type::Ey);
-			update_helper(jmd, face, Coord_Type::Ez);
+			update_helper(jmd, face, Coord_Type::Ex, rank);
+			update_helper(jmd, face, Coord_Type::Ey, rank);
+			update_helper(jmd, face, Coord_Type::Ez, rank);
 		}
 	}
 	
-	void Eigen_Internal::update_Md(std::vector<real> &jmd) {
+	void Eigen_Internal::update_Md(std::vector<real> &jmd, const size_t rank) {
 		for(auto& face : tfsf_list) {
-			update_helper(jmd, face, Coord_Type::Hx);
-			update_helper(jmd, face, Coord_Type::Hy);
-			update_helper(jmd, face, Coord_Type::Hz);
+			update_helper(jmd, face, Coord_Type::Hx, rank);
+			update_helper(jmd, face, Coord_Type::Hy, rank);
+			update_helper(jmd, face, Coord_Type::Hz, rank);
 		}
 	}
 	
-	void Eigen_Internal::get_Jd(real time) {
-		projector.advance(std::cout);	//this updates
+	void Eigen_Internal::get_Jd(real time, const size_t rank) {
+		if (rank == 0)
+			projector.advance(std::cout);	//this updates
 	}
 	
-	void Eigen_Internal::get_Md(real time) {}
+	void Eigen_Internal::get_Md(real time, const size_t rank) {}
 	
 }

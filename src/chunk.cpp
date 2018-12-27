@@ -150,70 +150,70 @@ namespace ffip {
 		this->kz.insert(this->kz.end(), 1);
 	}
 	
-	
-	void Chunk::update_Jd(const real time, const int num_proc) {
-		update_JMd_helper<ex_tag>(ch_p1, ch_p2, num_proc);
-		update_JMd_helper<ey_tag>(ch_p1, ch_p2, num_proc);
-		update_JMd_helper<ez_tag>(ch_p1, ch_p2, num_proc);
-		
-		auto PML_update = [&, this](PML_Point& item) {
-			if(item.c_pos != 0)
-				item.psi_pos = item.b_pos * item.psi_pos + item.c_pos * (eh[item.index + item.jump_pos] - eh[item.index - item.jump_pos]) / dx;
-			
-			if(item.c_neg != 0)
-				item.psi_neg = item.b_neg * item.psi_neg + item.c_neg * (eh[item.index + item.jump_neg] - eh[item.index - item.jump_neg]) / dx;
-			
-			jmd[item.index] += item.psi_pos - item.psi_neg;
-		};
-		
-		task_divider(e_PML, PML_update, num_proc);
-		
-		auto source_update = [&, this](Source_Internal* x) {
-			x->get_Jd(time);
-			x->update_Jd(jmd);
-		};
-		
-		task_divider(source_list, source_update, num_proc);
+	void Chunk::PML_update_helper(std::vector<PML_Point>& PML, const size_t rank) {
+		size_t idx1, idx2;
+		vector_divider(PML, rank, num_proc, idx1, idx2);
+
+		for (auto itr = PML.begin() + idx1; itr != PML.begin() + idx2; itr++) {
+			if (itr->c_pos != 0)
+				itr->psi_pos = itr->b_pos * itr->psi_pos + itr->c_pos * (eh[itr->index + itr->jump_pos] - eh[itr->index - itr->jump_pos]) / dx;
+
+			if (itr->c_neg != 0)
+				itr->psi_neg = itr->b_neg * itr->psi_neg + itr->c_neg * (eh[itr->index + itr->jump_neg] - eh[itr->index - itr->jump_neg]) / dx;
+
+			jmd[itr->index] += itr->psi_pos - itr->psi_neg;
+		}
+	}
+
+	void Chunk::update_e_PML(const size_t rank) {
+		PML_update_helper(e_PML, rank);
+	}
+
+	void Chunk::update_m_PML(const size_t rank) {
+		PML_update_helper(h_PML, rank);
+	}
+
+	void Chunk::update_e_source(const real time, const size_t rank) {
+		if (rank == 0)
+			for (auto item : source_list) {
+				item->get_Jd(time, rank);
+				item->update_Jd(jmd, rank);
+			}
+	}
+
+	void Chunk::update_m_source(const real time, const size_t rank) {
+		if (rank == 0)
+			for (auto item : source_list) {
+				item->get_Md(time, rank);
+				item->update_Md(jmd, rank);
+			}
 	}
 	
-	void Chunk::update_Md(const real time, const int num_proc) {
-		update_JMd_helper<hx_tag>(ch_p1, ch_p2, num_proc);
-		update_JMd_helper<hy_tag>(ch_p1, ch_p2, num_proc);
-		update_JMd_helper<hz_tag>(ch_p1, ch_p2, num_proc);
-		
-		auto PML_update = [&, this](PML_Point& item) {
-			if(item.c_pos != 0)
-				item.psi_pos = item.b_pos * item.psi_pos + item.c_pos * (eh[item.index + item.jump_pos] - eh[item.index - item.jump_pos]) / dx;
-			
-			if(item.c_neg != 0)
-				item.psi_neg = item.b_neg * item.psi_neg + item.c_neg * (eh[item.index + item.jump_neg] - eh[item.index - item.jump_neg]) / dx;
-			
-			jmd[item.index] += item.psi_pos - item.psi_neg;
-		};
-		
-		task_divider(h_PML, PML_update, num_proc);
-		
-		auto source_update = [&, this](Source_Internal* x) {
-			x->get_Md(time);
-			x->update_Md(jmd);
-		};
-		
-		task_divider(source_list, source_update, num_proc);
+	void Chunk::update_Jd(const real time, const size_t rank) {
+		update_JMd_helper<ex_tag>(ch_p1, ch_p2, rank);
+		update_JMd_helper<ey_tag>(ch_p1, ch_p2, rank);
+		update_JMd_helper<ez_tag>(ch_p1, ch_p2, rank);
 	}
 	
-	void Chunk::update_B2H(const real time, const int num_proc) {
-		update_DEHB_helper(Hx, ch_p1, ch_p2, num_proc);
-		update_DEHB_helper(Hy, ch_p1, ch_p2, num_proc);
-		update_DEHB_helper(Hz, ch_p1, ch_p2, num_proc);
+	void Chunk::update_Md(const real time, const size_t rank) {
+		update_JMd_helper<hx_tag>(ch_p1, ch_p2, rank);
+		update_JMd_helper<hy_tag>(ch_p1, ch_p2, rank);
+		update_JMd_helper<hz_tag>(ch_p1, ch_p2, rank);
 	}
 	
-	void Chunk::update_D2E(const real time, const int num_proc) {
-		update_DEHB_helper(Ex, ch_p1, ch_p2, num_proc);
-		update_DEHB_helper(Ey, ch_p1, ch_p2, num_proc);
-		update_DEHB_helper(Ez, ch_p1, ch_p2, num_proc);
+	void Chunk::update_B2H(const real time, const size_t rank) {
+		update_DEHB_helper(Hx, ch_p1, ch_p2, rank);
+		update_DEHB_helper(Hy, ch_p1, ch_p2, rank);
+		update_DEHB_helper(Hz, ch_p1, ch_p2, rank);
 	}
 	
-	void Chunk::update_DEHB_helper(const Coord_Type F, const iVec3 p1, const iVec3 p2, const int num_proc) {
+	void Chunk::update_D2E(const real time, const size_t rank) {
+		update_DEHB_helper(Ex, ch_p1, ch_p2, rank);
+		update_DEHB_helper(Ey, ch_p1, ch_p2, rank);
+		update_DEHB_helper(Ez, ch_p1, ch_p2, rank);
+	}
+	
+	void Chunk::update_DEHB_helper(const Coord_Type F, const iVec3 p1, const iVec3 p2, const size_t rank) {
 		auto tmp = get_component_interior(p1, p2, F);
 		auto p1_ch = tmp.first - ch_origin;
 		auto p2_ch = tmp.second - ch_origin;
@@ -223,25 +223,14 @@ namespace ffip {
 			modifier = 1 / e0;
 		else
 			modifier = -1 / u0;
-		
-		auto func = [&, this](my_iterator itr) {
-			for(;!itr.is_end(); itr.advance()) {
-				int index = itr.x * ch_jump_x + itr.y * ch_jump_y + itr.z * ch_jump_z;
-				real tmp = eh[index];
+
+		for(auto itr = my_iterator{ p1_ch, p2_ch, p1_ch.get_type(), rank, num_proc };!itr.is_end(); itr.advance()) {
+			int index = itr.x * ch_jump_x + itr.y * ch_jump_y + itr.z * ch_jump_z;
+			real tmp = eh[index];
 				
-				eh[index] = medium_chunk[index]->update_field(eh[index], eh1[index], modifier * jmd[index], dispersive_field_chunk[index]);
-				eh1[index] = tmp;
-			}
-		};
-		
-		std::vector<std::thread> threads;
-		for (int i = 1; i < num_proc; ++i)
-			threads.push_back(std::thread{func, my_iterator{p1_ch, p2_ch, p1_ch.get_type(), i, num_proc}});
-				
-		func(my_iterator{p1_ch, p2_ch, p1_ch.get_type(), 0, num_proc});
-		
-		for (auto& item : threads)
-			item.join();
+			eh[index] = medium_chunk[index]->update_field(eh[index], eh1[index], modifier * jmd[index], dispersive_field_chunk[index]);
+			eh1[index] = tmp;
+		}
 	}
 	
 	void Chunk::update_padded_E(const real time) {}
@@ -301,5 +290,8 @@ namespace ffip {
 	real Chunk::ave(const int bit, const int index) const{
 		return ave_helper(bit, index, ch_jump_z, ch_jump_y, ch_jump_x) / jump[bit];
 	}
-	
+
+	void Chunk::set_num_proc(size_t _num_proc) {
+		num_proc = _num_proc;
+	}
 }

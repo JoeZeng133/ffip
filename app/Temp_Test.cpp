@@ -6,23 +6,25 @@
 
 using namespace std;
 
+int func(double x) {
+	return 1 / x;
+}
+
 int  main(int argc, char const *argv[]) {
-	auto start = std::chrono::system_clock::now();
-	
-	ffip::iVec3 p1{ 0, 0, 0 };
-	ffip::iVec3 p2{ 4, 4, 4 };
 
-	int n = 3;
-	for(int i = 0; i < n; ++i) {
-		auto itr = ffip::my_iterator(p1, p2, ffip::Null, i, n);
-		for(;!itr.is_end(); itr.advance()) {
-			cout << itr.x << " " << itr.y << " " << itr.z << "\n";
+	int num_proc = 32;
+
+	for (int time = 0; time < 1000; ++time) {
+		vector<thread> threads;
+		for (int i = 1; i < num_proc; ++i) {
+			threads.push_back(thread(func, i));
 		}
-	}
+		for (auto& item : threads)
+			item.join();
 
-	cout << thread::hardware_concurrency() << endl;
+		cout << "Current Threads" << time << "\r";
+	}
 	
-	auto end = std::chrono::system_clock::now();
-	std::chrono::duration<double> elapsed_seconds = end-start;
-	cout << "\nRunning Time: " << elapsed_seconds.count() << endl;
+
+	cout << "Terminated" << endl;
 }

@@ -177,18 +177,20 @@ namespace ffip {
 		}
 
 		//add PML layers
-		sim_p1.x -= 2 * PMLs[0][0].get_d();
-		sim_p1.y -= 2 * PMLs[1][0].get_d();
-		sim_p1.z -= 2 * PMLs[2][0].get_d();
+		sim_p1.x -= int(2 * PMLs[0][0].get_d());
+		sim_p1.y -= int(2 * PMLs[1][0].get_d());
+		sim_p1.z -= int(2 * PMLs[2][0].get_d());
 		
-		sim_p2.x += 2 * PMLs[0][1].get_d();
-		sim_p2.y += 2 * PMLs[1][1].get_d();
-		sim_p2.z += 2 * PMLs[2][1].get_d();
+		sim_p2.x += int(2 * PMLs[0][1].get_d());
+		sim_p2.y += int(2 * PMLs[1][1].get_d());
+		sim_p2.z += int(2 * PMLs[2][1].get_d());
 
 		//implementaions of MPI, for now 1 chunk covers the whole region
 		chunk = new Chunk{sim_p1, sim_p2, sim_p1, sim_p2, dx, dt};
 		ch_p1 = chunk->get_p1();
 		ch_p2 = chunk->get_p2();
+
+		chunk->set_num_proc(num_proc);
 	}
 	
 	void Simulation::set_num_proc(const int _num_proc) {
@@ -204,7 +206,6 @@ namespace ffip {
 		udf_unit();
 		step = 0;
 		std::cout << "Initialization Complete\n";
-//		std::cout << "Step = ";
 	}
 	
 	void Simulation::add_source(Source *source) {
@@ -243,26 +244,55 @@ namespace ffip {
 	void Simulation::advance(std::ostream& os) {
 		std::cout << "\r" << std::setfill('0') << std::setw(4) << step;
 		real time = (step ++ ) * dt;
-		chunk->update_Md(time, num_proc);
-		chunk->update_B2H(time, num_proc);
-		
-		chunk->update_Jd(time + 0.5 * dt, num_proc);
-		chunk->update_D2E(time + 0.5 * dt, num_proc);
-		
-		chunk->update_padded_E(time);
-		chunk->update_padded_H(time);
-		
-		auto probes_update = [&, this](Probe* item) {
-			item->update(*this);
+
+		std::vector<std::thread> threads;
+		auto func = [&, this](const int rank, const int num_proc) {
+			chunk->update_Md(time, rank);
+			glob_barrier->Sync();
+			chunk->update_m_PML(rank);
+			glob_barrier->Sync();
+			chunk->update_m_source(time, rank);
+			glob_barrier->Sync();
+			chunk->update_B2H(time, rank);
+			glob_barrier->Sync();
+
+			chunk->update_Jd(time + 0.5 * dt, rank);
+			glob_barrier->Sync();
+			chunk->update_e_PML(rank);
+			glob_barrier->Sync();
+			chunk->update_e_source(time + 0.5 * dt, rank);
+			glob_barrier->Sync();
+			chunk->update_D2E(time + 0.5 * dt, rank);
+			glob_barrier->Sync();
+
+			chunk->update_padded_E(time);
+			glob_barrier->Sync();
+			chunk->update_padded_H(time);
+			glob_barrier->Sync();
+
+			size_t idx1, idx2;
+			vector_divider(probes, rank, num_proc, idx1, idx2);
+			std::for_each(probes.begin() + idx1, probes.begin() + idx2, [this](Probe* item) {item->update(*this); });
+
+			for (auto item : N2F_faces)
+				item->update(chunk, step, rank, num_proc);
+
+			glob_barrier->Sync();
 		};
+
 		
-		task_divider(probes, probes_update, num_proc);
-		
-		auto N2F_update = [&, this](N2F_Face_Base* item) {
+		for (int i = 1; i < num_proc; ++i)
+			threads.push_back(std::thread(func, i, num_proc));
+		func(0, num_proc);
+
+		for (auto& item : threads)
+			item.join();
+
+		/*auto N2F_update = [&, this](N2F_Face_Base* item) {
 			item->update(chunk, step);
 		};
-		
-		task_divider(N2F_faces, N2F_update, num_proc);
+
+		task_divider(N2F_faces, N2F_update, num_proc);*/
 		udf_advance();
 	}
 
@@ -383,5 +413,7 @@ namespace ffip {
 		for (int i = 0; i < 6; ++i)
 			N2F_faces[i]->output_JM(os[i]);*/
 	}
+
+	
 }
 

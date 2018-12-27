@@ -24,7 +24,7 @@ namespace ffip {
 	}
 	
 	int side_low_tag::round(real x) {
-		return floor(x);
+		return int(floor(x));
 	}
 	
 	const int side_high_tag::val = 1;
@@ -34,7 +34,7 @@ namespace ffip {
 	}
 	
 	int side_high_tag::round(real x) {
-		return ceil(x);
+		return int(ceil(x));
 	}
 	
 	const int odd_tag::val = 1;
@@ -281,9 +281,9 @@ namespace ffip {
 	/* PML */
 	PML::PML(Direction _dir, Side _side): dir(_dir), side(_side) {}
 	
-	PML::PML(Direction _dir, Side _side, real _d): d(_d), dir(_dir), side(_side) {}
+	PML::PML(Direction _dir, Side _side, int _d): d(_d), dir(_dir), side(_side) {}
 	
-	PML::PML(Direction _dir, Side _side, real _d, real _sigma_max): d(_d), sigma_max(_sigma_max), dir(_dir), side(_side) {}
+	PML::PML(Direction _dir, Side _side, int _d, real _sigma_max): d(_d), sigma_max(_sigma_max), dir(_dir), side(_side) {}
 	
 	Direction PML::get_dir() const {
 		return dir;
@@ -293,7 +293,7 @@ namespace ffip {
 		return side;
 	}
 	
-	real PML::get_d() const {
+	int PML::get_d() const {
 		return d;
 	}
 	
@@ -350,16 +350,18 @@ namespace ffip {
 			z = z1 + 1;
 	}
 	
-	my_iterator::my_iterator(const iVec3& p1, const iVec3& p2, const Coord_Type ctype, const int rank, const int num): my_iterator(p1, p2, ctype) {
+	my_iterator::my_iterator(const iVec3& p1, const iVec3& p2, const Coord_Type ctype, const size_t rank, const size_t num): my_iterator(p1, p2, ctype) {
 		if (rank >= num)
 			throw std::runtime_error("Rank is larger than number of threads");
 		
 		if (size <= num)
 			throw std::runtime_error("Region is too small to divide");
 		
-		int idx1 = (rank * size) / num;
-		int idx2 = ((rank + 1) * size) / num;
-		size = idx2 - idx1;
+		size_t idx1 = (rank * size) / num;
+		size_t idx2 = ((rank + 1) * size) / num;
+
+		size = idx2;
+		index = idx1;
 		
 		x = x0 + (idx1 % ((x1 - x0) / jump + 1)) * jump;
 		idx1 /= (x1 - x0) / jump + 1;
@@ -406,35 +408,44 @@ namespace ffip {
 		return os;
 	}
 
-	std::pair<iVec3, iVec3> divide_region(iVec3 p1, iVec3 p2, const int r, const int n) {
-		if (!ElementWise_Less_Eq(p1, p2))
-			throw std::runtime_error("The region cannot be divided");
+	Barrier::Barrier(std::size_t count) : m_count{ count }, m_initial{ count }, m_state{ State::Down } { }
 
-		iVec3 dp = (p2 - p1) + iVec3{ 1, 1, 1 };
-		if (dp.z >= dp.y && dp.z >= dp.x) {
-			if (n > dp.z)
-				throw std::runtime_error("The region cannot be divided");
+	void Barrier::Sync()
+	{
+		std::unique_lock<std::mutex> lock{ m_mutex };
 
-			p2.z = ((r + 1) * dp.z) / n - 1 + p1.z;
-			p1.z = (r * dp.z) / n + p1.z;
-			
-		}
-		else if (dp.y >= dp.x && dp.y >= dp.z) {
-			if (n > dp.y)
-				throw std::runtime_error("The region cannot be divided");
-
-			p2.y = ((r + 1) * dp.y) / n - 1 + p1.y;
-			p1.y = (r * dp.y) / n + p1.y;
-			
-		}
-		else {
-			if (n > dp.x)
-				throw std::runtime_error("The region cannot be divided");
-
-			p2.x = ((r + 1) * dp.x) / n - 1 + p1.x;
-			p1.x = (r * dp.x) / n + p1.x;
+		if (m_state == State::Down)
+		{
+			// Counting down the number of syncing threads
+			if (--m_count == 0) {
+				m_state = State::Up;
+				m_cv.notify_all();
+			}
+			else {
+				m_cv.wait(lock, [this] { return m_state == State::Up; });
+			}
 		}
 
-		return { p1, p2 };
+		else // (m_state == State::Up)
+		{
+			// Counting back up for Auto reset
+			if (++m_count == m_initial) {
+				m_state = State::Down;
+				m_cv.notify_all();
+			}
+			else {
+				m_cv.wait(lock, [this] { return m_state == State::Down; });
+			}
+		}
+	}
+
+	Barrier* glob_barrier{ new Barrier{ 1 } };
+	void set_num_proc(const size_t num_proc) {
+		delete glob_barrier;
+		glob_barrier = new Barrier(num_proc);
+	}
+
+	size_t Barrier::get_num_proc() const {
+		return m_initial;
 	}
 }

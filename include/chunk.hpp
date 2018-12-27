@@ -27,6 +27,9 @@ namespace ffip {
 		/* source */
 		std::vector<Source_Internal*> source_list;				//
 		real dx, dt;
+
+		/* Concurrency members*/
+		size_t num_proc{ 1 };
 	public:
 		//given start, end domain_comp coord and initialize an empty Chunk
 		Chunk(const iVec3& _sim_p1, const iVec3& _sim_p2, const iVec3& _ch_p1, const iVec3& _ch_p2, real _dx, real _dt);
@@ -49,17 +52,27 @@ namespace ffip {
 		iVec3 get_p2() const;
 		size_t get_index_ch(const iVec3& p) const;			//get index relative to chunk origin
 		
-		/* Jd, Md (currenst, curl) updates*/
-		void update_Jd(const real time, const int num_proc);		//D(n + 1) - D(n) = Jd(n + 0.5) = curl(H(n + 0.5)) - Ji(n + 0.5)
-		void update_Md(const real time, const int num_proc);		//B(n + 1) - B(n) = Md(n + 0.5) = -(curl(H(n + 0.5)) + Mi(n + 0.5))
-		
+		/* Jd, Md (currenst, curl) updates
+		  D(n + 1) - D(n) = Jd(n + 0.5) = curl(H(n + 0.5)) - Ji(n + 0.5)
+		  B(n + 1) - B(n) = Md(n + 0.5) = -(curl(E(n + 0.5)) + Mi(n + 0.5))
+		*/
+		void update_Jd(const real time, const size_t rank);		//curl H
+		void update_Md(const real time, const size_t rank);		//curl E
 		template<typename T>
-		void update_JMd_helper(const iVec3 p1, const iVec3 p2, const int num_proc);
+		void update_JMd_helper(const iVec3 p1, const iVec3 p2, const size_t rank);	//helper function for calculating curl
+
+		void update_e_PML(const size_t rank);									//PML electric points update
+		void update_m_PML(const size_t rank);									//PML magnetic points update
+		void PML_update_helper(std::vector<PML_Point>& PML, const size_t rank);	//PML update helper
+
+		void update_e_source(const real time, const size_t rank);				//electric current source update
+		void update_m_source(const real time, const size_t rank);				//magnetic current source update
+
 		
 		/* Material updates */
-		void update_D2E(const real time, const int num_proc);
-		void update_B2H(const real time, const int num_proc);
-		void update_DEHB_helper(const Coord_Type F, const iVec3 p1, const iVec3 p2, const int num_proc);
+		void update_D2E(const real time, const size_t rank);
+		void update_B2H(const real time, const size_t rank);
+		void update_DEHB_helper(const Coord_Type F, const iVec3 p1, const iVec3 p2, const size_t rank);
 		
 		/* MPI updates of the boundary */
 		void update_padded_H(const real time);
@@ -102,11 +115,13 @@ namespace ffip {
 
 			return interp_helper(data, args...) * (1 - w) + interp_helper(data + shift, args...) * w;
 		}
+
+		/* concurrency members*/
+		void set_num_proc(size_t _num_proc);
 	};
 	
-	
 	template<typename T>
-	void Chunk::update_JMd_helper(const iVec3 p1, const iVec3 p2, const int num_proc) {
+	void Chunk::update_JMd_helper(const iVec3 p1, const iVec3 p2, const size_t rank) {
 		/* Curl updates without PML */
 		using dir_base = typename T::dir_base;
 		using x1 = typename dir_base::x1;
@@ -118,21 +133,9 @@ namespace ffip {
 		int ch_jump_x1 = get_ch_jump<x1>();
 		int ch_jump_x2 = get_ch_jump<x2>();
 		
-		auto func = [&](my_iterator itr) {
-			for(; !itr.is_end(); itr.advance()) {
-				int index = itr.x * ch_jump_x + itr.y * ch_jump_y + itr.z * ch_jump_z;
-				
-				jmd[index] = (eh[index + ch_jump_x1] - eh[index - ch_jump_x1]) / dx / get_k<x1>(choose<x1>::get(itr)) - (eh[index + ch_jump_x2] - eh[index - ch_jump_x2]) / dx / get_k<x2>(choose<x2>::get(itr));
-			}
-		};
-		
-		std::vector<std::thread> threads;
-		for(int i = 1; i < num_proc; ++i) {
-			threads.push_back(std::thread(func, my_iterator(p1_ch, p2_ch, p1_ch.get_type(), i, num_proc)));
+		for(auto itr = my_iterator(p1_ch, p2_ch, T::ctype, rank, num_proc); !itr.is_end(); itr.advance()) {
+			int index = itr.x * ch_jump_x + itr.y * ch_jump_y + itr.z * ch_jump_z;
+			jmd[index] = (eh[index + ch_jump_x1] - eh[index - ch_jump_x1]) / dx / get_k<x1>(choose<x1>::get(itr)) - (eh[index + ch_jump_x2] - eh[index - ch_jump_x2]) / dx / get_k<x2>(choose<x2>::get(itr));
 		}
-
-		func(my_iterator(p1_ch, p2_ch, p1_ch.get_type(), 0, num_proc));
-		for(auto& item : threads)
-			item.join();
 	}
 }
