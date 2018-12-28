@@ -589,7 +589,7 @@ namespace ffip {
 	class PML {
 	private:
 		int d{0};
-		real sigma_max{0}, k_max{1}, a_max{0.1};	//it was found out a_max is critical in absorbing waves in 1D simulation
+		real sigma_max{0}, k_max{1}, a_max{0};	//it was found out a_max is critical in absorbing waves in 1D simulation
 		real m_a{1}, m{3};
 		Direction dir;
 		Side side;

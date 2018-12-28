@@ -217,7 +217,14 @@ int main(int argc, char const *argv[]) {
 
 	vector<Medium*> medium_gather;
 	fstream fin{"config.in", ios::in};
-	fstream fo{"output.out", ios::out};
+	fstream fo{"log.out", ios::out};
+
+	if (!fin.is_open())
+		throw runtime_error("fail to open configuration file");
+
+	if (!fo.is_open())
+		throw runtime_error("fail to open log file");
+
 	fstream probes_output_file;
 	fstream probes_input_file;
 	fstream farfield_input_file;

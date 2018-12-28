@@ -12,18 +12,21 @@ er_bg = 1;
 ur_bg = 1;
 c = c0 / sqrt(er_bg * ur_bg);
 
-lam_min = 500e-9;
+lam_min = 200e-9;
 lam_max = 1000e-9;
 
 PML_d = 6;
-dt = 4e-18;           
-dx = 5e-9;            %2.5nm discretization
-Sc = c * dt / dx;       %Sc < 1/sqrt(3) = 0.5774
-dim = [50, 50, 50];
-step = 3000;
+Sc = 0.5;
+dx = 1e-9;            %1nm discretization
+dt = Sc * dx / c;   
+dim = [125, 125, 125];
+step = 4000;
+fprintf('Sc = %.2f\n', Sc);
 
-fp = c / ((lam_min + lam_max) / 2);            %540 THz 
+fp = c / (400e-9);            %400 THz 
 Np = c / (fp * dx);     %Wavelength in background medium [normalized to dx]
+fprintf('Wavelength in bg = %.2f dx\n', Np);
+fprintf('Gonna need this much time steps %.2f\n', 5 / fp / dt);
 ricker = @(t, fp, d) (1 - 2 * (pi * fp * (t - d)).^2) .* exp(-(pi * fp * (t - d)).^2);
 t = (0:step) * dt;
 delay = 1 / fp;
@@ -34,8 +37,8 @@ ref_signal = ricker(t, fp, delay);
 % th = linspace(0 * pi,  pi, 10);
 rho = 1;
 phi = pi / 4;
-th = pi / 4;
-lam = linspace(lam_min, lam_max, 100);
+th = 3 * pi / 4;
+lam = linspace(lam_min, lam_max, 50);
 ft = c ./ lam;
 
 [Ft, Th, Phi, Rho] = ndgrid(ft, th, phi, rho);
@@ -70,7 +73,6 @@ xlabel('\lambda [nm]')
 legend({'$\textrm{Re}(\varepsilon_r)$', '$\textrm{Im}(\varepsilon_r)$'}, 'interpreter', 'latex','fontsize', 15)
 axis tight
 
-%%
 % sphere parameters
 m = sqrt(conj(er(:))); %exp(-jwt) dependence, use the conjugate
 a = 60e-9;
@@ -116,6 +118,9 @@ fclose(fileID);
 
 disp('config.in created');
 %% numerical fields
+convergence = load('log.out');
+figure(2)
+plot(convergence);
 data = load('output.out');
 make_complex = @(x, y) x + 1j * y;
 ref = sum(ref_signal .* exp(-1j * 2 * pi * Ft(:) * t), 2);
@@ -143,7 +148,7 @@ end
 %% plots against one parameters (frequency)
 
 figure(3)
-plot(lam / 1e-9, abs(Eth(:)), 'sq'), hold on
+plot(lam / 1e-9, abs(Eth(:)), 'sq-'), hold on
 plot(lam / 1e-9, abs(Eth_phy(:)))
 xlabel('\lambda [nm]')
 legend({'$Numerical |E_\theta|$', '$Analytical |E_\theta|$'}, 'interpreter', 'latex','fontsize', 15)

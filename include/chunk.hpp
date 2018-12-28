@@ -118,6 +118,9 @@ namespace ffip {
 
 		/* concurrency members*/
 		void set_num_proc(size_t _num_proc);
+
+		/* miscellaneous*/
+		real measure() const;
 	};
 	
 	template<typename T>

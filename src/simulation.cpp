@@ -288,9 +288,7 @@ namespace ffip {
 		for (auto& item : threads)
 			item.join();
 
-		/*for (auto item : probes)
-			item->update(*this);*/
-
+		os << chunk->measure() << "\n";
 		udf_advance();
 	}
 
@@ -372,44 +370,35 @@ namespace ffip {
 		}
 	}
 	
-	std::fstream os[6];
-	
+	std::fstream os;
+
+
 	void Simulation::udf_unit() {
-		/*for(int i = 0; i < 6; ++i) {
-			std::string idx = std::to_string(i);
-			os[i].open("face" + idx + ".out", std::fstream::out);
-		}
-		
-		for(int i = 0; i < 6; ++i) {
-			os[i] << N2F_faces[i]->get_p1() << "\n" << N2F_faces[i]->get_p2() << "\n";
-			os[i] << N2F_faces[i]->get_norm_vec() << "\n";
-			os[i] << std::scientific;
-		}*/
+		/*os.open("slice.out", std::ios::out);
+		if (!os.is_open())
+			throw std::runtime_error("fail to open slice.out");
+
+		iVec3 p1 = { (ch_p1.x + ch_p2.x) / 2, ch_p1.x, ch_p1.z };
+		iVec3 p2 = { (ch_p1.x + ch_p2.x) / 2 + 1, ch_p2.x, ch_p2.z };
+		auto tmp = get_component_interior(p1, p2, Ex);
+
+		os << tmp.first << " " << tmp.second << "\n";*/
 	}
 	
 	void Simulation::udf_advance() {
+	/*	iVec3 p1 = { (ch_p1.x + ch_p2.x) / 2, ch_p1.x, ch_p1.z };
+		iVec3 p2 = { (ch_p1.x + ch_p2.x) / 2 + 1, ch_p2.x, ch_p2.z };
+		auto tmp = get_component_interior(p1, p2, Ex);
 
-		/* output fields at N2F face each (position, time step)
-		for(int i = 0; i < 6; ++i) {
-			auto face = N2F_faces[i];
-			
-			for(auto itr = my_iterator(face->get_p1(), face->get_p2(), face->get_p1().get_type()); !itr.is_end(); itr.advance()) {
-				auto pos = itr.get_vec();
-				os[i] << (*chunk)(pos, Ex) << " "
-				<< (*chunk)(pos, Ey) << " "
-				<< (*chunk)(pos, Ez) << " "
-				<< (*chunk)(pos, Hx) << " "
-				<< (*chunk)(pos, Hy) << " "
-				<< (*chunk)(pos ,Hz) << "\n";
-				
-			}
-		}*/
+		for (auto itr = my_iterator(tmp.first, tmp.second, Ex); !itr.is_end(); itr.advance())
+			os << chunk->operator()(itr.get_vec()) << " ";
+
+		os << "\n";*/
+		
 	}
 
 	void Simulation::udf_output() {
-	/*	output currents at each (position, frequency)
-		for (int i = 0; i < 6; ++i)
-			N2F_faces[i]->output_JM(os[i]);*/
+	
 	}
 
 	

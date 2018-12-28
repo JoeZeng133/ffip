@@ -14,7 +14,7 @@ PML_d = 6;
 Sc = 1 / sqrt(3);
 dt = 2e-17 / 50;
 dx = c0 * dt / Sc;
-dim = [50, 50, 50];
+dim = [25, 25, 25];
 step = 600;
 
 Np = 30;                            %center frequency of the rickerwavelet

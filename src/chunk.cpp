@@ -294,4 +294,11 @@ namespace ffip {
 	void Chunk::set_num_proc(size_t _num_proc) {
 		num_proc = _num_proc;
 	}
+
+	real Chunk::measure() const {
+		real res = 0;
+		for (auto item : eh)
+			res += abs(item);
+		return res;
+	}
 }
