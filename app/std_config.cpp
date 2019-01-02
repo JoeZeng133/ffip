@@ -191,7 +191,7 @@ void read_probe(istream& fin, Simulation& sim) {
 	fin >> n;
 	for (int i = 0; i < n; ++i) {
 		fin >> x >> y >> z >> freq;
-		sim.add_probe(new Probe_Frequency({x, y, z}, freq));
+		sim.add_nearfield_probe(freq, {x, y, z});
 	}
 }
 
@@ -209,7 +209,6 @@ void read_farfield(istream& fin, Simulation& sim) {
 int main(int argc, char const *argv[]) {
 	auto start = std::chrono::system_clock::now();
 	set_num_proc(thread::hardware_concurrency());
-	//set_num_proc(1);
 
 	int time_step;
 	Simulation sim;
@@ -300,16 +299,17 @@ int main(int argc, char const *argv[]) {
 		if (!assigned)
 			break;
 		fin >> field;
-
 	}
 	
 	sim.init();
+	
 	
 	for(int i = 0; i < time_step; ++i) {
 		sim.advance(fo);
 	}
 	
-	sim.output(probes_output_file);
+	sim.udf_output();
+	sim.output_nearfield(probes_output_file);
 	sim.output_farfield(farfield_output_file);
 
 	auto end = std::chrono::system_clock::now();

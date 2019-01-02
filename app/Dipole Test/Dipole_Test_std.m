@@ -1,5 +1,4 @@
-                                                                                                                                                                                                                                                                         %% near-field dipole test
-clear
+                                                                                                                                                                                                                                                                         %% near-field dipole testclear
 clc
 close all
 
@@ -24,7 +23,7 @@ delay = 1 / fp;
 ricker = @(t, fp, d) (1 - 2 * (pi * fp * (t - d)).^2) .* exp(-(pi * fp * (t - d)).^2);
 t = (0:step) * dt;
 ref_signal = ricker(t, fp, delay);
-G = 1;                         %the point source is G
+G = 1 + 2j;                         %the point source is G
 
 rho = linspace(10, 15, 10) * dx;
 phi = linspace(0, 2 * pi, 10);
@@ -115,7 +114,7 @@ fprintf(fileID, "box 0 -1 -1 -1 1 1 1");
 fprintf(fileID, " }\n");
 fprintf(fileID, "}\n");
 
-% plane wave source
+% dipole sources
 fprintf(fileID, "source 1 {\n");
 fprintf(fileID, "{ ");
 fprintf(fileID, "dipole %s", filename_dipoles);

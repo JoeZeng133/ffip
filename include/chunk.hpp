@@ -22,7 +22,8 @@ namespace ffip {
 		size_t ch_jump_x, ch_jump_y, ch_jump_z;
 		iVec3 ch_dim, ch_p1, ch_p2, ch_origin, sim_p1, sim_p2;
 		
-		int jump[8];
+		/* counts how many ones in a bit pattern*/
+		int num_ones[8];
 		
 		/* source */
 		std::vector<Source_Internal*> source_list;				//
@@ -38,14 +39,15 @@ namespace ffip {
 		void PML_init(const real_arr& kx, const real_arr& ky, const real_arr& kz,
 					  const real_arr& bx, const real_arr& by, const real_arr& bz,
 					  const real_arr& cx, const real_arr&cy, const real_arr&cz);		//provide with PML parameters in the entire simulation
-		//generic getter
+		//getters
 		template<typename T>
-		const int get_ch_jump() const;
+		const size_t get_ch_jump() const;
 		
 		template<typename T>
 		const real get_k(const int id) const;
 		
-		//getter for dimension
+		real get_dt() const;
+		real get_dx() const;
 		iVec3 get_dim() const;
 		iVec3 get_origin() const;
 		iVec3 get_p1() const;
@@ -84,7 +86,8 @@ namespace ffip {
 		/* field access at computation coordinates*/
 		real operator()(const fVec3& p, const Coord_Type ctype) const;		//access at float computation coordinates
 		real operator()(const iVec3& p, const Coord_Type ctype) const;		//access at integer computation coordinates
-		real operator()(const iVec3& p) const;								//raw access			
+		real operator()(const iVec3& p) const;								//raw access
+		real operator[](const size_t index) const;							//raw index access
 		
 		/* average field according to bit patterns
 		 111 = average over 8 points

@@ -147,6 +147,8 @@ namespace ffip {
 		};
 	}
 	
+	
+	
 	/* Gridded Interpolation class*/
 	GriddedInterp::GriddedInterp(string _file_name):file_name(_file_name) {
 		fstream fin{file_name, ios::in};
@@ -157,7 +159,6 @@ namespace ffip {
 		
 		int n, m, p;
 		real x0, y0, z0;
-		real dx, dy, dz;
 		
 		fin >> n >> m >> p;
 		
@@ -179,10 +180,12 @@ namespace ffip {
 			fin >> tmp;
 			v.push_back(tmp);
 		}
+		
+		interp = interpn<3>(p, m, n);
 	}
 	
 	GriddedInterp::GriddedInterp(const iVec3& dim, const fVec3& w0, const fVec3& dw, const real_arr& _v):
-	v(_v) {
+	v(_v), dx(dw.x), dy(dw.y), dz(dw.z) {
 		
 		for(int i = 0; i < dim.x; ++i)
 			x.push_back(w0.x + dw.x * i);
@@ -192,11 +195,12 @@ namespace ffip {
 		
 		for(int k = 0; k < dim.z; ++k)
 			z.push_back(w0.z + dw.z * k);
+		
+		interp = interpn<3>(z.size(), y.size(), x.size());
 	}
 
-	
 	real GriddedInterp::request_value(const fVec3& p) const{
-		return interp_ndim(v.data(), p.z, z, p.y, y, p.x, x);
+		return interp.get(v, (p.z - z.front()) / dz, (p.y - y.front()) / dy, (p.x - x.front()) / dx);
 	}
 	
 	void GriddedInterp::expand_dim_helper(std::vector<real> &w, const real lo, const real hi, const Direction dir) {
@@ -325,9 +329,13 @@ namespace ffip {
 	PML_Point::PML_Point(const int _index, const int _jump_pos, const int _jump_neg, const real _b_pos, const real _b_neg, const real _c_pos, const real _c_neg):
 	index(_index), jump_pos(_jump_pos), jump_neg(_jump_neg), b_pos(_b_pos), b_neg(_b_neg), c_pos(_c_pos), c_neg(_c_neg) {}
 	
+	/* ############################################### */
+	my_iterator::my_iterator(const std::pair<iVec3, iVec3> corners, const Coord_Type ctype): my_iterator{corners.first, corners.second, ctype} {}
 	
-	my_iterator::my_iterator(const iVec3& p1, const iVec3& p2, Coord_Type ctype) {
-		decltype(get_component_interior(p1, p2, ctype)) tmp;
+	my_iterator::my_iterator(const fVec3& p1, const fVec3& p2, const Coord_Type ctype): my_iterator{get_component_interior(p1, p2, ctype), ctype} {}
+	
+	my_iterator::my_iterator(const iVec3& p1, const iVec3& p2, const Coord_Type ctype) {
+		std::pair<iVec3, iVec3> tmp;
 		
 		// loop through points inside [p1, p2]. Null means loop through every types of points
 		if (ctype != Coord_Type::Null)  {
@@ -345,7 +353,8 @@ namespace ffip {
 		y1 = tmp.second.y;
 		z1 = tmp.second.z;
 		
-		size = get_size();
+		index = 0;
+		end = size = get_size();
 		if (size == 0)
 			z = z1 + 1;
 	}
@@ -355,19 +364,29 @@ namespace ffip {
 			throw std::runtime_error("Rank is larger than number of threads");
 		
 		if (size <= num)
-			throw std::runtime_error("Region is too small to divide");
+			throw std::runtime_error("Region is too small to divide, Better use non-parallel version");
 		
 		size_t idx1 = (rank * size) / num;
 		size_t idx2 = ((rank + 1) * size) / num;
-
-		size = idx2;
+		
 		index = idx1;
+		end = idx2;
 		
 		x = x0 + (idx1 % ((x1 - x0) / jump + 1)) * jump;
 		idx1 /= (x1 - x0) / jump + 1;
 		y = y0 + (idx1 % ((y1 - y0) / jump + 1)) * jump;
 		idx1 /= ((y1 - y0) / jump + 1);
 		z = z0 + (idx1 % ((z1 - z0) / jump + 1)) * jump;
+	}
+	
+	iVec3 my_iterator::get_vec(size_t index) const {
+		int x, y, z;
+		x = x0 + (index % ((x1 - x0) / jump + 1)) * jump;
+		index /= (x1 - x0) / jump + 1;
+		y = y0 + (index % ((y1 - y0) / jump + 1)) * jump;
+		index /= ((y1 - y0) / jump + 1);
+		z = z0 + (index % ((z1 - z0) / jump + 1)) * jump;
+		return {x, y, z};
 	}
 	
 	void my_iterator::advance() {
@@ -382,7 +401,7 @@ namespace ffip {
 	}
 	
 	bool my_iterator::is_end() const{
-		return index >= size;
+		return index >= end;
 	}
 	
 	bool my_iterator::is_empty() const{
@@ -391,6 +410,10 @@ namespace ffip {
 	
 	size_t my_iterator::get_size() const{
 		return is_empty()? 0 : (size_t)((x1 - x0) / jump + 1) * ((y1 - y0) / jump + 1) * ((z1 - z0) / jump + 1);
+	}
+	
+	Vec3<size_t> my_iterator::get_dim() const {
+		return is_empty()? Vec3<size_t>(0, 0, 0) : Vec3<size_t>((x1 - x0) / jump + 1, (y1 - y0) / jump + 1, (z1 - z0) / jump + 1);
 	}
 	
 	iVec3 my_iterator::get_vec() const {

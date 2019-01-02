@@ -100,6 +100,36 @@ namespace ffip {
 		return Pole_Ref{get_a1(), get_a2(), get_b0(), get_b1(), get_b2()};
 	}
 	
+	/* Critical Points Pole*/
+	CP_Pole::CP_Pole(const real A, const real Omega, const real phi, const real Gamma) {
+		a0 = 2 * A * Omega * (Omega * cos(phi) - Gamma * sin(phi));
+		a1 = -2 * A * Omega * sin(phi);
+		b0 = Omega * Omega + Gamma * Gamma;
+		b1 = 2 * Gamma;
+		b2 = 1;
+		cp = b2 / (dt * dt) + b1 / (2 * dt);
+	}
+	
+	real CP_Pole::get_a1() const {
+		return (2 * b2 / (dt * dt) - b0) / cp;
+	}
+	
+	real CP_Pole::get_a2() const {
+		return (b1 / (2 * dt) - b2 / (dt * dt)) / cp;
+	}
+	
+	real CP_Pole::get_b0() const {
+		return (a0 / (2 * dt) + a1 / (dt * dt)) / cp;
+	}
+	
+	real CP_Pole::get_b1() const {
+		return (-2 * a1 / dt / dt) / cp;
+	}
+	
+	real CP_Pole::get_b2() const {
+		return (a1 / dt / dt - a0 / 2 / dt) / cp;
+	}
+	
 	/* Lorentz Pole */
 	Lorentz_Pole::Lorentz_Pole(real rel_perm, real freq, real damp): epsilon(rel_perm), omega(freq * 2 * pi), delta(damp * pi) {}
 	

@@ -17,7 +17,15 @@ namespace ffip {
 		dispersive_field_chunk.resize(eh.size(), nullptr);
 		
 		for(int i = 0; i < 8; ++i)
-			jump[i ^ 0b111] = 1 << (!(i & 1) + !(i & 2) + !(i & 4));
+			num_ones[i ^ 0b111] = 1 << (!(i & 1) + !(i & 2) + !(i & 4));
+	}
+	
+	real Chunk::get_dt() const {
+		return dt;
+	}
+	
+	real Chunk::get_dx() const {
+		return dx;
 	}
 	
 	iVec3 Chunk::get_dim() const{
@@ -57,17 +65,17 @@ namespace ffip {
 	}
 	
 	template<>
-	const int Chunk::get_ch_jump<dir_x_tag>() const {
+	const size_t Chunk::get_ch_jump<dir_x_tag>() const {
 		return ch_jump_x;
 	}
 	
 	template<>
-	const int Chunk::get_ch_jump<dir_y_tag>() const {
+	const size_t Chunk::get_ch_jump<dir_y_tag>() const {
 		return ch_jump_y;
 	}
 	
 	template<>
-	const int Chunk::get_ch_jump<dir_z_tag>() const {
+	const size_t Chunk::get_ch_jump<dir_z_tag>() const {
 		return ch_jump_z;
 	}
 	
@@ -262,7 +270,7 @@ namespace ffip {
 	real Chunk::operator()(const fVec3& p, const Coord_Type ctype) const {
 		if (!ElementWise_Less_Eq(ch_p1, p) || !ElementWise_Less_Eq(p, ch_p2))
 			return 0;
-
+ 
 		real f[8];
 		
 		auto tmp = get_nearest_point<side_low_tag>(p, ctype);
@@ -277,6 +285,10 @@ namespace ffip {
 			(p.x - tmp.x) / 2
 			);
 	}
+	
+	real Chunk::operator[](const size_t index) const {
+		return eh[index];
+	}
 
 	template<>
 	real Chunk::ave_helper(const int bit, const int index, const int jump) const{
@@ -288,7 +300,7 @@ namespace ffip {
 	}
 	
 	real Chunk::ave(const int bit, const int index) const{
-		return ave_helper(bit, index, ch_jump_z, ch_jump_y, ch_jump_x) / jump[bit];
+		return ave_helper(bit, index, ch_jump_z, ch_jump_y, ch_jump_x) / num_ones[bit];
 	}
 
 	void Chunk::set_num_proc(size_t _num_proc) {

@@ -10,40 +10,15 @@ namespace ffip {
 		sim_dim = _dim;
 	}
 
-	void Simulation::probe_init() {}
+	void Simulation::probe_init() {
+		for(int i = 0; i < NF_freq.size(); ++i)
+			probes.push_back(new Probe_Frequency(NF_freq[i], NF_pos[i], chunk));
+	}
+	
 
 	void Simulation::N2F_init() {
 		if (N2F_pos.empty()) return;
-
-		//make frequency unique
-		N2F_omega_unique = N2F_omega;
-		std::sort(N2F_omega_unique.begin(), N2F_omega_unique.end());
-		auto it = std::unique(N2F_omega_unique.begin(), N2F_omega_unique.end());
-		N2F_omega_unique.resize(std::distance(N2F_omega_unique.begin(), it));
-		
-		//generate six N2F_surfaces
-		auto center = (N2F_p1 + N2F_p2) * (dx / 4);
-		std::pair<iVec3, iVec3> faces[6];
-		faces[0] = get_face<dir_x_tag, side_low_tag>(N2F_p1, N2F_p2);
-		faces[1] = get_face<dir_x_tag, side_high_tag>(N2F_p1, N2F_p2);
-		faces[2] = get_face<dir_y_tag, side_low_tag>(N2F_p1, N2F_p2);
-		faces[3] = get_face<dir_y_tag, side_high_tag>(N2F_p1, N2F_p2);
-		faces[4] = get_face<dir_z_tag, side_low_tag>(N2F_p1, N2F_p2);
-		faces[5] = get_face<dir_z_tag, side_high_tag>(N2F_p1, N2F_p2);
-		
-		for(int i = 0; i < 6; ++i) {
-			faces[i] = get_intersection(faces[i].first, faces[i].second, ch_p1, ch_p2);
-			faces[i] = get_component_interior(faces[i].first, faces[i].second, N2F_p1.get_type());
-		}
-		
-		N2F_faces = {
-			new N2F_Face<dir_x_tag>{ N2F_p1, N2F_p2, faces[0].first, faces[0].second, Side::Low, N2F_omega_unique, dx, dt, center, bg_medium},
-			new N2F_Face<dir_x_tag>{ N2F_p1, N2F_p2, faces[1].first, faces[1].second, Side::High, N2F_omega_unique, dx, dt, center, bg_medium},
-			new N2F_Face<dir_y_tag>{ N2F_p1, N2F_p2, faces[2].first, faces[2].second, Side::Low, N2F_omega_unique, dx, dt, center, bg_medium},
-			new N2F_Face<dir_y_tag>{ N2F_p1, N2F_p2, faces[3].first, faces[3].second, Side::High, N2F_omega_unique, dx, dt, center, bg_medium},
-			new N2F_Face<dir_z_tag>{ N2F_p1, N2F_p2, faces[4].first, faces[4].second, Side::Low, N2F_omega_unique, dx, dt, center, bg_medium},
-			new N2F_Face<dir_z_tag>{ N2F_p1, N2F_p2, faces[5].first, faces[5].second, Side::High, N2F_omega_unique, dx, dt, center, bg_medium}
-		};
+		n2f_box = new N2F_Box(fVec3(N2F_p1), fVec3(N2F_p2), N2F_omega, chunk, bg_medium->get_c());
 	}
 
 	void Simulation::medium_init() {
@@ -203,6 +178,7 @@ namespace ffip {
 		source_init();
 		medium_init();
 		N2F_init();
+		probe_init();
 		udf_unit();
 		step = 0;
 		std::cout << "Initialization Complete\n";
@@ -232,8 +208,9 @@ namespace ffip {
 			bg_medium = m;
 	}
 
-	void Simulation::add_probe(Probe* probe) {
-		probes.push_back(probe);
+	void Simulation::add_nearfield_probe(const real freq, const fVec3& v) {
+		NF_pos.push_back(v);
+		NF_freq.push_back(freq);
 	}
 
 	void Simulation::add_farfield_probe(const real freq, const fVec3& pos) {
@@ -242,10 +219,9 @@ namespace ffip {
 	}
 	
 	void Simulation::advance(std::ostream& os) {
-		std::cout << "\r" << std::setfill('0') << std::setw(4) << step;
+		std::cout << "\n" << std::setfill('0') << std::setw(4) << step;
 		real time = (step ++ ) * dt;
-
-		std::vector<std::thread> threads;
+		
 		auto func = [&, this](const int rank, const int num_proc) {
 			chunk->update_Md(time, rank);
 			glob_barrier->Sync();
@@ -272,22 +248,20 @@ namespace ffip {
 
 			size_t idx1, idx2;
 			vector_divider(probes, rank, num_proc, idx1, idx2);
-			std::for_each(probes.begin() + idx1, probes.begin() + idx2, [this](Probe* item) {item->update(*this); });
-
-			for (auto item : N2F_faces)
-				item->update(chunk, step, rank, num_proc);
-
+			std::for_each(probes.begin() + idx1, probes.begin() + idx2, [this](Probe* item) {item->update(step); });
+			
+			if (n2f_box)
+				n2f_box->update(step, rank, num_proc);
 			glob_barrier->Sync();
 		};
-
 		
-		for (int i = 1; i < num_proc; ++i)
-			threads.push_back(std::thread(func, i, num_proc));
-		func(0, num_proc);
-
-		for (auto& item : threads)
-			item.join();
-
+		std::vector<std::future<void>> task_list;
+		for(int i = 0; i < num_proc; ++i) {
+			task_list.push_back(std::async(std::launch::async, func, i, num_proc));
+		}
+		for(auto &item : task_list)
+			item.get();
+		
 		os << chunk->measure() << "\n";
 		udf_advance();
 	}
@@ -328,18 +302,20 @@ namespace ffip {
 		return bg_medium;
 	}
 	
-	void Simulation::output(std::ostream &os) {
+	void Simulation::output_nearfield(std::ostream &os) {
 		for(auto item : probes) {
 			item->output(os);
 		}
 	}
 	
 	void Simulation::output_farfield(std::ostream &os) {
-		//get impedance of the non-absorbing background medium
+		if (n2f_box == nullptr) return;
+		n2f_box->prepare();
+
 		real imped = bg_medium->get_z();
 		os << std::scientific;
-		
-		for(int i = 0; i < N2F_pos.size(); ++i) {
+
+		for (int i = 0; i < N2F_pos.size(); ++i) {
 			real omega = N2F_omega[i];
 			real k = omega / bg_medium->get_c();		//get the wavenumber
 			real th = N2F_pos[i].x;
@@ -348,59 +324,31 @@ namespace ffip {
 			fVec3 proj_th = {cos(th) * cos(phi), cos(th) * sin(phi), -sin(th)};
 			fVec3 proj_phi = {-sin(phi), cos(phi), 0};
 			Vec3<complex_num> N{0, 0, 0}, L{0, 0, 0};
-			
-			for(auto item : N2F_faces) {
-				auto tmp = item->get_NL(th, phi, omega);
-				N = N + tmp.first;
-				L = L + tmp.second;
-			}
-			
-			complex_num Nth = inner_prod(proj_th, N);
-			complex_num Nphi = inner_prod(proj_phi, N);
-			complex_num Lth = inner_prod(proj_th, L);
-			complex_num Lphi = inner_prod(proj_phi, L);
-			
+
+			auto tmp = n2f_box->get_NL(th, phi, omega);
+
+			complex_num Nth = inner_prod(proj_th, tmp.first);
+			complex_num Nphi = inner_prod(proj_phi, tmp.first);
+			complex_num Lth = inner_prod(proj_th, tmp.second);
+			complex_num Lphi = inner_prod(proj_phi, tmp.second);
+
 			complex_num arg = k / (4 * pi * rho) * complex_num{sin(k * rho), cos(k * rho)};
 			complex_num Eth = -(Lphi + imped * Nth) * arg;
 			complex_num Ephi = (Lth - imped * Nphi) * arg;
 			complex_num Hth = (Nphi - Lth / imped) * arg;
 			complex_num Hphi = -(Nth + Lphi / imped) * arg;
-			
+
 			os << Eth << " " << Ephi << " " << Hth << " " << Hphi << std::endl;
 		}
 	}
 	
-	std::fstream os;
-
-
 	void Simulation::udf_unit() {
-		/*os.open("slice.out", std::ios::out);
-		if (!os.is_open())
-			throw std::runtime_error("fail to open slice.out");
-
-		iVec3 p1 = { (ch_p1.x + ch_p2.x) / 2, ch_p1.x, ch_p1.z };
-		iVec3 p2 = { (ch_p1.x + ch_p2.x) / 2 + 1, ch_p2.x, ch_p2.z };
-		auto tmp = get_component_interior(p1, p2, Ex);
-
-		os << tmp.first << " " << tmp.second << "\n";*/
 	}
 	
 	void Simulation::udf_advance() {
-	/*	iVec3 p1 = { (ch_p1.x + ch_p2.x) / 2, ch_p1.x, ch_p1.z };
-		iVec3 p2 = { (ch_p1.x + ch_p2.x) / 2 + 1, ch_p2.x, ch_p2.z };
-		auto tmp = get_component_interior(p1, p2, Ex);
-
-		for (auto itr = my_iterator(tmp.first, tmp.second, Ex); !itr.is_end(); itr.advance())
-			os << chunk->operator()(itr.get_vec()) << " ";
-
-		os << "\n";*/
-		
 	}
 
 	void Simulation::udf_output() {
-	
 	}
-
-	
 }
 

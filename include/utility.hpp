@@ -14,8 +14,17 @@
 #include <atomic>
 #include <condition_variable>
 #include <mutex>
+#include <numeric>
+#include <future>
 
 namespace ffip {
+	/* Exception*/
+	struct Invalid_Corner_Points {};
+	struct Invalid_Direction {};
+	struct Chunk_is_Not_Initialized{};
+	struct Invalide_Coord_Type{};
+	struct Out_of_the_Domain{};
+	
 	/* type aliases */
     using real = double;
 	using real_arr = std::vector<real>;
@@ -27,10 +36,10 @@ namespace ffip {
 	extern const real e0, u0, z0, c0;
 	extern const real pi;
 
-	/* enums with underlying bit pattern for calculations*/
+	/* enums with implied bit pattern for calculations*/
 	enum Direction {X = 0, Y = 1, Z = 2};
 	enum Side {Low = -1, High = 1};
-	enum Coord_Type {Ex = 0b001, Ey = 0b010, Ez = 0b100, Hx = 0b110, Hy = 0b101, Hz = 0b011, Corner = 0b000, Center = 0b111, Null = -1};
+	enum Coord_Type {Ex = 0b001, Ey = 0b010, Ez = 0b100, Hx = 0b110, Hy = 0b101, Hz = 0b011, Corner = 0b000, Center = 0b111, All = -2, Null = -1};
 	
 	int Ctype2DirInt(const Coord_Type ctype);
 	
@@ -76,7 +85,7 @@ namespace ffip {
 	};
 
 	/* higher than sth */
-    struct side_high_tag{
+    struct side_high_tag {
 		using opposite_side = side_low_tag;
 		static const int val;
 		static int get_next_int(int x);
@@ -102,6 +111,10 @@ namespace ffip {
 	struct dir_x_tag{
 		using x1 = dir_y_tag;
 		using x2 = dir_z_tag;
+		
+		using x1_a = dir_y_tag;
+		using x2_a = dir_z_tag;
+		
 		using z = dir_y_tag;
 		
 		static const int val;
@@ -114,6 +127,10 @@ namespace ffip {
 	struct dir_y_tag{
 		using x1 = dir_z_tag;
 		using x2 = dir_x_tag;
+		
+		using x1_a = dir_x_tag;
+		using x2_a = dir_z_tag;
+		
 		using z = dir_x_tag;
 		
 		static const int val;
@@ -125,6 +142,10 @@ namespace ffip {
 	struct dir_z_tag{
 		using x1 = dir_x_tag;
 		using x2 = dir_y_tag;
+		
+		using x1_a = dir_x_tag;
+		using x2_a = dir_y_tag;
+		
 		using z = dir_z_tag;
 		
 		static const int val;
@@ -171,85 +192,54 @@ namespace ffip {
 		static const Coord_Type ctype;
 	};
 	
-	/*rotational symmetry of cartesian coordinates (x, y, z)
-	(y, z, x) or (z, x, y) or (x, y, z)
-	*/
 	template<typename D>
 	struct dir_traits {
+		//orientation preserving
 		using x1 = typename D::x1;
 		using x2 = typename D::x2;
 		using x3 = D;
 		using z = typename D::z;		//rotate_frame<D::z> (rotate_frame<D>() ) = Identity map
+		
+		//array arrangement preserving
+		using x1_a = typename D::x1_a;
+		using x2_a = typename D::x2_a;
 	};
 	
 	template<typename T = real>
 	struct Vec3{
 		using value_type = T;
 		/* data members */
-		T x, y, z;
+		T x{}, y{}, z{};
 
 		/* Semiregular members*/
 		Vec3() = default;
 		Vec3(T _x, T _y, T _z): x(_x), y(_y), z(_z) {}
 		
-		Vec3(const Vec3&) = default;			//copy
-		Vec3& operator=(const Vec3&) = default;
+		template<typename T2>
+		explicit Vec3(const Vec3<T2>&);			//copy construction
+		
+		template<typename T2>
+		Vec3& operator=(const Vec3<T2>&) ;		//copy assignment
 
 		/* function members */
 		Coord_Type get_type() const;						//get Coord_Type for the given comp coordinates
 		Coord_Type get_type(const Coord_Type other) const;	//get Coord_Type for the given relative comp coordinates
 	};
 	
-	/* helper empty struct for accessing x,y,z elements of sth generically*/
-	template<typename D>
-	struct choose {
-		
-		template<typename T>
-		static typename T::value_type& get(T&);
-		
-		template<typename T>
-		static typename T::value_type const& get(const T&);
-	};
-	
-	template<>
-		template<typename T>
-	typename T::value_type& choose<dir_x_tag>::get(T& v) {
-		return v.x;
-	}
-	
-	template<>
-	template<typename T>
-	typename T::value_type& choose<dir_y_tag>::get(T& v) {
-		return v.y;
-	}
-	
-	template<>
-	template<typename T>
-	typename T::value_type& choose<dir_z_tag>::get(T& v) {
-		return v.z;
-	}
-	
-	template<>
-	template<typename T>
-	typename T::value_type const& choose<dir_x_tag>::get(const T& v) {
-		return v.x;
-	}
-	
-	template<>
-	template<typename T>
-	typename T::value_type const& choose<dir_y_tag>::get(const T& v) {
-		return v.y;
-	}
-	
-	template<>
-	template<typename T>
-	typename T::value_type const& choose<dir_z_tag>::get(const T& v) {
-		return v.z;
-	}
-	
 	using iVec3 = Vec3<int>;
 	using fVec3 = Vec3<real>;
 	using cVec3 = Vec3<complex_num>;
+	using sVec3 = Vec3<size_t>;
+	
+	template<typename T>
+		template<typename T2>
+	Vec3<T>::Vec3(const Vec3<T2>& other): x(other.x), y(other.y), z(other.z) {}
+	
+	template<typename T>
+		template<typename T2>
+	Vec3<T>& Vec3<T>::operator=(const Vec3<T2>& other) {
+		return Vec3<T>{other};
+	}
 	
 	/* point wise less */
 	template<typename T1, typename T2>
@@ -333,6 +323,52 @@ namespace ffip {
 		return get_nearest_int<S, T>(S::round(x));
 	}
 	
+	/* helper empty struct for accessing x,y,z elements of sth generically*/
+	template<typename D>
+	struct choose {
+		
+		template<typename T>
+		static typename T::value_type& get(T&);
+		template<typename T>
+		static typename T::value_type const& get(const T&);
+	};
+	
+	template<>
+	template<typename T>
+	typename T::value_type& choose<dir_x_tag>::get(T& v) {
+		return v.x;
+	}
+	
+	template<>
+	template<typename T>
+	typename T::value_type& choose<dir_y_tag>::get(T& v) {
+		return v.y;
+	}
+	
+	template<>
+	template<typename T>
+	typename T::value_type& choose<dir_z_tag>::get(T& v) {
+		return v.z;
+	}
+	
+	template<>
+	template<typename T>
+	typename T::value_type const& choose<dir_x_tag>::get(const T& v) {
+		return v.x;
+	}
+	
+	template<>
+	template<typename T>
+	typename T::value_type const& choose<dir_y_tag>::get(const T& v) {
+		return v.y;
+	}
+	
+	template<>
+	template<typename T>
+	typename T::value_type const& choose<dir_z_tag>::get(const T& v) {
+		return v.z;
+	}
+	
 	/* get the nearest point of coord_type to a global computation point on side S (low or high)*/
 	template<typename S, typename T>
 	constexpr iVec3 get_nearest_point(const Vec3<T>& p, const Coord_Type type) {
@@ -358,11 +394,14 @@ namespace ffip {
 		return res;
 	}
 
-	/* p1, p2 are domain comp coordinates, return the largest box(surface, line) containing all the points of type component inside specified by the start and end point*/
+	/* p1, p2 are computational coordinates, T1 , T2 in {floating types  and integer types}
+	 return the corner points of fields of coord_type type inside [p1, p2]
+	 if coord_type is null, return fields of all types
+	 */
 	template<typename T1, typename T2>
 	inline std::pair<iVec3, iVec3> get_component_interior(const Vec3<T1>& p1, const Vec3<T2>& p2, const Coord_Type type) {
 		if (type == Coord_Type::Null)
-			throw std::runtime_error("Coord_Type cannot be Null");
+			return {iVec3(ceil(p1.x), ceil(p1.y), ceil(p1.z)), iVec3(floor(p2.x), floor(p2.y), floor(p2.z))};
 
 		return std::make_pair(	get_nearest_point<side_high_tag>(p1, type),
 								get_nearest_point<side_low_tag>(p2, type));
@@ -372,7 +411,7 @@ namespace ffip {
 	template<typename T1, typename T2>
 	inline std::pair<iVec3, iVec3> get_component_closure(const Vec3<T1>& p1, const Vec3<T2>& p2, const Coord_Type type) {
 		if (type == Coord_Type::Null)
-			throw std::runtime_error("Coord_Type cannot be Null");
+			return {iVec3(floor(p1.x), floor(p1.y), floor(p1.z)), iVec3(ceil(p2.x), ceil(p2.y), ceil(p2.z))};
 
 		return std::make_pair(	get_nearest_point<side_low_tag>(p1, type),
 								get_nearest_point<side_high_tag>(p2, type));
@@ -385,7 +424,7 @@ namespace ffip {
 									{std::min(p2.x, q2.x),std::min(p2.y, q2.y), std::min(p2.z, q2.z)});
 	}
 	
-	/* return a particular face of a box region specified by (p1, p2), very nasty*/
+	/* return a particular face of a box region specified by (p1, p2)*/
 	template<typename D, typename S, typename T>
 	std::pair<Vec3<T>, Vec3<T>> get_face(Vec3<T> p1, Vec3<T> p2) {
 		choose<D>::get(S::choose_between(p2, p1)) = choose<D>::get(S::choose_between(p1, p2));
@@ -443,13 +482,221 @@ namespace ffip {
 		auto get_functor() -> std::function<real(const real)> const;
         void set_dt(real dt);
     };
+	
+	/* fast 1 dimensional linear interpolation */
+	class interp1 {
+	public:
+		size_t dimx;
+		interp1(const size_t _dimx): dimx(_dimx) {
+			if (dimx <= 1)
+				throw std::runtime_error("Invalid Side");
+		}
+		
+		template<typename T>
+		T interp(const std::vector<T>& data, const real x) {
+			if (data.size()!= dimx)
+				throw std::runtime_error("Invalid Data Size");
+			
+			if (x < 0 || x >= dimx - 1)
+				throw Out_of_the_Domain{};
+			
+			size_t x_b = floor(x);
+			return data[x_b] * (x_b + 1 - x) + data[x_b + 1] * (x - x_b);
+		}
+	};
+	
+	
+	/* fast 2 dimensional linear interpolation */
+	class interp2 {
+	public:
+		size_t dimx, dimy;
+		size_t size, jump_y;
+		
+		interp2(const size_t _dimx, const size_t _dimy): dimx(_dimx), dimy(_dimy) {
+			if (dimx <= 1 || dimy <= 1)
+				throw std::runtime_error("Invalid Size");
+			
+			size = dimx * dimy;
+			jump_y = dimx;
+		}
+		
+		template<typename T>
+		T interp(const std::vector<T>& data, const real x, const real y) {
+			if (data.size()!= size)
+				throw  std::runtime_error("Invalid Data Size");
+			
+			if (x < 0 || x > dimx - 1 || y < 0 || y > dimy - 1)
+				throw Out_of_the_Domain{};
+			
+			size_t xb = floor(x);
+			size_t yb = floor(y);
+			real tx = x - xb;
+			real ty = y - yb;
+			T const* ptr = &data[xb + yb * jump_y];
+			
+			return (1 - tx) * (1 - ty) * ptr[0] +
+			tx * (1 - ty) * ptr[1] +
+			(1 - tx) * ty * ptr[jump_y] +
+			tx * ty * ptr[1 + jump_y];
+		}
+	};
+	
+	/* fast 3 dimensional linear interpolation
+	 */
+	class interp3 {
+	public:
+		size_t dimx, dimy, dimz;
+		size_t size, jump_y, jump_z;
+		
+		interp3(const size_t _dimx, const size_t _dimy, const size_t _dimz): dimx(_dimx), dimy(_dimy), dimz(_dimz) {
+			if (dimx <= 1 || dimy <= 1 || dimz <= 1)
+				throw std::runtime_error("Invalid Size");
+			
+			size = dimx * dimy * dimz;
+			jump_y = dimx;
+			jump_z = dimx * dimy;
+		}
+		
+		template<typename T>
+		T interp(const std::vector<T>& data, const real x, const real y, const real z) {
+			if (data.size()!= size)
+				throw std::runtime_error("Invalid Data Size");
+			
+			if (x < 0 || x > dimx - 1 || y < 0 || y > dimy - 1|| z < 0 || z > dimz - 1)
+				throw Out_of_the_Domain{};
+			
+			size_t xb = floor(x);
+			size_t yb = floor(y);
+			size_t zb = floor(z);
+			real tx = x - xb;
+			real ty = y - yb;
+			real tz = z - zb;
+			T const* ptr = &data[xb + yb * jump_y + zb * jump_z];
+			
+			const T& c000 = ptr[0];
+			const T& c001 = ptr[1];
+			const T& c010 = ptr[jump_y];
+			const T& c011 = ptr[1 + jump_y];
+			const T& c100 = ptr[jump_z];
+			const T& c101 = ptr[jump_z + 1];
+			const T& c110 = ptr[jump_z + jump_y];
+			const T& c111 = ptr[jump_z + jump_y + 1];
+			
+			return (1 - tx) * (1 - ty) * (1 - tz) * c000 +
+			tx * (1 - ty) * (1 - tz) * c001 +
+			(1 - tx) * ty * (1 - tz) * c010 +
+			tx * ty * (1 - tz) * c011 +
+			(1 - tx) * (1 - ty) * tz * c100 +
+			tx * (1 - ty) * tz * c101 +
+			(1 - tx) * ty * tz * c110 +
+			tx * ty * tz * c111;
+		}
+	};
+	
+	/* Generic Interpolation class
+	 	two times slower than the fast one
+	 */
+#define tol_interp 1e-5
+	
+	template<int N>
+	class interpn : public interpn<N - 1> {
+	public:
+		using base_class = interpn<N - 1>;
+		size_t dimn{1}, jump{1};
+		
+		interpn() = default;
+		
+		template<typename... Args>
+		interpn(const size_t _dimn, Args... args): base_class(args...), dimn(_dimn) {
+			static_assert(sizeof...(args) == N - 1, "Invalid Number of Size");
+			if (dimn < 1)
+				throw std::runtime_error("Invalid Dimension");
+			
+			jump = base_class::get_size();
+		}
+		
+		size_t get_size() const {
+			return dimn * base_class::get_size();
+		}
+		
+		template<typename T, typename... Args>
+		T get_helper(T const* data, real xq, Args&&... args) const{
+			if ( dimn == 1)		//ignore this dimension if it is 1
+				return base_class::get_helper(data, args...);
+			
+			//force points to be inside of region
+			if (xq > dimn - 1) base_class::get_helper(data + jump * (dimn - 1), args...);
+			if (xq < 0) base_class::get_helper(data, args...);
+			
+			size_t index = xq;
+			real tx = xq - index;
+			
+			if (tx < tol_interp)
+				return base_class::get_helper(data + jump * index, args...);
+			else
+				return	tx * base_class::get_helper(data + jump * (index + 1), args...) +
+				(1 - tx) * base_class::get_helper(data + jump * index, args...);
+		}
+		
+		template<typename T, typename... Args>
+		T get(const std::vector<T>& vec, Args&&... args) const{
+			static_assert(sizeof...(args) == N, "Invalid Request");
+			return get_helper(vec.data(), args...);
+		}
+	};
+	
+	template<>
+	class interpn<1> {
+	public:
+		size_t dimn{1}, jump{1};
+		
+		interpn() = default;
+		
+		interpn(const size_t _dimn): dimn(_dimn) {
+			if (dimn < 1)
+				throw std::runtime_error("Invalid Dimension");
+			
+			jump = 1;
+		}
+		
+		size_t get_size() const {
+			return dimn;
+		}
+		
+		template<typename T>
+		T get(const std::vector<T>& vec, real xq) const{
+			return get_helper(vec.data(), xq);
+		}
+		
+		template<typename T>
+		T get_helper(T const* data, real xq) const{
+			if (dimn == 0)
+				throw std::runtime_error("number of coordinates are zero");
+			
+			if (dimn == 1)		//ignore this dimension if it is 1
+				return data[0];
+			
+			if (xq > dimn - 1) return data[dimn - 1];
+			if (xq < 0) return data[0];
+			
+			size_t index = xq;
+			real tx = xq - index;
+			
+			if (tx < tol_interp)
+				return data[index];
+			else
+				return tx * data[index + 1] + (1 - tx) * data[index];
+		}
+	};
 
     /* linear interpolation on fixed interval grids*/
     class GriddedInterp {
     private:
-		std::vector<real> x, y, z, v;
+		real_arr x, y, z, v;
+		real dx, dy, dz;
         std::string file_name;
-
+		interpn<3> interp{1, 1, 1};
+		
     public:
         /* Semiregular members*/
         GriddedInterp(std::string file_name);
@@ -473,77 +720,11 @@ namespace ffip {
 
 		//public functions for calculating generic line, face and volume integral
     };
-
-	/* empty struct to get size of an object*/
-	template<typename T>
-	struct size_trait {
-		static size_t size(const T&) {return 1;};
-	};
 	
-	/* return size if it is a vector */
-	template<typename T>
-	struct size_trait<std::vector<T>> {
-		static size_t size(const std::vector<T>& v) {return v.size();}
-	};
 	
-	/* get size of series of vectors, one vector */
-	template<typename T>
-	inline size_t get_vec_size(const T& vn) {
-		return size_trait<T>::size(vn);
-	}
-
-	/* get size of series of vectors, template */
-	template<typename T, typename... Args>
-	inline size_t get_vec_size(const T& vn, Args... args) {
-		return size_trait<T>::size(vn) * get_vec_size(args...);
-	}
-
-	/* n dimensional linear interpolation, 1 dimension
-	   Xn must have fixed interval, otherwise the result does not make sense*/
-	template<typename T>
-	inline T interp_ndim(const T* data, const real xn, const std::vector<real>& Xn) {
-		if (Xn.size() == 0)
-			throw std::runtime_error("number of coordinates are zero");
-
-		if (Xn.size() == 1)		//ignore this dimension if it is 1
-			return data[0];
-
-		if (xn > Xn.back() || xn < Xn.front())
-			return 0;			//zero if it is outside of the region
-
-		real index = (xn - Xn[0]) / (Xn.back() - Xn.front()) * (Xn.size() - 1);
-		
-		if (index == int(index))
-			return data[int(index)];
-		else
-			return (index - floor(index)) * data[(int)index + 1] + (ceil(index) - index) * data[(int)index];
-	}
-
-	/* n dimensional linear interpolation, template 
-	   Xn must have fixed interval, otherwise the result does not make sense*/
-	template<typename T, typename... Args>
-	inline T interp_ndim(const T* data, const real xn, const std::vector<real>& Xn, Args... args) {
-		if (Xn.size() == 0)
-			throw std::runtime_error("number of coordinates are zero");
-
-		if (Xn.size() == 1)		//ignore this dimension if it is 1
-			return interp_ndim(data, args...);
-
-		if (xn > Xn.back() || xn < Xn.front())
-			return 0;			//zero if it is outside of the region
-
-		real index = (xn - Xn[0]) / (Xn.back() - Xn.front()) * (Xn.size() - 1);
-		//std::cout << index << " ";
-		size_t shift = get_vec_size(args...);
-
-		if (index == int(index))
-			return interp_ndim(data + shift * int(index), args...);
-		else
-			return (index - floor(index)) * interp_ndim(data + shift * int(index + 1), args...) + (ceil(index) - index) *  interp_ndim(data + shift * int(index), args...);
-	}
 	
-	/* n dimensional linear integration, 1 dimension, 
-	   xn does not need to have fixed interval*/
+	/* n dimensional linear integration, 1 dimension,
+	 xn does not need to have fixed interval*/
 	template<typename T>
 	T integral_ndim(const T* data, const std::vector<real> &xn) {
 		if(xn.size() == 0)
@@ -563,13 +744,37 @@ namespace ffip {
 		return res;
 	}
 	
-	/* n dimensional linear integration, template,
-	xn does not need to have fixed interval*/
+	/* empty struct to get size of an object*/
+	template<typename T>
+	struct size_trait {
+		static size_t size(const T&) {return 1;};
+	};
+	
+	/* return size if it is a vector */
+	template<typename T>
+	struct size_trait<std::vector<T>> {
+		static size_t size(const std::vector<T>& v) {return v.size();}
+	};
+	
+	/* get size of series of vectors, one vector */
+	template<typename T>
+	inline size_t get_vec_size(const T& vn) {
+		return size_trait<T>::size(vn);
+	}
+	
+	/* get size of series of vectors, template */
 	template<typename T, typename... Args>
-	T integral_ndim(const T* data, const std::vector<real> &xn, Args... args) {
+	inline size_t get_vec_size(const T& vn, Args... args) {
+		return size_trait<T>::size(vn) * get_vec_size(args...);
+	}
+	
+	/* n dimensional linear integration, template,
+	 xn does not need to have fixed interval*/
+	template<typename T, typename... Args>
+	T integral_ndim(const T* data, const std::vector<real> &xn, Args&&... args) {
 		if (xn.size() == 0)
 			throw std::runtime_error("Invalid array size");
-
+		
 		// ignore zero dimension
 		if (xn.size() == 1)
 			return integral_ndim(data, args...);
@@ -577,14 +782,14 @@ namespace ffip {
 		
 		std::vector<T> tmp(xn.size());
 		size_t shift = get_vec_size(args...);
-
+		
 		for(int i = 0; i < xn.size(); ++i) {
 			tmp[i] = integral_ndim(data + shift * i, args...);
 		}
 		
 		return integral_ndim(tmp.data(), xn);
 	}
-
+	
 	/* PML class for calculating k, b, c arrays used in updating perfectly matched layer using CPML*/
 	class PML {
 	private:
@@ -625,7 +830,7 @@ namespace ffip {
 		std::vector<real> jp1, jp;
 	};
 	
-	/* all points that are in PML layers*/
+	/* field information for points inside PML layers*/
 	struct PML_Point {
 		int index, jump_pos, jump_neg;
 		real b_pos, b_neg, c_pos, c_neg;
@@ -637,53 +842,35 @@ namespace ffip {
 	template<typename P, int N, int M>
 	inline typename P::value_type get(const P& p);
 	
-	
 	/* an iterator to iterate through a box region specified by two corner regions [p1, p2]
 	 it allows iteration of particular coord_type points: ex, ..., ez, hx, ..., hz
 	 for null, it will loop through all points
-	 it allows looping through a particular part of the region
 	 */
 	struct my_iterator {
 		using value_type = int;
 		
-		size_t size{0}, index{0};
+		size_t size, index, end;
 		int x0, y0, z0, x1, y1, z1;
 		int x, y, z;
 		int jump;
 		
+		/* non-parallel version constructor*/
 		my_iterator(const iVec3& p1, const iVec3& p2, const Coord_Type ctype);
+		my_iterator(const std::pair<iVec3, iVec3> corners, const Coord_Type ctype);
+		my_iterator(const fVec3& p1, const fVec3& p2, const Coord_Type ctype);
+		/* used for paralellization so that the itr only loops through rank/num of the total points*/
 		my_iterator(const iVec3& p1, const iVec3& p2, const Coord_Type ctype, const size_t rank, const size_t num);
 		
-		void advance();
-		bool is_end() const;
-		bool is_empty() const;
-		iVec3 get_vec() const;
-		size_t get_size() const;
+		void advance();					//increase index by 1
+		bool is_end() const;			//does it reach the end?
+		bool is_empty() const;			//is the region illegal?
+		iVec3 get_vec() const;			//return the current x, y, z in iVec3
+		iVec3 get_vec(size_t index) const;	//return x, y, z specified by index
+		size_t get_index(const int x, const int y, const int z) const;	//return the index specified by x, y, z
+		size_t get_size() const;			//return size of the region
+		Vec3<size_t> get_dim() const;		//return the dimension of the region
 	};
-
-	template<typename T, typename F>
-	void task_divider(std::vector<T>& list, F& func, const int num_proc) {
-		if (list.size() < num_proc)
-			for(auto& item : list) {
-				func(item);
-			}
-		else {
-			std::vector<std::thread> threads;
-
-			for(int i = 1; i < num_proc; ++i) {
-				auto itr1 = list.begin() + (i * list.size()) / num_proc;
-				auto itr2 = list.begin() + ((i + 1) * list.size()) / num_proc;
-				threads.push_back(std::thread(std::for_each<decltype(itr1), F>, itr1, itr2, std::ref(func)));
-			}
-			auto itr1 = list.begin() + (0 * list.size()) / num_proc;
-			auto itr2 = list.begin() + (1 * list.size()) / num_proc;
-			std::for_each(itr1, itr2, func);
-			
-			for(auto& item : threads)
-				item.join();
-		}
-	}
-
+	
 	/* Barrier implementation with reset at the end*/
 	class Barrier
 	{

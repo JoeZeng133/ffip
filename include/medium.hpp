@@ -24,6 +24,20 @@ namespace ffip {
 		int index;
 	};
 	
+	struct CP_Pole : public Pole_Base {
+		real a0, a1, b0, b1, b2;
+		real cp;
+		
+		CP_Pole(const real A, const real Omega, const real phi, const real Gamma);
+		
+		/* override functions*/
+		real get_a1() const override;
+		real get_a2() const override;
+		real get_b0() const override;
+		real get_b1() const override;
+		real get_b2() const override;
+	};
+	
 	struct Lorentz_Pole : public Pole_Base{
 		real epsilon, omega, delta;
 		
