@@ -828,6 +828,7 @@ namespace ffip {
 	struct Dispersive_Field {
 		union {real ex2, ey2, ez2, e2, hx2, hy2, hz2, h2, eh2;};
 		std::vector<real> jp1, jp;
+		Dispersive_Field(const size_t num_poles);
 	};
 	
 	/* field information for points inside PML layers*/

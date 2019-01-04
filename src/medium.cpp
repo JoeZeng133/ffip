@@ -17,44 +17,31 @@ namespace ffip {
 		return poles.size();
 	}
 	
-	real Medium_Ref::update_field(real eh, real eh1, real norm_db, Dispersive_Field *f2) const{
+	real Medium_Ref::update_field(real eh, real eh1, real x, Dispersive_Field *f2) const{
 		
 		if (poles.empty()) {		/* non dispersive material updates*/
-			return (2 * norm_db - eh * d2) / d1;
+			return (x - eh * d2) / d1;
 			
 		} else {					/* update current contributions*/
+			auto& pn = f2->jp;
+			auto& pn1 = f2->jp1;
 			
 			real sum_J = 0;
-			for(int i = 0; i < poles.size(); ++i) {
+			for(int i = 0; i < pn.size(); ++i) {
 				auto pole = poles[i];
-				
-				if (pole->a2 == 0) {				//deybe, drue update
-					f2->jp1[i] = f2->jp[i] * pole->a1;
-					sum_J += f2->jp[i] + f2->jp1[i];
-				}
-				else {										//lorentz pole
-					f2->jp1[i] =f2->jp[i] * pole->a1 + f2->jp1[i] * pole->a2;
-					sum_J += f2->jp[i] + f2->jp1[i];
-				}
+				sum_J += (pole->a1 - 1) * pn[i] + pole->a2 * pn1[i];
 			}
 			
-			/* buffer E(n + 1) */
-			real ehp1 = (2 * norm_db - sum_J - eh1 * d3 - eh * d2) / d1;
+			real res = (x - eh * d2 - eh1 * d3 - sum_J) / d1;
 			
-			/* update currents */
-			for(int i = 0; i < poles.size(); ++i) {
+			for(int i = 0; i < pn.size(); ++i) {
 				auto pole = poles[i];
-				
-				if(pole->a2 == 0) {			//Deybe or Drude update
-					f2->jp[i] = f2->jp1[i] + (ehp1 * pole->b0 + eh * pole->b1) * weights[i];
-					
-				} else {						//Lorentz update
-					real tmp = f2->jp[i];		//buffer J(n)
-					f2->jp[i] = f2->jp1[i] + (ehp1 * pole->b0 + eh1 * pole->b2) * weights[i];
-					f2->jp1[i] = tmp;
-				}
+				real tmp = pn[i];
+				pn[i] = pole->a1 * pn[i] + pole->a2 * pn1[i] + (pole->b0 * res + pole->b1 * eh + pole->b2 * eh1) * weights[i];
+				pn1[i] = tmp;
 			}
-			return ehp1;
+			
+			return res;
 		}
 	}
 	
@@ -101,56 +88,48 @@ namespace ffip {
 	}
 	
 	/* Critical Points Pole*/
-	CP_Pole::CP_Pole(const real A, const real Omega, const real phi, const real Gamma) {
+	CP_Pole::CP_Pole(real A, real phi, real Omega, real Gamma) {
+		Omega *= 2 * pi;
+		Gamma *= 2 * pi;
+		
 		a0 = 2 * A * Omega * (Omega * cos(phi) - Gamma * sin(phi));
 		a1 = -2 * A * Omega * sin(phi);
 		b0 = Omega * Omega + Gamma * Gamma;
 		b1 = 2 * Gamma;
 		b2 = 1;
-		cp = b2 / (dt * dt) + b1 / (2 * dt);
+	}
+	
+	real CP_Pole::get_cp() const {
+		return b2 / (dt * dt) + b1 / (2 * dt) + b0 / 4;
 	}
 	
 	real CP_Pole::get_a1() const {
-		return (2 * b2 / (dt * dt) - b0) / cp;
+		return (2 * b2 / (dt * dt) - b0 / 2) / get_cp();
 	}
 	
 	real CP_Pole::get_a2() const {
-		return (b1 / (2 * dt) - b2 / (dt * dt)) / cp;
+		return (b1 / (2 * dt) - b2 / (dt * dt) - b0 / 4) / get_cp();
 	}
 	
 	real CP_Pole::get_b0() const {
-		return (a0 / (2 * dt) + a1 / (dt * dt)) / cp;
+		return (a0 / 4 + a1 / (2 * dt)) / get_cp();
 	}
 	
 	real CP_Pole::get_b1() const {
-		return (-2 * a1 / dt / dt) / cp;
+		return (a0 / 2) / get_cp();
 	}
 	
 	real CP_Pole::get_b2() const {
-		return (a1 / dt / dt - a0 / 2 / dt) / cp;
+		return (a0 / 4 - a1 / (2 * dt)) / get_cp();
 	}
 	
 	/* Lorentz Pole */
-	Lorentz_Pole::Lorentz_Pole(real rel_perm, real freq, real damp): epsilon(rel_perm), omega(freq * 2 * pi), delta(damp * pi) {}
-	
-	real Lorentz_Pole::get_a1() const {
-		return (2 - omega * omega * dt * dt) / (1 + delta * dt);
-	}
-	
-	real Lorentz_Pole::get_a2() const {
-		return (delta * dt - 1) / (delta * dt + 1);
-	}
-	
-	real Lorentz_Pole::get_b0() const {
-		return epsilon * omega * omega * dt / 2 / (1 + delta * dt);
-	}
-	
-	real Lorentz_Pole::get_b1() const {
-		return 0;
-	}
-	
-	real Lorentz_Pole::get_b2() const {
-		return -get_b0();
+	Lorentz_Pole::Lorentz_Pole(real rel_perm, real freq, real damp) {
+		a0 = rel_perm * (2 * pi * freq) * (2 * pi * freq);
+		a1 = 0;
+		b0 = (2 * pi * freq) * (2 * pi * freq);
+		b1 = 2 * pi * damp;
+		b2 = 1;
 	}
 	
 	/* Deybe pole */
@@ -177,26 +156,12 @@ namespace ffip {
 	}
 	
 	/* Drude pole*/
-	Drude_Pole::Drude_Pole(real freq, real inv_relaxation): omega(freq * 2 * pi), gamma(inv_relaxation * 2 * pi) {}
-	
-	real Drude_Pole::get_a1() const {
-		return (1 - gamma * dt / 2) / (1 + gamma * dt / 2);
-	}
-	
-	real Drude_Pole::get_a2() const {
-		return 0;
-	}
-	
-	real Drude_Pole::get_b0() const {
-		return omega * omega * dt / 2 / (1 + gamma * dt / 2);
-	}
-	
-	real Drude_Pole::get_b1() const {
-		return get_b0();
-	}
-	
-	real Drude_Pole::get_b2() const {
-		return 0;
+	Drude_Pole::Drude_Pole(real freq, real inv_relaxation) {
+		a0 = (2 * pi * freq) * (2 * pi * freq);
+		a1 = 0;
+		b0 = 0;
+		b1 = inv_relaxation * 2 * pi;
+		b2 = 1;
 	}
 	
 	/* Medium used for scripting*/
@@ -266,8 +231,8 @@ namespace ffip {
 		Medium_Ref res;
 		
 		res.weights.resize(e_poles_ref.size(), 1);
-		res.d1 = 2 * e_inf / dt + sigma_e / e0;
-		res.d2 = -2 * e_inf / dt + sigma_e / e0;
+		res.d1 = e_inf + sigma_e * dt / (2 * e0);
+		res.d2 = -e_inf + sigma_e * dt / (2 * e0);
 		res.d3 = 0;
 		
 		for(auto& pole : e_poles_ref) {
@@ -283,8 +248,8 @@ namespace ffip {
 		Medium_Ref res;
 		
 		res.weights.resize(m_poles_ref.size(), 1);
-		res.d1 = 2 * u_inf / dt + sigma_u / u0;
-		res.d2 = -2 * u_inf / dt + sigma_u / u0;
+		res.d1 = u_inf + sigma_u * dt / (2 * u0);
+		res.d2 = -u_inf + sigma_u * dt / (2 * u0);
 		res.d3 = 0;
 		
 		for(auto& pole : m_poles_ref) {

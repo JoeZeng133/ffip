@@ -325,6 +325,12 @@ namespace ffip {
 		return 0.8 * (m_k + 1) / (z0 * dx * sqrt(er * ur));
 	}
 	
+	Dispersive_Field::Dispersive_Field(const size_t num_poles) {
+		eh2 = 0;
+		jp.resize(num_poles, 0);
+		jp1.resize(num_poles, 0);
+	}
+	
 	/* PML point constructor*/
 	PML_Point::PML_Point(const int _index, const int _jump_pos, const int _jump_neg, const real _b_pos, const real _b_neg, const real _c_pos, const real _c_neg):
 	index(_index), jump_pos(_jump_pos), jump_neg(_jump_neg), b_pos(_b_pos), b_neg(_b_neg), c_pos(_c_pos), c_neg(_c_neg) {}

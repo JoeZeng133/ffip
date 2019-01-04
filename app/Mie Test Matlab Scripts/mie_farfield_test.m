@@ -53,28 +53,13 @@ drude = @(w, fp, gamma) (2 * pi * fp)^2 ./ (1j * w * (2 * pi * gamma) - w.^2);
 Omega = 2 * pi * Ft;
 K = Omega / c0;
 er_func = @(w) (1 + lorentz(w, 0.8, 4e16, 1e16) + lorentz(w, 0.5, 6e16, 1e16));
+% er_func = @(w) (1 + drude(w, 2e14, 0.5e14) + lorentz(w, 3, 5e14, 1e14));
 er = er_func(Omega);
 
 % sphere parameters
 m = sqrt(conj(er(:))); %exp(-jwt) dependence, use the conjugate
 a = 10 * dx;
 size_param = K * a;
-
-% inhomogeneous geometry file generation
-filename_geometry_objective = 'objective_geometry.in';
-fileID = fopen(filename_geometry_objective, 'w');
-vspan = 30;
-center = dim * dx / 2;
-st = center - 0.5 * vspan * dx;
-v = (0:vspan) * dx + st(1);
-[X, Y, Z] = ndgrid(v, v, v);
-V = ((X - center(1)).^2 + (Y - center(2)).^2 + (Z - center(3)).^2) <= a^2;
-fprintf(fileID, '%d %d %d\n', [vspan+1, vspan+1, vspan+1]);
-fprintf(fileID, '%e %e\n', [st(1), dx]);
-fprintf(fileID, '%e %e\n', [st(2), dx]);
-fprintf(fileID, '%e %e\n', [st(3), dx]);
-fprintf(fileID, '%e ', V(:));
-fclose(fileID);
 
 figure(1)
 ft_samples = linspace(0.5 * fp, 1.5 * fp, 100);

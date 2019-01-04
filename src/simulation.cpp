@@ -12,13 +12,16 @@ namespace ffip {
 
 	void Simulation::probe_init() {
 		for(int i = 0; i < NF_freq.size(); ++i)
-			probes.push_back(new Probe_Frequency(NF_freq[i], NF_pos[i], chunk));
+			probes.push_back(new Nearfield_Probe(NF_freq[i], NF_pos[i], chunk));
 	}
 	
 
 	void Simulation::N2F_init() {
-		if (N2F_pos.empty()) return;
-		n2f_box = new N2F_Box(fVec3(N2F_p1), fVec3(N2F_p2), N2F_omega, chunk, bg_medium->get_c());
+		if (!N2F_pos.empty())
+			n2f_box = new N2F_Box(N2F_p1, N2F_p2, N2F_omega, chunk, bg_medium->get_c());
+		
+		if (!c_scat_omega.empty())
+			scat_flux_box = new Flux_Box(N2F_p1, N2F_p2, c_scat_omega, chunk);
 	}
 
 	void Simulation::medium_init() {
@@ -44,6 +47,21 @@ namespace ffip {
 				if (!is_H_point(ctype) && !is_E_point(ctype))			//exclude non-material points
 					continue;
 				
+				/* staire case implementation
+				 */
+//				fVec3 sampled_point = p * dx / 2;
+//				auto weights = get_zero_weights();
+//				bool assigned = 0;
+//				for(auto item : solids) {
+//					if (item->update_weights(sampled_point, weights)) {	//it is true when it is inside the solid
+//						assigned = 1;
+//						break;
+//					}
+//				}
+//
+//				if (!assigned)			//assign background medium;
+//					weights[bg_medium->index] += 1;
+				
 				/* spatial averaging to get materials
 				 naive sampling integration over a cube
 				 can be improved using adaptive quadrature
@@ -51,18 +69,18 @@ namespace ffip {
 				 */
 				fVec3 box_p1{(p.x - 1) * dx / 2, (p.y - 1) * dx / 2, (p.z - 1) * dx / 2};
 				auto weights = get_zero_weights();
-				
+
 				for(auto& item : sampled_points) {
 					auto sampled_point = box_p1 + item;
 					bool assigned = 0;
-					
+
 					for(auto item : solids) {
 						if (item->update_weights(sampled_point, weights)) {	//it is true when it is inside the solid
 							assigned = 1;
 							break;
 						}
 					}
-					
+
 					if (!assigned)			//assign background medium;
 						weights[bg_medium->index] += 1;
 				}
@@ -144,21 +162,22 @@ namespace ffip {
 		}
 
 		//implementations of N2F faces
-		if (!N2F_pos.empty()) {
-			N2F_p1 = sim_p1 - iVec3{ 1, 1, 1 };
-			N2F_p2 = sim_p2 + iVec3{ 1, 1, 1 };
+		if (!N2F_omega.empty() || !c_scat_omega.empty()) {
+			N2F_p1 = sim_p1 - fVec3{ 1, 1, 1 };
+			N2F_p2 = sim_p2 + fVec3{ 1, 1, 1 };
+			
 			sim_p1 = sim_p1 - iVec3{ 2, 2, 2 };
 			sim_p2 = sim_p2 + iVec3{ 2, 2, 2 };
 		}
 
 		//add PML layers
-		sim_p1.x -= int(2 * PMLs[0][0].get_d());
-		sim_p1.y -= int(2 * PMLs[1][0].get_d());
-		sim_p1.z -= int(2 * PMLs[2][0].get_d());
+		sim_p1.x -= 2 * PMLs[0][0].get_d();
+		sim_p1.y -= 2 * PMLs[1][0].get_d();
+		sim_p1.z -= 2 * PMLs[2][0].get_d();
 		
-		sim_p2.x += int(2 * PMLs[0][1].get_d());
-		sim_p2.y += int(2 * PMLs[1][1].get_d());
-		sim_p2.z += int(2 * PMLs[2][1].get_d());
+		sim_p2.x += 2 * PMLs[0][1].get_d();
+		sim_p2.y += 2 * PMLs[1][1].get_d();
+		sim_p2.z += 2 * PMLs[2][1].get_d();
 
 		//implementaions of MPI, for now 1 chunk covers the whole region
 		chunk = new Chunk{sim_p1, sim_p2, sim_p1, sim_p2, dx, dt};
@@ -218,6 +237,10 @@ namespace ffip {
 		N2F_pos.push_back(pos);
 	}
 	
+	void Simulation::add_c_scat_freq(const real freq) {
+		c_scat_omega.push_back(2 * pi * freq);
+	}
+	
 	void Simulation::advance(std::ostream& os) {
 		std::cout << "\n" << std::setfill('0') << std::setw(4) << step;
 		real time = (step ++ ) * dt;
@@ -248,17 +271,22 @@ namespace ffip {
 
 			size_t idx1, idx2;
 			vector_divider(probes, rank, num_proc, idx1, idx2);
-			std::for_each(probes.begin() + idx1, probes.begin() + idx2, [this](Probe* item) {item->update(step); });
+			std::for_each(probes.begin() + idx1, probes.begin() + idx2, [this](Nearfield_Probe* item) {item->update(step); });
 			
 			if (n2f_box)
 				n2f_box->update(step, rank, num_proc);
+			
+			if (scat_flux_box)
+				scat_flux_box->update(step, rank, num_proc);
+			
 			glob_barrier->Sync();
 		};
 		
 		std::vector<std::future<void>> task_list;
-		for(int i = 0; i < num_proc; ++i) {
+		for(int i = 1; i < num_proc; ++i) {
 			task_list.push_back(std::async(std::launch::async, func, i, num_proc));
 		}
+		func(0, num_proc);
 		for(auto &item : task_list)
 			item.get();
 		
@@ -342,10 +370,33 @@ namespace ffip {
 		}
 	}
 	
+	void Simulation::output_c_scat(std::ostream& os) {
+		if (scat_flux_box == nullptr) return;
+		auto res = scat_flux_box->get();
+		
+		for(auto item : res)
+			os << item << "\n";
+	}
+	
+	std::fstream os_tmp;
+	iVec3 tmp_p1, tmp_p2;
+	
 	void Simulation::udf_unit() {
+		os_tmp = std::fstream{"debug.out", std::ios::out};
+		tmp_p1 = sim_p1;
+		tmp_p2 = sim_p2;
+		tmp_p1.x = (sim_p1.x + sim_p2.x) / 2;
+		tmp_p2.x = (sim_p1.x + sim_p2.x) / 2 + 1;
+		
+		auto itr = my_iterator(tmp_p1, tmp_p2, Ex);
+		auto dim = itr.get_dim();
+		os_tmp << dim << "\n";
 	}
 	
 	void Simulation::udf_advance() {
+		for(auto itr = my_iterator(tmp_p1, tmp_p2, Ex); !itr.is_end(); itr.advance()) {
+			os_tmp << (*chunk)(itr.get_vec()) << "\n";
+		}
 	}
 
 	void Simulation::udf_output() {

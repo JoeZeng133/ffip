@@ -11,17 +11,18 @@ medium[string] number_of_medium[integer]{
 		er[double] sigma_e[double] ur[double] sigma_u[double]
 		number_of_poles[integer]
 		{
-			{
-				Lorentz[string] rel_perm[double] freq[double] damp[double]
-			}
-			{
-				Drude[string] freq[double] inv_relaxation[double]
-			}
-			{
-				Deybe[string] rel_perm[double] relaxation[double]
-			}
-			...
+			Lorentz[string] rel_perm[double] freq[double] damp[double]
 		}
+		{
+			Drude[string] freq[double] inv_relaxation[double]
+		}
+		{
+			Deybe[string] rel_perm[double] relaxation[double]
+		}
+		{
+			CP[string] A[double] phi[double] Omega[double] Gamma[double]
+		}
+		...
 	}
 	...
 }
@@ -39,7 +40,14 @@ source[string] number_of_sources[integer] {
 }
 
 probe[string] input_file[string] output_file[string]
+
 farfield[string] input_file[string] output_file[string]
+
+c_scat[string] input_file[string] output_file[string]
+
+*********************** scattering coefficient file
+number_of_frequencies
+f[double]...
 
 *********************** dipole file
 number_of_dipoles

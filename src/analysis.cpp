@@ -2,9 +2,9 @@
 
 namespace ffip {
 	/* ################################ */
-	Probe_Frequency::Probe_Frequency(const real freq, const fVec3& _pos, Chunk const* _chunk): omega(2 * pi * freq), pos(_pos), chunk(_chunk) {}
+	Nearfield_Probe::Nearfield_Probe(const real freq, const fVec3& _pos, Chunk const* _chunk): omega(2 * pi * freq), pos(_pos), chunk(_chunk) {}
 
-	void Probe_Frequency::update(const int time_step) {
+	void Nearfield_Probe::update(const int time_step) {
 		real phase = -time_step * chunk->get_dt() * omega;
 		complex_num exp_omega_n = { cos(phase), sin(phase) };
 
@@ -17,7 +17,7 @@ namespace ffip {
 		hz += chunk->at(pos, Hz) * exp_omega_n;
 	}
 
-	void Probe_Frequency::output(std::ostream &o) {
+	void Nearfield_Probe::output(std::ostream &o) {
 		if (!phase_corrected.exchange(true)) {
 			real phase = 0.5 * chunk->get_dt() * omega;
 			complex_num correction = complex_num{cos(phase), sin(phase)};		//exp(0.5dtw)
@@ -149,4 +149,33 @@ namespace ffip {
 		for(auto item : n2f_faces)
 			item->prepare(rank, num_proc);
 	}
+	
+	/* ################################ */
+	Flux_Box::Flux_Box(const fVec3& _p1, const fVec3& _p2, const real_arr& _omega_list, Chunk* const _chunk): p1(_p1), p2(_p2), omega_list(_omega_list), chunk(_chunk) {
+		
+		flux_faces.push_back(new Flux_Face<dir_x_tag>{get_face<dir_x_tag, side_low_tag>(p1, p2), Low, omega_list, chunk});
+		flux_faces.push_back(new Flux_Face<dir_y_tag>{get_face<dir_y_tag, side_low_tag>(p1, p2), Low, omega_list, chunk});
+		flux_faces.push_back(new Flux_Face<dir_z_tag>{get_face<dir_z_tag, side_low_tag>(p1, p2), Low, omega_list, chunk});
+		flux_faces.push_back(new Flux_Face<dir_x_tag>{get_face<dir_x_tag, side_high_tag>(p1, p2), High, omega_list, chunk});
+		flux_faces.push_back(new Flux_Face<dir_y_tag>{get_face<dir_y_tag, side_high_tag>(p1, p2), High, omega_list, chunk});
+		flux_faces.push_back(new Flux_Face<dir_z_tag>{get_face<dir_z_tag, side_high_tag>(p1, p2), High, omega_list, chunk});
+	}
+	
+	void Flux_Box::update(const int time_step, const size_t rank, const size_t num_proc) {
+		for(auto item : flux_faces)
+			item->update(time_step, rank, num_proc);
+	}
+	
+	real_arr Flux_Box::get() const {
+		real_arr res(omega_list.size(), 0);
+		
+		for(auto item : flux_faces) {
+			auto tmp = item->get();
+			for(int i = 0; i < tmp.size(); ++i)
+				res[i] += tmp[i];
+		}
+		
+		return res;
+	}
+	
 }

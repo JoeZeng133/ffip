@@ -67,6 +67,12 @@ Pole_Base* read_pole(istream& fin) {
 		res =  new Deybe_Pole(rel_perm, relaxation);
 	}
 	
+	if (type == "CP") {
+		double A, phi, Omega, Gamma;
+		fin >> A >> phi >> Omega >> Gamma;
+		res = new CP_Pole{A, phi, Omega, Gamma};
+	}
+	
 	fin >> c;
 	if (c != '}' || res == nullptr)
 		throw runtime_error("pole format is not right");
@@ -184,7 +190,7 @@ void read_source(istream& fin, Simulation& sim) {
 		throw runtime_error("medium format is not right");
 }
 
-void read_probe(istream& fin, Simulation& sim) {
+void read_nearfield_probe(istream& fin, Simulation& sim) {
 	int n;
 	double x, y, z, freq;
 	
@@ -195,7 +201,7 @@ void read_probe(istream& fin, Simulation& sim) {
 	}
 }
 
-void read_farfield(istream& fin, Simulation& sim) {
+void read_farfield_probe(istream& fin, Simulation& sim) {
 	int n;
 	double th, phi, rho, freq;
 	
@@ -203,6 +209,16 @@ void read_farfield(istream& fin, Simulation& sim) {
 	for (int i = 0; i < n; ++i) {
 		fin >> th >> phi >> rho >> freq;
 		sim.add_farfield_probe(freq, {th, phi, rho});
+	}
+}
+
+void read_c_scat(istream& fin, Simulation& sim) {
+	int n;
+	fin >> n;
+	for(int i = 0; i < n; ++i) {
+		double freq;
+		fin >> freq;
+		sim.add_c_scat_freq(freq);
 	}
 }
 
@@ -224,10 +240,13 @@ int main(int argc, char const *argv[]) {
 	if (!fo.is_open())
 		throw runtime_error("fail to open log file");
 
-	fstream probes_output_file;
-	fstream probes_input_file;
+	fstream nearfield_output_file;
+	fstream nearfield_input_file;
 	fstream farfield_input_file;
 	fstream farfield_output_file;
+	
+	fstream c_scat_output_file;
+	fstream c_scat_input_file;
 	
 	string field;
 	fin >> field;
@@ -277,10 +296,10 @@ int main(int argc, char const *argv[]) {
 		if (field == "probe") {
 			string filename;
 			fin >> filename;
-			probes_input_file = fstream{filename, ios::in};
+			nearfield_input_file = fstream{filename, ios::in};
 			fin >> filename;
-			probes_output_file = fstream{filename, ios::out};
-			read_probe(probes_input_file, sim);
+			nearfield_output_file = fstream{filename, ios::out};
+			read_nearfield_probe(nearfield_input_file, sim);
 			
 			assigned = true;
 		}
@@ -291,7 +310,18 @@ int main(int argc, char const *argv[]) {
 			farfield_input_file = fstream{filename, ios::in};
 			fin >> filename;
 			farfield_output_file = fstream{filename, ios::out};
-			read_farfield(farfield_input_file, sim);
+			read_farfield_probe(farfield_input_file, sim);
+			
+			assigned = true;
+		}
+		
+		if (field == "c_scat") {
+			string filename;
+			fin >> filename;
+			c_scat_input_file = fstream{filename, ios::in};
+			fin >> filename;
+			c_scat_output_file = fstream{filename, ios::out};
+			read_c_scat(c_scat_input_file, sim);
 			
 			assigned = true;
 		}
@@ -309,8 +339,9 @@ int main(int argc, char const *argv[]) {
 	}
 	
 	sim.udf_output();
-	sim.output_nearfield(probes_output_file);
+	sim.output_nearfield(nearfield_output_file);
 	sim.output_farfield(farfield_output_file);
+	sim.output_c_scat(c_scat_output_file);
 
 	auto end = std::chrono::system_clock::now();
 	std::chrono::duration<double> elapsed_seconds = end-start;

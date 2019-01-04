@@ -54,9 +54,7 @@ namespace ffip {
 		
 		size_t num_poles = medium_ref->get_size_poles();
 		if (num_poles > 0) {
-			dispersive_field_chunk[index] = new Dispersive_Field{};
-			dispersive_field_chunk[index]->jp.resize(num_poles);
-			dispersive_field_chunk[index]->jp1.resize(num_poles);
+			dispersive_field_chunk[index] = new Dispersive_Field{num_poles};
 		}
 	}
 	
@@ -228,9 +226,9 @@ namespace ffip {
 		real modifier;							//normalize fields er*E = D/e0, ur * H = B/u0;
 		
 		if (is_E_point(F))
-			modifier = 1 / e0;
+			modifier = 1 / e0 * dt;
 		else
-			modifier = -1 / u0;
+			modifier = -1 / u0 * dt;
 
 		for(auto itr = my_iterator{ p1_ch, p2_ch, p1_ch.get_type(), rank, num_proc };!itr.is_end(); itr.advance()) {
 			int index = itr.x * ch_jump_x + itr.y * ch_jump_y + itr.z * ch_jump_z;

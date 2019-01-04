@@ -26,9 +26,9 @@ namespace ffip {
 	
 	struct CP_Pole : public Pole_Base {
 		real a0, a1, b0, b1, b2;
-		real cp;
 		
-		CP_Pole(const real A, const real Omega, const real phi, const real Gamma);
+		CP_Pole() = default;
+		CP_Pole(real A, real phi, real Omega, real Gamma);
 		
 		/* override functions*/
 		real get_a1() const override;
@@ -36,20 +36,13 @@ namespace ffip {
 		real get_b0() const override;
 		real get_b1() const override;
 		real get_b2() const override;
+		real get_cp() const;
 	};
 	
-	struct Lorentz_Pole : public Pole_Base{
-		real epsilon, omega, delta;
+	struct Lorentz_Pole : public CP_Pole{
 		
 		Lorentz_Pole(real rel_perm, real freq, real damp);
 		~Lorentz_Pole() = default;
-		
-		/* override functions*/
-		real get_a1() const override;
-		real get_a2() const override;
-		real get_b0() const override;
-		real get_b1() const override;
-		real get_b2() const override;
 	};
 	
 	struct Deybe_Pole : public Pole_Base{
@@ -67,18 +60,9 @@ namespace ffip {
 		
 	};
 	
-	struct Drude_Pole : public Pole_Base{
-		real omega, gamma;
-		
+	struct Drude_Pole : public CP_Pole{
 		Drude_Pole(real freq, real inv_relaxation);
 		~Drude_Pole() = default;
-		
-		/* override functions*/
-		real get_a1() const override;
-		real get_a2() const override;
-		real get_b0() const override;
-		real get_b1() const override;
-		real get_b2() const override;
 	};
 	
 	/* medium reference for use in actual computation
@@ -88,9 +72,7 @@ namespace ffip {
 	public:
 		std::vector<Pole_Ref const*> poles;
 		std::vector<real> weights;
-		/* d1 * E(n + 1) + d2 * E(n) + d3 * E(n - 1) = 2 * D(n + 0.5) - sum_J
-		 d1 = 0 means no material
-		 */
+		
 		real d1{0}, d2{0}, d3{0};
 	public:
 		Medium_Ref() = default;

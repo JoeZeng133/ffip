@@ -5,14 +5,7 @@
 #include <iostream>
 
 namespace ffip {
-	class Probe {
-	public:
-		virtual ~Probe() {}
-		virtual void update(const int time_step) = 0;
-		virtual void output(std::ostream&) = 0;
-	};
-	
-	class Probe_Frequency : public Probe{
+	class Nearfield_Probe{
 	private:
 		real omega;
 		fVec3 pos;
@@ -21,10 +14,10 @@ namespace ffip {
 	public:
 		complex_num ex{0}, ey{0}, ez{0}, hx{0}, hy{0}, hz{0};
 		
-		Probe_Frequency() = delete;
-		Probe_Frequency(const real freq, const fVec3& _pos, Chunk const* chunk);
-		void update(const int time_step) override;
-		void output(std::ostream&) override;
+		Nearfield_Probe() = delete;
+		Nearfield_Probe(const real freq, const fVec3& _pos, Chunk const* chunk);
+		void update(const int time_step);
+		void output(std::ostream&);
 	};
 	
 	/* Used internally inside simulation
@@ -126,8 +119,8 @@ namespace ffip {
 		fVec3 dp = p2 - p1;
 		lx1 = choose<x1>::get(dp);
 		lx2 = choose<x2>::get(dp);
-		nx1 = (size_t)round(lx1 / 2);
-		nx2 = (size_t)round(lx2 / 2);
+		nx1 = (size_t)round(lx1 / 2 + 1);
+		nx2 = (size_t)round(lx2 / 2 + 1);
 		dx1 = lx1 / nx1;
 		dx2 = lx2 / nx2;
 		
@@ -252,120 +245,129 @@ namespace ffip {
 	};
 	
 	/* Flux region class*/
-//	class Flux_Face_Base {
-//	public:
-//		virtual void update(const int time_step, const size_t rank = 0, const size_t num_proc = 1) = 0;
-//		virtual complex_arr get() const = 0;
-//		virtual ~Flux_Face_Base() {};
-//	};
-//
-//	template<typename Dir>
-//	class Flux_Face : public Flux_Face_Base {
-//		using x1 = typename Dir::x1;
-//		using x2 = typename Dir::x2;
-//		using x1_a = typename Dir::x1_a;
-//		using x2_a = typename Dir::x2_a;
-//
-//	private:
-//		fVec3 p1, p2;
-//		Side side;
-//		const real_arr& freq;
-//		Chunk const* chunk{nullptr};
-//		real dx, dt;
-//
-//		Box_Freq_Req* e1_req, *e2_req, *h1_req, *h2_req;
-//
-//		void validity_check() const;
-//	public:
-//		Flux_Face(const std::pair<fVec3, fVec3>& corners, const Side side, const real_arr& freq, Chunk const* chunk);
-//		Flux_Face(const fVec3& p1, const fVec3& p2, const Side side, const real_arr& freq, Chunk const* chunk);
-//		void update(const int time_step, const size_t rank = 0, const size_t num_proc = 1) override;
-//		complex_arr get() const override;
-//	};
-//
-//	template<typename Dir>
-//	void Flux_Face<Dir>::validity_check() const {
-//		if (choose<Dir>::get(p1) != choose<Dir>::get(p2))
-//			throw Invalid_Direction{};
-//
-//		if (!ElementWise_Less_Eq(p1, p2))
-//			throw Invalid_Corner_Points{};
-//	}
-//
-//	template<typename Dir>
-//	complex_arr Flux_Face<Dir>::get() const {
-//		h1_req->correct_phase();
-//		h2_req->correct_phase();
-//
-//		auto dp = p2 - p1;
-//		real lx1 = choose<x1>::get(dp);
-//		real lx2 = choose<x2>::get(dp);
-//		size_t nx1 = (int)ceil(lx1 / dx) + 1;
-//		size_t nx2 = (int)ceil(lx2 / dx) + 1;
-//		real dx1 = lx1 / nx1;
-//		real dx2 = lx2 / nx2;
-//
-//		complex_arr res(freq.size(), 0);
-//		for(int j = 0; j <= nx2; ++j)
-//			for(int i = 0; i <= nx1; ++i) {
-//				auto sample_point = dp;
-//				choose<x1>::get(sample_point) += i * dx1;
-//				choose<x2>::get(sample_point) += j * dx2;
-//
-//				auto e1 = (*e1_req)(sample_point);
-//				auto e2 = (*e2_req)(sample_point);
-//				auto h1 = (*h1_req)(sample_point);
-//				auto h2 = (*h2_req)(sample_point);
-//
-//				real modifier = ((i == 0) ^ (i == nx1) ? 0.5 : 1) * ((j == 0) ^ (j == nx2) ? 0.5 : 1);
-//				for(int f = 0; f < freq.size(); ++f) {
-//					res[f] += int(side) * modifier * (e1[f] * std::conj(h2[f]) - e2[f] * std::conj(h1[f])) ;
-//				}
-//			}
-//		for(auto& item : res)
-//			item *= dx1 * dx2;
-//
-//		return res;
-//	}
-//
-//	template<typename Dir>
-//	Flux_Face<Dir>::Flux_Face(const std::pair<fVec3, fVec3>& corners, const Side side, const real_arr& freq, Chunk const* chunk): Flux_Face(corners.first, corners.second, side, freq, chunk) {}
-//
-//	template<typename Dir>
-//	Flux_Face<Dir>::Flux_Face(const fVec3& _p1, const fVec3& _p2, const Side _side, const real_arr& _freq, Chunk const* _chunk):p1(_p1), p2(_p2), side(_side), freq(_freq), chunk(_chunk) {
-//		validity_check();
-//		dx = chunk->get_dx();
-//		dt = chunk->get_dt();
-//		e1_req = new Box_Freq_Req(p1, p2, Dir::x1::E, freq, chunk);
-//		e2_req = new Box_Freq_Req(p1, p2, Dir::x2::E, freq, chunk);
-//		h1_req = new Box_Freq_Req(p1, p2, Dir::x1::H, freq, chunk);
-//		h2_req = new Box_Freq_Req(p1, p2, Dir::x2::H, freq, chunk);
-//	}
-//
-//	template<typename Dir>
-//	void Flux_Face<Dir>::update(const int time_step, const size_t rank, const size_t num_proc) {
-//		e1_req->update(time_step, rank, num_proc);
-//		e2_req->update(time_step, rank, num_proc);
-//		h1_req->update(time_step, rank, num_proc);
-//		h2_req->update(time_step, rank, num_proc);
-//	}
-//
-//	class Flux_Box {
-//	private:
-//		fVec3 p1, p2;
-//		real_arr omega;
-//		Chunk* const chunk {nullptr};
-//		std::vector<Flux_Face_Base*> flux_faces;
-//
-//	public:
-//		Flux_Box(const fVec3& p1, const fVec3& p2, const real_arr& omega, Chunk* const chunk);
-//		~Flux_Box();
-//
-//		Flux_Box(const Flux_Box&) = delete;
-//		Flux_Box& operator=(const Flux_Box&) = delete;
-//		Flux_Box(Flux_Box&&) = default;
-//		Flux_Box& operator=(Flux_Box&&) = default;
-//		void update(const int time_step, const size_t rank, const size_t num_proc);
-//		complex_arr get() const;
-//	};
+	class Flux_Face_Base {
+	public:
+		virtual void update(const int time_step, const size_t rank = 0, const size_t num_proc = 1) = 0;
+		virtual real_arr get() const = 0;
+		virtual ~Flux_Face_Base() {};
+	};
+
+	template<typename Dir>
+	class Flux_Face : public Flux_Face_Base {
+		using x1 = typename Dir::x1;
+		using x2 = typename Dir::x2;
+
+	private:
+		fVec3 p1, p2;
+		Side side;
+		const real_arr& omega_list;
+		Chunk const* chunk{nullptr};
+		real dx, dt;
+
+		real lx1, lx2;
+		real dx1, dx2;
+		size_t nx1, nx2;
+		Box_Freq_Req* e1_req, *e2_req, *h1_req, *h2_req;
+		std::vector<complex_arr> e1_list, e2_list, h1_list, h2_list;
+
+		void validity_check() const;
+	public:
+		Flux_Face(const std::pair<fVec3, fVec3>& corners, const Side side, const real_arr& omega_list, Chunk const* chunk);
+		Flux_Face(const fVec3& p1, const fVec3& p2, const Side side, const real_arr& omega_list, Chunk const* chunk);
+		void update(const int time_step, const size_t rank = 0, const size_t num_proc = 1) override;
+		real_arr get() const override;
+	};
+	
+	template<typename Dir>
+	Flux_Face<Dir>::Flux_Face(const std::pair<fVec3, fVec3>& corners, const Side side, const real_arr& freq, Chunk const* chunk): Flux_Face(corners.first, corners.second, side, freq, chunk) {}
+	
+	template<typename Dir>
+	Flux_Face<Dir>::Flux_Face(const fVec3& _p1, const fVec3& _p2, const Side _side, const real_arr& _omega_list, Chunk const* _chunk):p1(_p1), p2(_p2), side(_side), omega_list(_omega_list), chunk(_chunk) {
+		
+		validity_check();
+		dx = chunk->get_dx();
+		dt = chunk->get_dt();
+		auto dp = p2 - p1;
+		lx1 = choose<x1>::get(dp);
+		lx2 = choose<x2>::get(dp);
+		nx1 = ceil(lx1 / 2 + 1);
+		nx2 = ceil(lx2 / 2 + 1);
+		dx1 = lx1 / nx1;
+		dx2 = lx2 / nx2;
+		
+		e1_req = new Box_Freq_Req(p1, p2, Dir::x1::E, omega_list, chunk);
+		e2_req = new Box_Freq_Req(p1, p2, Dir::x2::E, omega_list, chunk);
+		h1_req = new Box_Freq_Req(p1, p2, Dir::x1::H, omega_list, chunk);
+		h2_req = new Box_Freq_Req(p1, p2, Dir::x2::H, omega_list, chunk);
+	}
+
+	template<typename Dir>
+	void Flux_Face<Dir>::validity_check() const {
+		if (choose<Dir>::get(p1) != choose<Dir>::get(p2))
+			throw Invalid_Direction{};
+
+		if (!ElementWise_Less_Eq(p1, p2))
+			throw Invalid_Corner_Points{};
+	}
+
+	template<typename Dir>
+	real_arr Flux_Face<Dir>::get() const {
+		h1_req->correct_phase();
+		h2_req->correct_phase();
+
+		real dS = dx * dx * (dx1 / 2) * (dx2 / 2);
+		real side_real = side;
+		real_arr res(omega_list.size(), 0);
+		
+		for(int j = 0; j <= nx2; ++j)
+			for(int i = 0; i <= nx1; ++i) {
+				auto sample_point = p1;
+				choose<x1>::get(sample_point) += i * dx1;
+				choose<x2>::get(sample_point) += j * dx2;
+
+				auto e1 = (*e1_req)(sample_point);
+				auto e2 = (*e2_req)(sample_point);
+				auto h1 = (*h1_req)(sample_point);
+				auto h2 = (*h2_req)(sample_point);
+
+				real trapz_weight = ((i == 0) || (i == nx1) ? 0.5 : 1) * ((j == 0) || (j == nx2) ? 0.5 : 1);
+				
+				for(int f = 0; f < omega_list.size(); ++f) {
+					res[f] += trapz_weight * std::real(e1[f] * std::conj(h2[f]) - e2[f] * std::conj(h1[f])) ;
+				}
+			}
+		
+		for(auto& item : res)
+			item *= 0.5 * side_real * dS;
+
+		return res;
+	}
+
+
+	template<typename Dir>
+	void Flux_Face<Dir>::update(const int time_step, const size_t rank, const size_t num_proc) {
+		e1_req->update(time_step, rank, num_proc);
+		e2_req->update(time_step, rank, num_proc);
+		h1_req->update(time_step, rank, num_proc);
+		h2_req->update(time_step, rank, num_proc);
+	}
+
+	class Flux_Box {
+	private:
+		fVec3 p1, p2;
+		const real_arr omega_list;
+		Chunk* const chunk {nullptr};
+		std::vector<Flux_Face_Base*> flux_faces;
+
+	public:
+		Flux_Box(const fVec3& p1, const fVec3& p2, const real_arr& omega, Chunk* const chunk);
+		~Flux_Box();
+
+		Flux_Box(const Flux_Box&) = delete;
+		Flux_Box& operator=(const Flux_Box&) = delete;
+		Flux_Box(Flux_Box&&) = default;
+		Flux_Box& operator=(Flux_Box&&) = default;
+		void update(const int time_step, const size_t rank = 0, const size_t num_proc = 1);
+		real_arr get() const;
+	};
 }

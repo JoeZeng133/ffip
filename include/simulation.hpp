@@ -13,8 +13,9 @@
 
 namespace ffip {
 	class Simulation;
-	class Probe;
+	class Nearfield_Probe;
 	class N2F_Box;
+	class Flux_Box;
 	
 	class Simulation {
 	private:
@@ -35,19 +36,23 @@ namespace ffip {
 		
 		std::vector<real> NF_freq;
 		std::vector<fVec3> NF_pos;
-		std::vector<Probe*> probes;
+		std::vector<Nearfield_Probe*> probes;
 		
+		//far fields calculation
+		fVec3 N2F_p1, N2F_p2;	//coordinates of N2F box
 		std::vector<real> N2F_omega;
 		std::vector<fVec3> N2F_pos;
 		N2F_Box* n2f_box{nullptr};
+
+		//scattering coefficient calculation
+		real_arr c_scat_omega;
+		Flux_Box* scat_flux_box{nullptr};
 		
 		iVec3 tf_p1, tf_p2;
-		iVec3 N2F_p1, N2F_p2;	//coordinates of N2F box
 
 		PML PMLs[3][2];
 		std::vector<real> kx, ky, kz, bx, by, bz, cx, cy, cz;
 		
-
 		void probe_init();
 		void N2F_init();
 		void medium_init();
@@ -66,6 +71,8 @@ namespace ffip {
 		void add_PML_layer(PML* PML);
 		void add_nearfield_probe(const real freq, const fVec3& pos);
 		void add_farfield_probe(const real freq, const fVec3& pos);
+		void add_c_scat_freq(const real freq);
+		
 		void set_background_medium(Medium const* m);
 		void set_num_proc(const int _num_proc);
 		void init();
@@ -91,5 +98,6 @@ namespace ffip {
 		
 		void output_nearfield(std::ostream& os);
 		void output_farfield(std::ostream& os);
+		void output_c_scat(std::ostream& os);
 	};
 }

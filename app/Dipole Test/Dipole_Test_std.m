@@ -1,4 +1,4 @@
-                                                                                                                                                                                                                                                                         %% near-field dipole testclear
+%% near-field dipole testclear
 clc
 close all
 
@@ -59,9 +59,10 @@ deybe = @(w, rel_e, tau) rel_e ./ (1 + 1j * w * tau);
 % sig_const = -imag(er_const) * (2 * pi * fp * e0);
 % er_func = @(w) (real(er_const) - 1j * sig_const ./ (w * e0));
 % er_func = @(w) (1 + deybe(w, rel_e, tau));
-% er_func = @(w) (1 + drude(w, 5e14, 2e14));
-er_func = @(w) (1 + lorentz(w, 3, 3e14, 0.5e14) + lorentz(w, 3, 5e14, 1e14));
+er_func = @(w) (1 + drude(w, 2e14, 0.5e14));
+% er_func = @(w) (1 + lorentz(w, 3, 3e14, 0.5e14) + lorentz(w, 3, 5e14, 1e14));
 % er_func = @(w) (1 + drude(w, 2e14, 0.5e14) + lorentz(w, 3, 5e14, 1e14));
+% er_func = @(w) (1 + lorentz(w, 3, 5e14, 1e14));
 
 testf = linspace(0.5 * fp, 2 * fp, 1000);
 tester = er_func(2 * pi * testf);
@@ -100,9 +101,9 @@ fprintf(fileID, "}\n");
 fprintf(fileID, "medium 1{\n");
 % medium 0, scatterer medium
 fprintf(fileID, "{ ");
-fprintf(fileID, "%e %e %e %e 2\n", er_bg, 0, ur_bg, 0);
-fprintf(fileID, "{ Lorentz %e %e %e }\n", 3, 3e14, 0.5e14);
-fprintf(fileID, "{ Lorentz %e %e %e }\n", 3, 5e14, 1e14);
+fprintf(fileID, "%e %e %e %e 1\n", er_bg, 0, ur_bg, 0);
+fprintf(fileID, "{ Drude %e %e }\n", 2e14, 0.5e14);
+% fprintf(fileID, "{ Lorentz %e %e %e }\n", 3, 5e14, 1e14);
 fprintf(fileID, " }\n");
 fprintf(fileID, "}\n");
 
@@ -150,7 +151,7 @@ Hphi = sum(H .* proj_phi, 2) ./ ref;
 %% correlation comparisons
 figure(3)
 subplot(1, 2, 1)
-plot(real(Er(:)), real(Er_p(:)), '*')
+plot(abs(Er(:)), abs(Er_p(:)), '*')
 axis equal
 axis tight
 title('Re E_r')
@@ -163,7 +164,7 @@ title('Im E_r')
 
 figure(4)
 subplot(1, 2, 1)
-plot(real(Eth(:)), real(Eth_p(:)), '*')
+plot(abs(Eth(:)), abs(Eth_p(:)), '*')
 axis equal
 axis tight
 title('Re E_\theta')
@@ -176,7 +177,7 @@ title('Im E_\theta')
 
 figure(5)
 subplot(1, 2, 1)
-plot(real(Hphi(:)), real(Hphi_p(:)), '*')
+plot(abs(Hphi(:)), abs(Hphi_p(:)), '*')
 axis equal
 axis tight
 title('Re H_\phi')
