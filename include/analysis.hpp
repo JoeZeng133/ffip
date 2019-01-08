@@ -5,19 +5,27 @@
 #include <iostream>
 
 namespace ffip {
-	class Nearfield_Probe{
+	class Nearfield_Probe {
 	private:
 		real omega;
-		fVec3 pos;
-		Chunk const* chunk;
-		std::atomic<bool> phase_corrected{0};
+		fVec3 pos;						//comp coords
+		Chunk const* chunk{nullptr};
+		complex_num correction;
+
 	public:
 		complex_num ex{0}, ey{0}, ez{0}, hx{0}, hy{0}, hz{0};
+
+		//copy and move assignable, constructable
+		Nearfield_Probe(const Nearfield_Probe&) = default;
+		Nearfield_Probe& operator=(const Nearfield_Probe&) = default;
+		Nearfield_Probe(Nearfield_Probe&&) = default;
+		Nearfield_Probe& operator=(Nearfield_Probe&&) = default;
 		
 		Nearfield_Probe() = delete;
 		Nearfield_Probe(const real freq, const fVec3& _pos, Chunk const* chunk);
 		void update(const int time_step);
-		void output(std::ostream&);
+		void set_chunk(Chunk const* chunk);
+		void output(std::ostream&) const;
 	};
 	
 	/* Used internally inside simulation
@@ -38,23 +46,23 @@ namespace ffip {
 		sVec3 dim;									//dimension of the array
 		interpn<3> interp;
 		
+		real step_correction;
 		std::vector<complex_arr> raw_fields;		//fourier transform of raw fields from chunk
-		std::atomic<bool> phase_corrected{0};		//phase correction for H field
 	public:
 		Box_Freq_Req() = default;
 		Box_Freq_Req(const fVec3& p1, const fVec3& p2, const Coord_Type F, const real_arr& omega_list, Chunk const* chunk);
 		
+		//copy, move constructable, assignbable
 		Box_Freq_Req(const Box_Freq_Req&) = default;
 		Box_Freq_Req& operator=(const Box_Freq_Req&) = default;
 		Box_Freq_Req(Box_Freq_Req&&) = default;
 		Box_Freq_Req& operator=(Box_Freq_Req&&) = default;
 		
 		void validity_check() const;
+		// thread safe update with rank provided
 		void update(const int time_step, const size_t rank = 0, const size_t num_proc = 1);
-		void correct_phase();						//thread safe function that performs phase correction once
-		
+		// thread safe access function
 		complex_arr operator()(const fVec3& p) const;
-//		complex_arr operator()(const iVec3& p) const;
 	};
 	
 	/* N2F region class*/
@@ -63,15 +71,13 @@ namespace ffip {
 		virtual void update(const int time_step, const size_t rank = 0, const size_t num_proc = 1) = 0;
 		virtual std::pair<cVec3, cVec3> get_NL(const real theta, const real phi, const int f_index) const = 0;
 		virtual ~N2F_Face_Base() {};
-		virtual void prepare(const size_t rank = 0, const size_t num_proc = 1) = 0;
+		virtual void prepare(const size_t rank = 0, const size_t num_proc = 1) const = 0;
 	};
 	
 	template<typename Dir>
 	class N2F_Face : public N2F_Face_Base {
 		using x1 = typename Dir::x1;
 		using x2 = typename Dir::x2;
-		using x1_a = typename Dir::x1_a;
-		using x2_a = typename Dir::x2_a;
 		
 	private:
 		fVec3 p1, p2, ref_p;			//corner points specified in computational coordinates
@@ -81,8 +87,7 @@ namespace ffip {
 		real c;
 		
 		Box_Freq_Req* e1_req, *e2_req, *h1_req, *h2_req;
-		std::vector<complex_arr> j1_list, j2_list, m1_list, m2_list;
-		std::atomic<bool> prepared{0};
+		mutable std::vector<complex_arr> j1_list, j2_list, m1_list, m2_list;
 		
 		real lx1, lx2;
 		size_t nx1, nx2;
@@ -90,14 +95,22 @@ namespace ffip {
 		
 		void validity_check() const;
 	public:
-		
+		//not copyable
+		N2F_Face(const N2F_Face&) = delete;
+		N2F_Face& operator=(const N2F_Face&) = delete;
+		//movable
+		N2F_Face(N2F_Face&&) = default;
+		N2F_Face& operator=(N2F_Face&&) = default;
 		
 		N2F_Face(const std::pair<fVec3, fVec3>& corners, const fVec3& ref_p, const Side side, const real_arr& omega_list, Chunk const* chunk, const real c);
 		N2F_Face(const fVec3& p1, const fVec3& p2, const fVec3& ref_p, const Side side, const real_arr& freq, Chunk const* chunk, const real c);
 		~N2F_Face();
 		
-		void prepare(const size_t rank = 0, const size_t num_proc = 1) override;
+		//to load j1, j2, m1, m2 concurrently with rank specified
+		void prepare(const size_t rank = 0, const size_t num_proc = 1) const override;
+		//to update e1, e2, h1, h2 concurrently with rank specified
 		void update(const int time_step, const size_t rank = 0, const size_t num_proc = 1) override;
+		//to get N, L vector potential, thread safe
 		std::pair<cVec3, cVec3> get_NL(const real theta, const real phi, const int f_index) const override;
 	};
 	
@@ -159,10 +172,8 @@ namespace ffip {
 	}
 	
 	template<typename Dir>
-	void N2F_Face<Dir>::prepare(const size_t rank, const size_t num_proc){
+	void N2F_Face<Dir>::prepare(const size_t rank, const size_t num_proc) const{
 		real side_float = side;
-		h1_req->correct_phase();
-		h2_req->correct_phase();
 		
 		for(auto itr = my_iterator(iVec3(0, 0, 0), iVec3(nx1, nx2, 0), Null, rank, num_proc); !itr.is_end(); itr.advance()) {
 			fVec3 sample_point = p1;
@@ -227,21 +238,25 @@ namespace ffip {
 		fVec3 p1, p2;
 		real_arr omega_list;
 		Chunk* const chunk {nullptr};
-		real c;
+		real c, z;
 		std::vector<N2F_Face_Base*> n2f_faces;
 		
 	public:
-		N2F_Box(const fVec3& p1, const fVec3& p2, const real_arr& omega, Chunk* const chunk, const real c);
+		N2F_Box(const fVec3& p1, const fVec3& p2, const real_arr& freq_list, Chunk* const chunk, const real c, const real z);
 		~N2F_Box();
 		
+		// not copiable
 		N2F_Box(const N2F_Box&) = delete;
 		N2F_Box& operator=(const N2F_Box&) = delete;
+		// movable
 		N2F_Box(N2F_Box&&) = default;
 		N2F_Box& operator=(N2F_Box&&) = default;
 		
 		void update(const int time_step, const size_t rank = 0, const size_t num_proc = 1);
-		void prepare(const size_t rank = 0, const size_t num_proc = 1);
-		std::pair<cVec3, cVec3> get_NL(const real theta, const real phi, const real omega);
+		
+		void prepare(const size_t rank = 0, const size_t num_proc = 1) const;
+		std::pair<cVec3, cVec3> get_NL(const real theta, const real phi, const real omega) const;
+		void output(std::ostream& os, const real theta, const real phi, const real rho, const real freq) const;
 	};
 	
 	/* Flux region class*/
@@ -267,13 +282,22 @@ namespace ffip {
 		real lx1, lx2;
 		real dx1, dx2;
 		size_t nx1, nx2;
-		Box_Freq_Req* e1_req, *e2_req, *h1_req, *h2_req;
+		Box_Freq_Req *e1_req, *e2_req, *h1_req, *h2_req;
 		std::vector<complex_arr> e1_list, e2_list, h1_list, h2_list;
-
-		void validity_check() const;
+		
 	public:
 		Flux_Face(const std::pair<fVec3, fVec3>& corners, const Side side, const real_arr& omega_list, Chunk const* chunk);
 		Flux_Face(const fVec3& p1, const fVec3& p2, const Side side, const real_arr& omega_list, Chunk const* chunk);
+		~Flux_Face();
+		
+		//non copiable
+		Flux_Face(const Flux_Face&) = delete;
+		Flux_Face& operator=(const Flux_Face&) = delete;
+		//movable
+		Flux_Face(Flux_Face&&) = default;
+		Flux_Face& operator=(Flux_Face&&) = default;
+		
+		void validity_check() const;
 		void update(const int time_step, const size_t rank = 0, const size_t num_proc = 1) override;
 		real_arr get() const override;
 	};
@@ -300,6 +324,14 @@ namespace ffip {
 		h1_req = new Box_Freq_Req(p1, p2, Dir::x1::H, omega_list, chunk);
 		h2_req = new Box_Freq_Req(p1, p2, Dir::x2::H, omega_list, chunk);
 	}
+	
+	template<typename Dir>
+	Flux_Face<Dir>::~Flux_Face() {
+		delete e1_req;
+		delete e2_req;
+		delete h1_req;
+		delete h2_req;
+	}
 
 	template<typename Dir>
 	void Flux_Face<Dir>::validity_check() const {
@@ -312,9 +344,6 @@ namespace ffip {
 
 	template<typename Dir>
 	real_arr Flux_Face<Dir>::get() const {
-		h1_req->correct_phase();
-		h2_req->correct_phase();
-
 		real dS = dx * dx * (dx1 / 2) * (dx2 / 2);
 		real side_real = side;
 		real_arr res(omega_list.size(), 0);
@@ -354,19 +383,22 @@ namespace ffip {
 
 	class Flux_Box {
 	private:
-		fVec3 p1, p2;
-		const real_arr omega_list;
+		fVec3 p1, p2;					//comp coords
+		real_arr omega_list;
 		Chunk* const chunk {nullptr};
 		std::vector<Flux_Face_Base*> flux_faces;
 
 	public:
-		Flux_Box(const fVec3& p1, const fVec3& p2, const real_arr& omega, Chunk* const chunk);
+		Flux_Box(const fVec3& p1, const fVec3& p2, const real_arr& freq, Chunk* const chunk);
 		~Flux_Box();
 
+		//non copiable
 		Flux_Box(const Flux_Box&) = delete;
 		Flux_Box& operator=(const Flux_Box&) = delete;
+		//movable
 		Flux_Box(Flux_Box&&) = default;
 		Flux_Box& operator=(Flux_Box&&) = default;
+		
 		void update(const int time_step, const size_t rank = 0, const size_t num_proc = 1);
 		real_arr get() const;
 	};

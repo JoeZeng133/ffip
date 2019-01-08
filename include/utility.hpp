@@ -47,7 +47,7 @@ namespace ffip {
 		return (ctype == Ex || ctype == Ey || ctype == Ez);
 	}
 	
-	constexpr bool is_H_point(const Coord_Type ctype) {
+	constexpr bool is_M_point(const Coord_Type ctype) {
 		return (ctype == Hx || ctype == Hy || ctype == Hz);
 	}
 	/* forward declrations */
@@ -253,6 +253,12 @@ namespace ffip {
 		return a.x <= b.x && a.y <= b.y && a.z <= b.z;
 	}
 	
+	/* testing whether a point is inside of a box*/
+	template<typename T1, typename T2>
+	constexpr bool Is_Inside_Box(const Vec3<T1>& p1, const Vec3<T1>& p2, const Vec3<T2>& tp) {
+		return (ElementWise_Less_Eq(p1, tp) && ElementWise_Less_Eq(tp, p2));
+	}
+	
 	/* dot product */
 	template<typename T1, typename T2>
 	constexpr Vec3<decltype(T1{} * T2{})> operator*(const Vec3<T1>& a, const Vec3<T2>& b) {
@@ -432,56 +438,9 @@ namespace ffip {
 	}
 
     /* source functions */
-    struct Gaussian_Func {
-        real a, mu;									// exp(-a * t^2)s
-        real dt;
-
-		Gaussian_Func() = delete;					//delete default constructors
-        Gaussian_Func(real sigma_t, real mu);	//exp(-0.5 (x - mu)^2 / sigma_t^2)
-        explicit Gaussian_Func(real sigma_f);		//fourier = exp(-0.5 f^2 / sigma_f^2)
-
-		Gaussian_Func(const Gaussian_Func&) = default;	//copy
-		Gaussian_Func& operator=(const Gaussian_Func&) = default;
-
-
-        real operator() (real time) const;
-        real operator[] (int time) const;					//(time * dt)
-		
-		auto get_functor() -> std::function<real(const real)> const;
-        void set_dt(real _dt);
-    };
-
-    struct Sinuosuidal_Func {
-        real a; //sin(a * t)
-		real phase{0};
-        real dt;
-
-		Sinuosuidal_Func() = delete;							//no default constructors
-        Sinuosuidal_Func(real freq, real d = 0); 					//sin(2 * pi * freq * (t - d))
-		Sinuosuidal_Func(const Sinuosuidal_Func&) = default;	//copy
-		Sinuosuidal_Func& operator=(const Sinuosuidal_Func&) = default;
-
-        real operator() (real time) const;
-        real operator[] (int time) const;
-
-		auto get_functor() -> std::function<real(const real)> const;
-        void set_dt(real _dt);
-    };
-
-    struct Rickerwavelet_Func {
-        real a, d;											//(1 - 2 * a * (t - d)) * exp(-a * (t - d)^2))
-        real dt;
-
-        Rickerwavelet_Func(real fp, real _d);				//(1 - 2(pi * fp * (t - d))^2) * exp(-(pi * fp * (t - d))^2)
-		Rickerwavelet_Func(const Rickerwavelet_Func&) = default;
-		Rickerwavelet_Func& operator=(const Rickerwavelet_Func&) = default;
-
-        real operator() (real time) const;
-        real operator[] (int time) const;
-
-		auto get_functor() -> std::function<real(const real)> const;
-        void set_dt(real dt);
-    };
+	auto make_gaussian_func(real sigma_t, real d = 0) -> std::function<real(const real)>;
+	auto make_sin_func(real freq, real d = 0) -> std::function<real(const real)>;
+	auto make_ricker_func(real fp, real d = 0) -> std::function<real(const real)>;
 	
 	/* fast 1 dimensional linear interpolation */
 	class interp1 {
@@ -493,7 +452,7 @@ namespace ffip {
 		}
 		
 		template<typename T>
-		T interp(const std::vector<T>& data, const real x) {
+		T get(const std::vector<T>& data, const real x) {
 			if (data.size()!= dimx)
 				throw std::runtime_error("Invalid Data Size");
 			
@@ -521,7 +480,7 @@ namespace ffip {
 		}
 		
 		template<typename T>
-		T interp(const std::vector<T>& data, const real x, const real y) {
+		T get(const std::vector<T>& data, const real y, const real x) {
 			if (data.size()!= size)
 				throw  std::runtime_error("Invalid Data Size");
 			
@@ -558,7 +517,7 @@ namespace ffip {
 		}
 		
 		template<typename T>
-		T interp(const std::vector<T>& data, const real x, const real y, const real z) {
+		T get(const std::vector<T>& data, const real z, const real y, const real x) {
 			if (data.size()!= size)
 				throw std::runtime_error("Invalid Data Size");
 			
@@ -625,8 +584,8 @@ namespace ffip {
 				return base_class::get_helper(data, args...);
 			
 			//force points to be inside of region
-			if (xq > dimn - 1) base_class::get_helper(data + jump * (dimn - 1), args...);
-			if (xq < 0) base_class::get_helper(data, args...);
+			if (xq > dimn - 1) return base_class::get_helper(data + jump * (dimn - 1), args...);
+			if (xq < 0) return base_class::get_helper(data, args...);
 			
 			size_t index = xq;
 			real tx = xq - index;
@@ -642,6 +601,34 @@ namespace ffip {
 		T get(const std::vector<T>& vec, Args&&... args) const{
 			static_assert(sizeof...(args) == N, "Invalid Request");
 			return get_helper(vec.data(), args...);
+		}
+		
+		template<typename T, typename... Args>
+		void put_helper(T* data, const T& val, real xq, Args&&... args) const{
+			if ( dimn == 1) {	//ignore 1 dimension
+				base_class::get_helper(data, args...);
+				return;
+			}
+			
+			//force points to be inside of region
+			if (xq > dimn - 1) return base_class::put_helper(data + jump * (dimn - 1), val, args...);
+			if (xq < 0) return base_class::put_helper(data, val, args...);
+			
+			size_t index = xq;
+			real tx = xq - index;
+			
+			if (tx < tol_interp)
+				base_class::put_helper(data + jump * index, val, args...);
+			else {
+				base_class::put_helper(data + jump * (index + 1), val * tx, args...);
+				base_class::put_helper(data + jump * index, val * (1 - tx), args...);
+			}
+		}
+		
+		template<typename T, typename... Args>
+		void put(std::vector<T>& vec, const T& val, Args&&... args) const {
+			static_assert(sizeof...(args) == N, "Invalid Request");
+			return put_helper(vec.data(), val, args...);
 		}
 	};
 	
@@ -670,9 +657,6 @@ namespace ffip {
 		
 		template<typename T>
 		T get_helper(T const* data, real xq) const{
-			if (dimn == 0)
-				throw std::runtime_error("number of coordinates are zero");
-			
 			if (dimn == 1)		//ignore this dimension if it is 1
 				return data[0];
 			
@@ -686,6 +670,39 @@ namespace ffip {
 				return data[index];
 			else
 				return tx * data[index + 1] + (1 - tx) * data[index];
+		}
+		
+		template<typename T>
+		void put(std::vector<T>& vec, const T& val, real xq) const{
+			return put_helper(vec.data(), val, xq);
+		}
+		
+		template<typename T>
+		void put_helper(T* data, const T& val, real xq) const{
+			if ( dimn == 1) {		//ignore this dimension if it is 1
+				data[0] = val;
+				return;
+			}
+			//force points to be inside of region
+			if (xq > dimn - 1) {
+				data[dimn - 1] = val;
+				return;
+			}
+			
+			if (xq < 0) {
+				data[0] = val;
+				return;
+			}
+			
+			size_t index = xq;
+			real tx = xq - index;
+			
+			if (tx < tol_interp)
+				data[index] = val;
+			else {
+				data[index + 1] = val * tx;
+				data[index] = val * (1 - tx);
+			}
 		}
 	};
 
@@ -793,18 +810,18 @@ namespace ffip {
 	/* PML class for calculating k, b, c arrays used in updating perfectly matched layer using CPML*/
 	class PML {
 	private:
-		int d{0};
-		real sigma_max{0}, k_max{1}, a_max{0};	//it was found out a_max is critical in absorbing waves in 1D simulation
-		real m_a{1}, m{3};
-		Direction dir;
-		Side side;
+		int d;
+		real sigma_max;
+		real k_max{1};
+		real a_max{0};
+		real m{3};
+		real m_a{1};
 
 	public:
 		/* constructors*/
 		PML() = default;
-		PML(Direction _dir, Side _side);
-		PML(Direction _dir, Side _side, int _d);
-		PML(Direction _dir, Side _side, int _d, real _sigma_max);
+		PML(int d, real sigma_max);
+		PML(int d, real sigma_max, real k_max, real a_max, real m, real m_a);
 
 		PML(const PML&) = default;				//copy
 		PML& operator=(const PML&) = default;
@@ -818,17 +835,18 @@ namespace ffip {
 		real get_k(const real x) const;
 		real get_b(const real x, const real dt) const;
 		real get_c(const real x, const real dt) const;
-		Direction get_dir() const;
-		Side get_side() const;
 
 		static real optimal_sigma_max(real m_k, real dx, real er = 1, real ur = 1);
 	};
 	
-	/* extra field information for use in dispersive field updates*/
+	/* extra field information for use in dispersive field updates
+	stores e(n-2) and polarization p(n) p(n - 1)
+	 */
 	struct Dispersive_Field {
 		union {real ex2, ey2, ez2, e2, hx2, hy2, hz2, h2, eh2;};
-		std::vector<real> jp1, jp;
+		std::vector<real> p1, p;
 		Dispersive_Field(const size_t num_poles);
+		size_t get_num_poles() const;
 	};
 	
 	/* field information for points inside PML layers*/
@@ -900,6 +918,7 @@ namespace ffip {
 	extern Barrier* glob_barrier;
 	void set_num_proc(const size_t num_proc);
 
+	// divide a list evenly
 	template<typename T>
 	inline void vector_divider(const std::vector<T>& list, const size_t rank, const size_t num_proc, size_t& idx1, size_t& idx2) {
 		if (num_proc > list.size()) {
@@ -915,7 +934,6 @@ namespace ffip {
 			idx1 = rank * list.size() / num_proc;
 			idx2 = (rank + 1) * list.size() / num_proc;
 		}
-		
 	}
 	extern iVec3 vec3_base[3];
 	

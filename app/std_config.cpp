@@ -11,28 +11,29 @@ int read_basic_config(istream& fin, Simulation& sim) {
 	char c;
 	double dt, dx;
 	int dimx, dimy, dimz;
+	int sf_thickness;
+	int PML_thickness;
 	int time_step;
 	double er, ur;
-	int PML_thickness;
-	double sigma_max;
 
 	fin >> c;
 	if (c != '{')
 		throw runtime_error("basic format is not right");
 	
-	fin >> dt >> dx >> dimx >> dimy >> dimz >> time_step >> er >> ur >> PML_thickness;
+	fin >> dt >> dx >> dimx >> dimy >> dimz >> sf_thickness >> PML_thickness >> time_step >> er >> ur;
 	sim.setup(dx, dt, {dimx, dimy, dimz});
-	sim.set_background_medium(make_medium(er, 0, ur, 0));
-	sigma_max = PML::optimal_sigma_max(3, dx, er, ur);
+	sim.set_background_medium(sim.make_medium(er, 0, ur, 0));
 	
 	if (PML_thickness) {
-		sim.add_PML_layer(new PML(X, High, PML_thickness, sigma_max));
-		sim.add_PML_layer(new PML(X, Low,  PML_thickness, sigma_max));
-		sim.add_PML_layer(new PML(Y, High, PML_thickness, sigma_max));
-		sim.add_PML_layer(new PML(Y, Low,  PML_thickness, sigma_max));
-		sim.add_PML_layer(new PML(Z, High, PML_thickness, sigma_max));
-		sim.add_PML_layer(new PML(Z, Low,  PML_thickness, sigma_max));
+		sim.add_PML_layer(sim.make_pml(PML_thickness), X, High);
+		sim.add_PML_layer(sim.make_pml(PML_thickness), X, Low);
+		sim.add_PML_layer(sim.make_pml(PML_thickness), Y, High);
+		sim.add_PML_layer(sim.make_pml(PML_thickness), Y, Low);
+		sim.add_PML_layer(sim.make_pml(PML_thickness), Z, High);
+		sim.add_PML_layer(sim.make_pml(PML_thickness), Z, Low);
 	}
+	sim.add_sf_layer(sf_thickness);
+	sim.chunk_init();
 	
 	fin >> c;
 	if (c != '}')
@@ -80,7 +81,7 @@ Pole_Base* read_pole(istream& fin) {
 	return res;
 }
 
-Medium* read_medium(istream& fin) {
+Medium* read_medium(istream& fin, Simulation& sim) {
 	double er, sigma_e, ur, sigma_u;
 	Medium* res{nullptr};
 	char c;
@@ -90,7 +91,7 @@ Medium* read_medium(istream& fin) {
 		throw runtime_error("medium format is not right");
 	
 	fin >> er >> sigma_e >> ur >> sigma_u;
-	res = make_medium(er, sigma_e, ur, sigma_u);
+	res = sim.make_medium(er, sigma_e, ur, sigma_u);
 	
 	int n;
 	fin >> n;
@@ -117,21 +118,21 @@ void read_geometry(istream& fin, Simulation& sim, const vector<Medium*>& medium_
 		int idx1, idx2;
 		string filename;
 		fin >> idx1 >> idx2 >> filename;
-		sim.add_solid(make_solid(medium_gather[idx1], medium_gather[idx2], filename));
+		sim.add_solid(sim.make_solid(medium_gather[idx1], medium_gather[idx2], filename));
 	}
 	
 	if (type == "sphere") {
 		int idx;
 		double radius, x, y, z;
 		fin >> idx >> radius >> x >> y >> z;
-		sim.add_solid(make_solid(medium_gather[idx], make_sphere(fVec3{x, y, z}, radius)));
+		sim.add_solid(sim.make_solid(medium_gather[idx], sim.make_sphere(fVec3{x, y, z}, radius)));
 	}
 
 	if (type == "box") {
 		int idx;
 		double x0, y0, z0, x1, y1, z1;
 		fin >> idx >> x0 >> y0 >> z0 >> x1 >> y1 >> z1;
-		sim.add_solid(make_solid(medium_gather[idx], make_box(fVec3{ x0, y0, z0 }, fVec3{ x1, y1, z1 })));
+		sim.add_solid(sim.make_solid(medium_gather[idx], sim.make_box(fVec3{ x0, y0, z0 }, fVec3{ x1, y1, z1 })));
 	}
 	
 	fin >> c;
@@ -150,20 +151,17 @@ void read_source(istream& fin, Simulation& sim) {
 		throw runtime_error("medium format is not right");
 	
 	fin >> type;
-	if (type == "eigen") {
+	if (type == "plane") {
 		fin >> n >> fp >> d;
 		
 		Medium const* bg_medium = sim.get_bg_medium();
 		Plane_Wave projector(sim.get_dx(), sim.get_dt(), n);
-		auto ricker_source = Rickerwavelet_Func(fp, d);
-		auto sin_source = Sinuosuidal_Func(fp, d);
 		
-		double sigma_max = PML::optimal_sigma_max(3, sim.get_dx(), bg_medium->get_e_inf(), bg_medium->get_u_inf());
 		projector.set_medium(bg_medium->get_e_inf(), bg_medium->get_u_inf());
-		projector.set_PML(PML(Direction::Z, High, 6, sigma_max));
-		projector.set_excitation(ricker_source.get_functor());
+		projector.set_PML(PML(6, 0.8 * 4 / (sim.get_dx() * z0), 1, 0, 3, 1));
+		projector.set_excitation(make_ricker_func(fp, d));
 		
-		sim.add_source(new Eigen_Source(projector));
+		sim.add_inc_source(new Inc_Source(projector));
 	}
 	
 	if (type == "dipole") {
@@ -177,11 +175,7 @@ void read_source(istream& fin, Simulation& sim) {
 		dipole_file >> n;
 		for (int i = 0; i < n; ++i) {
 			dipole_file >> x >> y >> z >> amp >> fp >> d >> ctype;
-			auto ricker_source = Rickerwavelet_Func(fp, d);
-			auto sin_source = Sinuosuidal_Func(fp, d);
-			
-			GriddedInterp interp({1, 1, 1}, {x, y, z}, {0, 0, 0}, {amp});
-			sim.add_source(new Current_Source(interp, ricker_source.get_functor(), (Coord_Type)ctype));
+			sim.add_dipole(amp, {x, y, z}, (Coord_Type)ctype, make_ricker_func(fp, d));
 		}
 	}
 	
@@ -190,6 +184,7 @@ void read_source(istream& fin, Simulation& sim) {
 		throw runtime_error("medium format is not right");
 }
 
+vector<Nearfield_Probe const*> nearfield_probes;
 void read_nearfield_probe(istream& fin, Simulation& sim) {
 	int n;
 	double x, y, z, freq;
@@ -197,38 +192,56 @@ void read_nearfield_probe(istream& fin, Simulation& sim) {
 	fin >> n;
 	for (int i = 0; i < n; ++i) {
 		fin >> x >> y >> z >> freq;
-		sim.add_nearfield_probe(freq, {x, y, z});
+		nearfield_probes.push_back(sim.add_nearfield_probe(freq, {x, y, z}));
 	}
 }
 
-void read_farfield_probe(istream& fin, Simulation& sim) {
+vector<fVec3> farfield_pos;
+vector<double> farfield_freq;
+
+N2F_Box const* read_farfield_probe(istream& fin, Simulation& sim) {
 	int n;
+	fVec3 p1, p2;
 	double th, phi, rho, freq;
 	
+	fin >> p1.x >> p1.y >> p1.z;
+	fin >> p2.x >> p2.y >> p2.z;
 	fin >> n;
 	for (int i = 0; i < n; ++i) {
 		fin >> th >> phi >> rho >> freq;
-		sim.add_farfield_probe(freq, {th, phi, rho});
+		farfield_pos.emplace_back(th, phi, rho);
+		farfield_freq.push_back(freq);
 	}
+	
+	return sim.add_n2f_box(p1, p2, farfield_freq);
 }
 
-void read_c_scat(istream& fin, Simulation& sim) {
+vector<double> flux_freq;
+Flux_Box const* read_flux(istream& fin, Simulation& sim) {
 	int n;
+	fVec3 p1, p2;
+	real_arr freq_list;
+	
+	fin >> p1.x >> p1.y >> p1.z;
+	fin >> p2.x >> p2.y >> p2.z;
 	fin >> n;
 	for(int i = 0; i < n; ++i) {
 		double freq;
 		fin >> freq;
-		sim.add_c_scat_freq(freq);
+		flux_freq.push_back(freq);
 	}
+	
+	return sim.add_flux_box(p1, p2, flux_freq);
 }
 
 int main(int argc, char const *argv[]) {
 	auto start = std::chrono::system_clock::now();
-	set_num_proc(thread::hardware_concurrency());
+	size_t num_threads = thread::hardware_concurrency();
+	set_num_proc(num_threads);
 
 	int time_step;
 	Simulation sim;
-	sim.set_num_proc(glob_barrier->get_num_proc());
+	sim.set_num_proc(num_threads);
 
 	vector<Medium*> medium_gather;
 	fstream fin{"config.in", ios::in};
@@ -244,9 +257,11 @@ int main(int argc, char const *argv[]) {
 	fstream nearfield_input_file;
 	fstream farfield_input_file;
 	fstream farfield_output_file;
+	fstream flux_output_file;
+	fstream flux_input_file;
 	
-	fstream c_scat_output_file;
-	fstream c_scat_input_file;
+	Flux_Box const* flux_box{nullptr};
+	N2F_Box const* n2f_box{nullptr};
 	
 	string field;
 	fin >> field;
@@ -255,6 +270,7 @@ int main(int argc, char const *argv[]) {
 		if (field == "basic") {
 			time_step = read_basic_config(fin, sim);
 			assigned = true;
+			cout << field << " Complete \n";
 		}
 		
 		if (field == "medium") {
@@ -263,10 +279,11 @@ int main(int argc, char const *argv[]) {
 			fin >> n >> c;
 			
 			for(int i = 0; i < n; ++i)
-				medium_gather.push_back(read_medium(fin));
+				medium_gather.push_back(read_medium(fin, sim));
 			assigned = true;
-			
 			fin >> c;
+			
+			cout << field << " Complete \n";
 		}
 		
 		if (field == "geometry") {
@@ -279,6 +296,8 @@ int main(int argc, char const *argv[]) {
 			assigned = true;
 			
 			fin >> c;
+			
+			cout << field << " Complete \n";
 		}
 		
 		if (field == "source") {
@@ -291,9 +310,11 @@ int main(int argc, char const *argv[]) {
 			assigned = true;
 			
 			fin >> c;
+			
+			cout << field << " Complete \n";
 		}
 		
-		if (field == "probe") {
+		if (field == "nearfield") {
 			string filename;
 			fin >> filename;
 			nearfield_input_file = fstream{filename, ios::in};
@@ -302,6 +323,8 @@ int main(int argc, char const *argv[]) {
 			read_nearfield_probe(nearfield_input_file, sim);
 			
 			assigned = true;
+			
+			cout << field << " Complete \n";
 		}
 		
 		if (field == "farfield") {
@@ -310,21 +333,34 @@ int main(int argc, char const *argv[]) {
 			farfield_input_file = fstream{filename, ios::in};
 			fin >> filename;
 			farfield_output_file = fstream{filename, ios::out};
-			read_farfield_probe(farfield_input_file, sim);
+			n2f_box = read_farfield_probe(farfield_input_file, sim);
 			
 			assigned = true;
+			
+			cout << field << " Complete \n";
 		}
 		
-		if (field == "c_scat") {
+		if (field == "flux") {
 			string filename;
 			fin >> filename;
-			c_scat_input_file = fstream{filename, ios::in};
+			flux_input_file = fstream{filename, ios::in};
 			fin >> filename;
-			c_scat_output_file = fstream{filename, ios::out};
-			read_c_scat(c_scat_input_file, sim);
+			flux_output_file = fstream{filename, ios::out};
+			flux_box = read_flux(flux_input_file, sim);
 			
 			assigned = true;
+			
+			cout << field << " Complete \n";
 		}
+		
+		if (field == "Stop_Step_Output") {
+			sim.output_step_number = false;
+			
+			assigned = true;
+			
+			cout << field << "\n";
+		}
+		
 		
 		if (!assigned)
 			break;
@@ -339,9 +375,24 @@ int main(int argc, char const *argv[]) {
 	}
 	
 	sim.udf_output();
-	sim.output_nearfield(nearfield_output_file);
-	sim.output_farfield(farfield_output_file);
-	sim.output_c_scat(c_scat_output_file);
+	
+	if (n2f_box) {
+		n2f_box->prepare();
+		for(int i = 0; i < farfield_pos.size(); ++i) {
+			auto pos = farfield_pos[i];
+			n2f_box->output(farfield_output_file, pos.x, pos.y, pos.z, farfield_freq[i]);
+		}
+	}
+	
+	for (auto item : nearfield_probes) {
+		item->output(nearfield_output_file);
+	}
+	
+	if (flux_box) {
+		auto res = flux_box->get();
+		for(auto item : res)
+			flux_output_file << item << "\n";
+	}
 
 	auto end = std::chrono::system_clock::now();
 	std::chrono::duration<double> elapsed_seconds = end-start;

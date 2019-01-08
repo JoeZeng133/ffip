@@ -38,9 +38,10 @@ while (itr < max_itr)
     fprintf(fileID, "basic {\n");
     fprintf(fileID, "%e %e\n", dt, dx);
     fprintf(fileID, "%d %d %d\n", dim);
+    fprintf(fileID, "%d\n", 1);
+    fprintf(fileID, "%d\n", PMl_d);
     fprintf(fileID, "%d\n", time_step);
     fprintf(fileID, "%e %e\n", er_bg, ur_bg);
-    fprintf(fileID, "%d\n", PMl_d);
     fprintf(fileID, "}\n");
 
     % medium configuration
@@ -67,19 +68,22 @@ while (itr < max_itr)
     % plane wave source
     fprintf(fileID, "source 1 {\n");
     fprintf(fileID, "{ ");
-    fprintf(fileID, "eigen %d %e %e", dim(3), fp, delay);
+    fprintf(fileID, "plane %d %e %e", dim(3), fp, delay);
     fprintf(fileID, " }\n");
     fprintf(fileID, "}\n");
-
+    
+    % no step number output
+    fprintf(fileID, 'Stop_Step_Output\n');
+    
     % probes
     file_probes_output_forward = 'forward_output.out';
-    fprintf(fileID, "probe %s %s\n", file_probes_input_forward, file_probes_output_forward);
+    fprintf(fileID, "nearfield %s %s\n", file_probes_input_forward, file_probes_output_forward);
     fclose(fileID);
 
     save("forward_results");
     disp('forward simulation configuration complete');
     % forward simulation results
-    !std_config.exe
+    !./std_config
     data = load(file_probes_output_forward);
 
     E_forward = [make_complex(data(:, 1), data(:, 2)), make_complex(data(:, 3), data(:, 4)), make_complex(data(:, 5), data(:, 6))];
@@ -127,9 +131,10 @@ while (itr < max_itr)
     fprintf(fileID, "basic {\n");
     fprintf(fileID, "%e %e\n", dt, dx);
     fprintf(fileID, "%d %d %d\n", dim);
+    fprintf(fileID, "%d\n", 0);
+    fprintf(fileID, "%d\n", PMl_d);
     fprintf(fileID, "%d\n", time_step);
     fprintf(fileID, "%e %e\n", er_bg, ur_bg);
-    fprintf(fileID, "%d\n", PMl_d);
     fprintf(fileID, "}\n");
 
     % medium configuration
@@ -159,7 +164,10 @@ while (itr < max_itr)
     fprintf(fileID, "dipole %s", file_dipoles_adjoint);
     fprintf(fileID, " }\n");
     fprintf(fileID, "}\n");
-
+    
+    % no step number output
+    fprintf(fileID, 'Stop_Step_Output\n');
+    
     % probes
     file_probes_output_adjoint = 'adjoint_output.out';
     fprintf(fileID, "probe %s %s\n", file_probes_input_forward, file_probes_output_adjoint );
@@ -167,7 +175,7 @@ while (itr < max_itr)
 
     disp('adjoint simulation configuration complete');
     % adjoint fields
-    !std_config.exe
+    !./std_config
     data = load(file_probes_output_adjoint);
     E_adjoint = [make_complex(data(:, 1), data(:, 2)), make_complex(data(:, 3), data(:, 4)), make_complex(data(:, 5), data(:, 6))];
     H_adjoint = [make_complex(data(:, 7), data(:, 8)), make_complex(data(:, 9), data(:, 10)), make_complex(data(:, 11), data(:, 12))];
@@ -204,7 +212,7 @@ while (itr < max_itr)
     % updates
     rho = reshape(delta_rho, size(rho)) + rho;
     disp('updated');
-    if (mod(itr - 1, 3) == 0)
+    if (mod(itr - 1, 1) == 0)
         figure
         pcolor(rho)
         colorbar

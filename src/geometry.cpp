@@ -186,19 +186,6 @@ namespace ffip {
 		}
 	}
 	
-	/* geometry factory */
-	std::vector<Inhomogeneous_Box*> inhom_box_holder;
-	std::vector<Homogeneous_Object*> hom_box_holder;
-	std::vector<Primitive*> primitive_holder;
 	
-	Solid const* make_solid(Medium const* m1, Medium const*  m2, const std::string& filename) {
-		inhom_box_holder.push_back(new Inhomogeneous_Box{m1, m2, filename});
-		return inhom_box_holder.back();
-	}
-	
-	Solid const* make_solid(Medium const* m, const Geometry_Node& geom) {
-		hom_box_holder.push_back(new Homogeneous_Object{m, geom});
-		return hom_box_holder.back();
-	}
 }
 

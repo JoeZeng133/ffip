@@ -5,47 +5,101 @@
 
 
 namespace ffip {
+	class Inc_Internal;
+	class Dipole;
+	
 	class Chunk {
+		/* constructor, indexing and field accessing members*/
+	private:
+		size_t ch_jump_x, ch_jump_y, ch_jump_z;
+		iVec3 ch_dim, ch_p1, ch_p2, ch_origin, sim_p1, sim_p2;
+		size_t jumps[8];
+		int num_ones[8];
+		real dx, dt;
+		
+	public:
+		Chunk(const iVec3& _sim_p1, const iVec3& _sim_p2, const iVec3& _ch_p1, const iVec3& _ch_p2, real _dx, real _dt);
+		//thread safe access at physical coordinates
+		real at(const fVec3& p, const Coord_Type ctype) const;
+		//thread safe access at float comp coord with ctype
+		real operator()(const fVec3& p, const Coord_Type ctype) const;
+		//thread safe access at integer comp coord with ctype
+		real operator()(const iVec3& p, const Coord_Type ctype) const;
+		//thread safe raw access
+		real operator()(const iVec3& p) const;
+		//thread safe indexing
+		real operator[](const size_t index) const;
+		/* average field according to bit patterns
+		 111 = average over 8 points
+		 110, 011, 101 = average over 4 points
+		 100, 001, 010 = average over 2 points
+		 000 = no average
+		 */
+		real ave(const int bit, const int index) const;
+		// helper function for averaging according to bit patterns
+		template<typename... Args>
+		real ave_helper(const int bit, const int index, const int jump, Args... args) const;
+		
+		
+		/* data storage and medium*/
 	private:
 		std::vector<real> eh;			//E(t), H(t - 0.5dt)
 		std::vector<real> eh1;			//E(t - dt), H(t - 1.5dt)
 		std::vector<real> jmd;			//Jd(t), M(t - 0.5dt)
+		std::vector<Dispersive_Field*> dispersive_field_chunk;	//for dispersive material only
+		std::vector<Medium_Ref const*> medium_chunk;			//place holder for medium_internal
 		
-		std::vector<Dispersive_Field*> dispersive_field_chunk;	//array of dispersive_field
-		std::vector<Medium_Ref const*> medium_chunk;				//place holder for medium_internal
+		static constexpr int MAX_NUM_POLES = 10;
+		std::vector<size_t> e_points[MAX_NUM_POLES];	//categorize points by number of poles
+		std::vector<size_t> m_points[MAX_NUM_POLES];	//used for better work schedule
 		
 		/* PML members*/
-		std::vector<PML_Point> e_PML, h_PML;
+	private:
+		std::vector<PML_Point> e_PML, m_PML;
 		std::vector<real> kx, ky, kz;
-		
-		/* Coordinate Members*/
-		size_t ch_jump_x, ch_jump_y, ch_jump_z;
-		iVec3 ch_dim, ch_p1, ch_p2, ch_origin, sim_p1, sim_p2;
-		
-		/* counts how many ones in a bit pattern*/
-		int num_ones[8];
-		
-		/* source */
-		std::vector<Source_Internal*> source_list;				//
-		real dx, dt;
-
-		/* Concurrency members*/
-		size_t num_proc{ 1 };
 	public:
-		//given start, end domain_comp coord and initialize an empty Chunk
-		Chunk(const iVec3& _sim_p1, const iVec3& _sim_p2, const iVec3& _ch_p1, const iVec3& _ch_p2, real _dx, real _dt);
-		void set_medium_point(const iVec3& point, Medium_Ref const* medium_internal);
-		void add_source_internal(Source_Internal* const source);
+		// concurrent PML points update
+		void PML_update_helper(std::vector<PML_Point>& PML, const size_t rank);
+		// PML layer initializations
 		void PML_init(const real_arr& kx, const real_arr& ky, const real_arr& kz,
 					  const real_arr& bx, const real_arr& by, const real_arr& bz,
-					  const real_arr& cx, const real_arr&cy, const real_arr&cz);		//provide with PML parameters in the entire simulation
-		//getters
+					  const real_arr& cx, const real_arr&cy, const real_arr&cz);
+		
+		/* dipole sources*/
+	private:
+		std::vector<std::unique_ptr<Dipole>> e_dipoles_list;
+		std::vector<std::unique_ptr<Dipole>> m_dipoles_list;
+	
+		/* incident waves */
+	private:
+		std::vector<std::unique_ptr<Inc_Internal>> inc_list;
+		
+		/* concurrency members*/
+	private:
+		Barrier* barrier{ new Barrier{ 1 } };
+		size_t num_proc{ 1 };
+	public:
+		void set_num_proc(size_t _num_proc);
+		void categorize_points();
+		
+		
+		/* called by Simulation */
+	public:
+		// set medium to a specific point
+		void set_medium_point(const iVec3& point, Medium_Ref const* medium_internal);
+		// add an incident wave source
+		void add_inc_internal(Inc_Internal* source);
+		// add dipoles
+		void add_dipoles(Dipole* dipole);
+		
+		/* getters */
+	public:
+		// get index jump in T direction
 		template<typename T>
 		const size_t get_ch_jump() const;
-		
+		// get k_T for updating curl
 		template<typename T>
 		const real get_k(const int id) const;
-		
 		real get_dt() const;
 		real get_dx() const;
 		iVec3 get_dim() const;
@@ -54,6 +108,8 @@ namespace ffip {
 		iVec3 get_p2() const;
 		size_t get_index_ch(const iVec3& p) const;			//get index relative to chunk origin
 		
+		/* update members*/
+	public:
 		/* Jd, Md (currenst, curl) updates
 		  D(n + 1) - D(n) = Jd(n + 0.5) = curl(H(n + 0.5)) - Ji(n + 0.5)
 		  B(n + 1) - B(n) = Md(n + 0.5) = -(curl(E(n + 0.5)) + Mi(n + 0.5))
@@ -62,69 +118,32 @@ namespace ffip {
 		void update_Md(const real time, const size_t rank);		//curl E
 		template<typename T>
 		void update_JMd_helper(const iVec3 p1, const iVec3 p2, const size_t rank);	//helper function for calculating curl
-
-		void update_e_PML(const size_t rank);									//PML electric points update
-		void update_m_PML(const size_t rank);									//PML magnetic points update
-		void PML_update_helper(std::vector<PML_Point>& PML, const size_t rank);	//PML update helper
-
-		void update_e_source(const real time, const size_t rank);				//electric current source update
-		void update_m_source(const real time, const size_t rank);				//magnetic current source update
-
-		
 		/* Material updates */
 		void update_D2E(const real time, const size_t rank);
 		void update_B2H(const real time, const size_t rank);
 		void update_DEHB_helper(const Coord_Type F, const iVec3 p1, const iVec3 p2, const size_t rank);
 		
+		void update_D2E_v2(const real time, const size_t rank);
+		void update_B2H_v2(const real time, const size_t rank);
+		
 		/* MPI updates of the boundary */
-		void update_padded_H(const real time);
-		void update_padded_E(const real time);
+		void update_ghost_H(const real time);
+		void update_ghost_E(const real time);
 		
-		/* field access functions*/
-		real at(const fVec3& p, const Coord_Type ctype) const;					//access at float physical coordinates
-		
-		/* field access at computation coordinates*/
-		real operator()(const fVec3& p, const Coord_Type ctype) const;		//access at float computation coordinates
-		real operator()(const iVec3& p, const Coord_Type ctype) const;		//access at integer computation coordinates
-		real operator()(const iVec3& p) const;								//raw access
-		real operator[](const size_t index) const;							//raw index access
-		
-		/* average field according to bit patterns
-		 111 = average over 8 points
-		 110, 011, 101 = average over 4 points
-		 100, 001, 010 = average over 2 points
-		 000 = no average
-		 take advantage of generic programming to efficiently compute the average without too much overhead
-		 */
-		template<typename... Args>
-		real ave_helper(const int bit, const int index, const int jump, Args... args) const{
-			constexpr int bit_N =1 << sizeof...(Args);
-			if(bit & bit_N) {
-				return ave_helper(bit, index + jump, args...) + ave_helper(bit, index - jump, args...);
-			}else {
-				return ave_helper(bit, index, args...);
-			}
-		}
-		
-		real ave(const int bit, const int index) const;
-
-		/* interpolation helper functions*/
-		real interp_helper(const real* data, const real w) const;
-
-		template<typename... Args>
-		real interp_helper(const real* data, const real w, Args... args) const{
-			constexpr int N = sizeof...(Args);
-			constexpr int shift = 1 << N;
-
-			return interp_helper(data, args...) * (1 - w) + interp_helper(data + shift, args...) * w;
-		}
-
-		/* concurrency members*/
-		void set_num_proc(size_t _num_proc);
-
 		/* miscellaneous*/
+	public:
 		real measure() const;
 	};
+	
+	template<typename... Args>
+	real Chunk::ave_helper(const int bit, const int index, const int jump, Args... args) const{
+		constexpr int bit_N =1 << sizeof...(Args);
+		if(bit & bit_N) {
+			return ave_helper(bit, index + jump, args...) + ave_helper(bit, index - jump, args...);
+		}else {
+			return ave_helper(bit, index, args...);
+		}
+	}
 	
 	template<typename T>
 	void Chunk::update_JMd_helper(const iVec3 p1, const iVec3 p2, const size_t rank) {

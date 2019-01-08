@@ -2,26 +2,65 @@
 #include <iostream>
 
 namespace ffip {
-	Simulation::Simulation(const real _dx, const real _dt, const iVec3 _dim): dt(_dt), dx(_dx), sim_dim(_dim) {}
-	
 	void Simulation::setup(const real _dx, const real _dt, const iVec3 _dim) {
 		dx = _dx;
 		dt = _dt;
 		sim_dim = _dim;
 	}
-
-	void Simulation::probe_init() {
-		for(int i = 0; i < NF_freq.size(); ++i)
-			probes.push_back(new Nearfield_Probe(NF_freq[i], NF_pos[i], chunk));
+	
+	void Simulation::add_sf_layer(const int d) {
+		sf_depth = d;
 	}
 	
-
-	void Simulation::N2F_init() {
-		if (!N2F_pos.empty())
-			n2f_box = new N2F_Box(N2F_p1, N2F_p2, N2F_omega, chunk, bg_medium->get_c());
+	void Simulation::add_PML_layer(const PML& pml, const Direction dir, const Side side) {
+		if (side > 0)
+			PMLs[dir][1] = pml;
+		else
+			PMLs[dir][0] = pml;
+	}
+	
+	void Simulation::add_inc_source(Inc_Source* source) {
+		Inc_Sources.push_back(source);
+	}
+	
+	void Simulation::chunk_init() {
+		//dimension is in computational units, so they are two times the original values
+		sim_dim = sim_dim * 2;
 		
-		if (!c_scat_omega.empty())
-			scat_flux_box = new Flux_Box(N2F_p1, N2F_p2, c_scat_omega, chunk);
+		sim_p1 = {0, 0, 0};
+		sim_p2 = sim_dim;
+		
+		//scattered field region
+		if (sf_depth) {
+			tf_p1 = sim_p1;
+			tf_p2 = sim_p2;
+			sim_p1 = sim_p1 - 2 * iVec3{ sf_depth, sf_depth, sf_depth };
+			sim_p2 = sim_p2 + 2 * iVec3{ sf_depth, sf_depth, sf_depth };
+		}
+		
+		//add PML layers
+		sim_p1.x -= 2 * PMLs[0][0].get_d();
+		sim_p1.y -= 2 * PMLs[1][0].get_d();
+		sim_p1.z -= 2 * PMLs[2][0].get_d();
+		
+		sim_p2.x += 2 * PMLs[0][1].get_d();
+		sim_p2.y += 2 * PMLs[1][1].get_d();
+		sim_p2.z += 2 * PMLs[2][1].get_d();
+		
+		//implementaions of MPI, for now 1 chunk covers the whole region
+		chunk = new Chunk{sim_p1, sim_p2, sim_p1, sim_p2, dx, dt};
+		ch_p1 = chunk->get_p1();
+		ch_p2 = chunk->get_p2();
+		chunk->set_num_proc(num_proc);
+	}
+	
+	void Simulation::add_dipole(const real amp, const fVec3 pos, const Coord_Type ctype, const std::function<real (const real)> &profile) {
+		chunk->add_dipoles(new Dipole(pos * (2 / dx), amp / (dx * dx * dx), profile, ctype, chunk));
+	}
+	
+	void Simulation::set_background_medium(Medium const*  m) {
+		if (m)
+			bg_medium = m;
 	}
 
 	void Simulation::medium_init() {
@@ -44,7 +83,7 @@ namespace ffip {
 				auto p = itr.get_vec();
 				auto ctype = p.get_type();
 				
-				if (!is_H_point(ctype) && !is_E_point(ctype))			//exclude non-material points
+				if (!is_M_point(ctype) && !is_E_point(ctype))			//exclude non-material points
 					continue;
 				
 				/* staire case implementation
@@ -85,32 +124,22 @@ namespace ffip {
 						weights[bg_medium->index] += 1;
 				}
 				
-				if (is_E_point(ctype))
-					chunk->set_medium_point(p, get_medium_ref(1, weights));
-				else
-					chunk->set_medium_point(p, get_medium_ref(0, weights));
+				chunk->set_medium_point(p, get_medium_ref(ctype, weights));
 			}
 		};
 		
-		std::vector<std::thread> threads;
+		std::vector<std::future<void>> task_list;
 		for(int i = 1; i < num_proc; ++i)
-			threads.push_back(std::thread{func, my_iterator(ch_p1, ch_p2, Null, i, num_proc)});
-		
+			task_list.push_back(std::async(std::launch::async, func, my_iterator(ch_p1, ch_p2, Null, i, num_proc)));
 		func(my_iterator(ch_p1, ch_p2, Null, 0, num_proc));
-		
-		for(auto& item : threads)
-			item.join();
+		for(auto& item : task_list)
+			item.get();
 	}
 	
 	void Simulation::source_init() {
-		for(auto item : current_sources) {
-			item->init(dx, ch_p1, ch_p2, chunk->get_dim(), chunk->get_origin());
-			chunk->add_source_internal(item->get_source_internal());
-		}
-		
-		for(auto item : eigen_sources) {
+		for(auto item : Inc_Sources) {
 			item->init(tf_p1, tf_p2, chunk->get_dim(), chunk->get_origin(), ch_p1, ch_p2, dx);
-			chunk->add_source_internal(item->get_source_internal());
+			chunk->add_inc_internal(item->get_source_internal());
 		}
 	}
 	
@@ -146,140 +175,94 @@ namespace ffip {
 		}
 	}
 	
-	void Simulation::chunk_init() {
-		//dimension is in computational units, so they are two times the original values
-		sim_dim = sim_dim * 2;
-		
-		sim_p1 = {0, 0, 0};
-		sim_p2 = sim_dim;
-		
-		//add TFSF faces
-		if (!eigen_sources.empty()) {
-			tf_p1 = sim_p1;
-			tf_p2 = sim_p2;
-			sim_p1 = sim_p1 - iVec3{ 1, 1, 1 };
-			sim_p2 = sim_p2 + iVec3{ 1, 1, 1 };
-		}
-
-		//implementations of N2F faces
-		if (!N2F_omega.empty() || !c_scat_omega.empty()) {
-			N2F_p1 = sim_p1 - fVec3{ 1, 1, 1 };
-			N2F_p2 = sim_p2 + fVec3{ 1, 1, 1 };
-			
-			sim_p1 = sim_p1 - iVec3{ 2, 2, 2 };
-			sim_p2 = sim_p2 + iVec3{ 2, 2, 2 };
-		}
-
-		//add PML layers
-		sim_p1.x -= 2 * PMLs[0][0].get_d();
-		sim_p1.y -= 2 * PMLs[1][0].get_d();
-		sim_p1.z -= 2 * PMLs[2][0].get_d();
-		
-		sim_p2.x += 2 * PMLs[0][1].get_d();
-		sim_p2.y += 2 * PMLs[1][1].get_d();
-		sim_p2.z += 2 * PMLs[2][1].get_d();
-
-		//implementaions of MPI, for now 1 chunk covers the whole region
-		chunk = new Chunk{sim_p1, sim_p2, sim_p1, sim_p2, dx, dt};
-		ch_p1 = chunk->get_p1();
-		ch_p2 = chunk->get_p2();
-
-		chunk->set_num_proc(num_proc);
-	}
-	
 	void Simulation::set_num_proc(const int _num_proc) {
 		num_proc = _num_proc;
+		delete barrier;
+		barrier = new Barrier(num_proc);
 	}
 	
 	void Simulation::init() {
-		chunk_init();
 		PML_init();
 		source_init();
 		medium_init();
-		N2F_init();
-		probe_init();
 		udf_unit();
+		chunk->categorize_points();
 		step = 0;
 		std::cout << "Initialization Complete\n";
-	}
-	
-	void Simulation::add_source(Source *source) {
-		auto current_cast = dynamic_cast<Current_Source*>(source);
-		if (current_cast) current_sources.push_back(current_cast);
-		
-		auto eigen_cast = dynamic_cast<Eigen_Source*>(source);
-		if (eigen_cast) eigen_sources.push_back(eigen_cast);
 	}
 	
 	void Simulation::add_solid(Solid const* solid) {
 		solids.push_back(solid);
 	}
-	
-	void Simulation::add_PML_layer(PML *PML) {
-		if (PML->get_side() > 0)
-			PMLs[PML->get_dir()][1] = *PML;
-		else
-			PMLs[PML->get_dir()][0] = *PML;
-	}
-	
-	void Simulation::set_background_medium(Medium const*  m) {
-		if (m)
-			bg_medium = m;
-	}
 
-	void Simulation::add_nearfield_probe(const real freq, const fVec3& v) {
-		NF_pos.push_back(v);
-		NF_freq.push_back(freq);
-	}
-
-	void Simulation::add_farfield_probe(const real freq, const fVec3& pos) {
-		N2F_omega.push_back(2 * pi * freq);
-		N2F_pos.push_back(pos);
+	Nearfield_Probe const* Simulation::add_nearfield_probe(const real freq, fVec3 pos) {
+		pos = pos * (2 / dx);
+		if (!Is_Inside_Box(ch_p1, ch_p2, pos))
+			throw Out_of_the_Domain{};
+		
+		auto res = new Nearfield_Probe{freq, pos, chunk};
+		nearfield_probes.push_back(std::unique_ptr<Nearfield_Probe>{res});
+		return res;
 	}
 	
-	void Simulation::add_c_scat_freq(const real freq) {
-		c_scat_omega.push_back(2 * pi * freq);
+	Flux_Box const* Simulation::add_flux_box(fVec3 p1, fVec3 p2, const real_arr& freq) {
+		p1 = p1 * (2 / dx);
+		p2 = p2 * (2 / dx);
+		if (!Is_Inside_Box(ch_p1, ch_p2, p1) || !Is_Inside_Box(ch_p1, ch_p2, p2))
+			throw Out_of_the_Domain{};
+		
+		auto res = new Flux_Box(p1, p2, freq, chunk);
+		flux_boxes.push_back(std::unique_ptr<Flux_Box>{res});
+		return res;
+	}
+	
+	N2F_Box const* Simulation::add_n2f_box(fVec3 p1, fVec3 p2, const real_arr& freq) {
+		p1 = p1 * (2 / dx);
+		p2 = p2 * (2 / dx);
+		if (!Is_Inside_Box(ch_p1, ch_p2, p1) || !Is_Inside_Box(ch_p1, ch_p2, p2))
+			throw Out_of_the_Domain{};
+		
+		auto res = new N2F_Box(p1, p2, freq, chunk, bg_medium->get_c(), bg_medium->get_z());
+		n2f_boxes.push_back(std::unique_ptr<N2F_Box>{res});
+		return res;
+	}
+	
+	PML Simulation::make_pml(const int d) {
+		return PML(d, 0.8 * 4 / (dx * bg_medium->get_z()), 7, 0, 3, 1);
 	}
 	
 	void Simulation::advance(std::ostream& os) {
-		std::cout << "\n" << std::setfill('0') << std::setw(4) << step;
+		if (output_step_number)
+			std::cout << "\n" << std::setfill('0') << std::setw(4) << step;
+		
 		real time = (step ++ ) * dt;
 		
 		auto func = [&, this](const int rank, const int num_proc) {
 			chunk->update_Md(time, rank);
-			glob_barrier->Sync();
-			chunk->update_m_PML(rank);
-			glob_barrier->Sync();
-			chunk->update_m_source(time, rank);
-			glob_barrier->Sync();
+			barrier->Sync();
 			chunk->update_B2H(time, rank);
-			glob_barrier->Sync();
+			barrier->Sync();
 
 			chunk->update_Jd(time + 0.5 * dt, rank);
-			glob_barrier->Sync();
-			chunk->update_e_PML(rank);
-			glob_barrier->Sync();
-			chunk->update_e_source(time + 0.5 * dt, rank);
-			glob_barrier->Sync();
+			barrier->Sync();
 			chunk->update_D2E(time + 0.5 * dt, rank);
-			glob_barrier->Sync();
+			barrier->Sync();
 
-			chunk->update_padded_E(time);
-			glob_barrier->Sync();
-			chunk->update_padded_H(time);
-			glob_barrier->Sync();
+//			chunk->update_ghost_E(time);
+//			glob_barrier->Sync();
+//			chunk->update_ghost_H(time);
+//			glob_barrier->Sync();
 
 			size_t idx1, idx2;
-			vector_divider(probes, rank, num_proc, idx1, idx2);
-			std::for_each(probes.begin() + idx1, probes.begin() + idx2, [this](Nearfield_Probe* item) {item->update(step); });
+			vector_divider(nearfield_probes, rank, num_proc, idx1, idx2);
+			for(auto itr = nearfield_probes.begin() + idx1; itr != nearfield_probes.begin() + idx2; ++itr)
+				(*itr)->update(step);
 			
-			if (n2f_box)
-				n2f_box->update(step, rank, num_proc);
+			for(auto& item : n2f_boxes)
+				item->update(step, rank, num_proc);
 			
-			if (scat_flux_box)
-				scat_flux_box->update(step, rank, num_proc);
-			
-			glob_barrier->Sync();
+			for(auto& item : flux_boxes)
+				item->update(step, rank, num_proc);
 		};
 		
 		std::vector<std::future<void>> task_list;
@@ -330,54 +313,6 @@ namespace ffip {
 		return bg_medium;
 	}
 	
-	void Simulation::output_nearfield(std::ostream &os) {
-		for(auto item : probes) {
-			item->output(os);
-		}
-	}
-	
-	void Simulation::output_farfield(std::ostream &os) {
-		if (n2f_box == nullptr) return;
-		n2f_box->prepare();
-
-		real imped = bg_medium->get_z();
-		os << std::scientific;
-
-		for (int i = 0; i < N2F_pos.size(); ++i) {
-			real omega = N2F_omega[i];
-			real k = omega / bg_medium->get_c();		//get the wavenumber
-			real th = N2F_pos[i].x;
-			real phi = N2F_pos[i].y;
-			real rho = N2F_pos[i].z;
-			fVec3 proj_th = {cos(th) * cos(phi), cos(th) * sin(phi), -sin(th)};
-			fVec3 proj_phi = {-sin(phi), cos(phi), 0};
-			Vec3<complex_num> N{0, 0, 0}, L{0, 0, 0};
-
-			auto tmp = n2f_box->get_NL(th, phi, omega);
-
-			complex_num Nth = inner_prod(proj_th, tmp.first);
-			complex_num Nphi = inner_prod(proj_phi, tmp.first);
-			complex_num Lth = inner_prod(proj_th, tmp.second);
-			complex_num Lphi = inner_prod(proj_phi, tmp.second);
-
-			complex_num arg = k / (4 * pi * rho) * complex_num{sin(k * rho), cos(k * rho)};
-			complex_num Eth = -(Lphi + imped * Nth) * arg;
-			complex_num Ephi = (Lth - imped * Nphi) * arg;
-			complex_num Hth = (Nphi - Lth / imped) * arg;
-			complex_num Hphi = -(Nth + Lphi / imped) * arg;
-
-			os << Eth << " " << Ephi << " " << Hth << " " << Hphi << std::endl;
-		}
-	}
-	
-	void Simulation::output_c_scat(std::ostream& os) {
-		if (scat_flux_box == nullptr) return;
-		auto res = scat_flux_box->get();
-		
-		for(auto item : res)
-			os << item << "\n";
-	}
-	
 	std::fstream os_tmp;
 	iVec3 tmp_p1, tmp_p2;
 	
@@ -400,6 +335,71 @@ namespace ffip {
 	}
 
 	void Simulation::udf_output() {
+	}
+	
+	
+	void Simulation::prepare_medium(const real _dt) {
+		for(auto& item : medium) {
+			item->set_dt(_dt);
+			e_medium_ref.push_back(std::make_unique<Medium_Ref>(item->get_e_medium_ref()));
+			m_medium_ref.push_back(std::make_unique<Medium_Ref>(item->get_m_medium_ref()));
+		}
+	}
+	
+	std::vector<real> Simulation::get_zero_weights() {
+		return std::vector<real>(medium.size(), 0);
+	}
+	
+	Medium_Ref const* Simulation::get_medium_ref(const Coord_Type ctype, const std::vector<real>& weights) {
+		
+		bool is_electric_point = is_E_point(ctype);
+		constexpr real tol = 1e-4;
+		int nonzeros = 0;
+		real total = 0;
+		Medium_Ref* res = nullptr;
+		auto& medium_ref = is_electric_point? e_medium_ref : m_medium_ref;
+		
+		if(weights.size() != medium.size())
+			throw std::runtime_error("Mixing numbers have wrong length");
+		
+		/* rounding down parameters*/
+		for(auto& x : weights) {
+			if(x > tol) {
+				nonzeros ++;
+				total += x;
+			}
+		}
+		
+		if(nonzeros > 1) {								//for the case of mixing more than 1 material
+			res = new Medium_Ref();
+			for(int i = 0; i < weights.size(); ++i)
+				if (weights[i] > tol) *res += *medium_ref[i] * (weights[i] / total);
+			
+			std::lock_guard<std::mutex> guard(medium_mutex);
+			syn_medium_ref.push_back(std::unique_ptr<Medium_Ref>(res));			//garbage collecting
+		}
+		else if (nonzeros == 1){						//for the case of only 1 material
+			for(int i = 0; i < weights.size(); ++i) {
+				if (weights[i] > tol) {
+					res = medium_ref[i].get();
+					break;
+				}
+			}
+		}
+		
+		if (res == nullptr)
+			throw std::runtime_error("Illegal weights");
+		return res;
+	}
+	
+	Solid const* Simulation::make_solid(Medium const* m1, Medium const*  m2, const std::string& filename) {
+		inhom_box_holder.push_back(std::make_unique<Inhomogeneous_Box>(m1, m2, filename));
+		return inhom_box_holder.back().get();
+	}
+	
+	Solid const* Simulation::make_solid(Medium const* m, const Geometry_Node& geom) {
+		hom_box_holder.push_back(std::make_unique<Homogeneous_Object>(m, geom));
+		return hom_box_holder.back().get();
 	}
 }
 

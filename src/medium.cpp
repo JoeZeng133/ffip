@@ -23,8 +23,8 @@ namespace ffip {
 			return (x - eh * d2) / d1;
 			
 		} else {					/* update current contributions*/
-			auto& pn = f2->jp;
-			auto& pn1 = f2->jp1;
+			auto& pn = f2->p;
+			auto& pn1 = f2->p1;
 			
 			real sum_J = 0;
 			for(int i = 0; i < pn.size(); ++i) {
@@ -133,26 +133,12 @@ namespace ffip {
 	}
 	
 	/* Deybe pole */
-	Deybe_Pole::Deybe_Pole(real rel_perm, real relaxation): epsilon(rel_perm), tau(relaxation) {}
-	
-	real Deybe_Pole::get_a1() const {
-		return (1 - 0.5 * dt / tau) / (1 + 0.5 * dt / tau);
-	}
-	
-	real Deybe_Pole::get_a2() const {
-		return 0;
-	}
-	
-	real Deybe_Pole::get_b0() const {
-		return epsilon / tau / (1 + 0.5 * dt / tau);
-	}
-	
-	real Deybe_Pole::get_b1() const {
-		return -get_b0();
-	}
-	
-	real Deybe_Pole::get_b2() const {
-		return 0;
+	Deybe_Pole::Deybe_Pole(real rel_perm, real relaxation) {
+		a0 = rel_perm;
+		a1 = 0;
+		b0 = 1;
+		b1 = relaxation;
+		b2 = 0;
 	}
 	
 	/* Drude pole*/
@@ -259,72 +245,6 @@ namespace ffip {
 			res.poles.push_back(pole);
 		}
 		
-		return res;
-	}
-	
-	
-	/* medium factory, needs to add garbage collecting for poles
-	  syn_medium_ref collects all synthesized medium references
-	 */
-	std::vector<std::unique_ptr<Medium>> medium;
-	std::vector<std::unique_ptr<Medium_Ref>> e_medium_ref;
-	std::vector<std::unique_ptr<Medium_Ref>> m_medium_ref;
-	std::vector<std::unique_ptr<Medium_Ref>> syn_medium_ref;
-	
-	void prepare_medium(const real _dt) {
-		for(auto& item : medium) {
-			item->set_dt(_dt);
-			e_medium_ref.push_back(std::make_unique<Medium_Ref>(item->get_e_medium_ref()));
-			m_medium_ref.push_back(std::make_unique<Medium_Ref>(item->get_m_medium_ref()));
-		}
-	}
-	
-	std::vector<real> get_zero_weights() {
-		return std::vector<real>(medium.size(), 0);
-	}
-	
-	Medium_Ref const* get_medium_ref(const bool is_electric_point, const std::vector<real>& weights) {
-		
-		constexpr real tol = 1e-4;
-		int nonzeros = 0;
-		real total = 0;
-		Medium_Ref* res = nullptr;
-		auto& medium_ref = is_electric_point? e_medium_ref : m_medium_ref;
-		
-		if(weights.size() != medium.size())
-			throw std::runtime_error("Mixing numbers have wrong length");
-		
-		/* rounding down parameters*/
-		for(auto& x : weights) {
-			if(x > tol) {
-				nonzeros ++;
-				total += x;
-			}
-		}
-		
-		if(nonzeros > 1) {								//for the case of mixing more than 1 material
-			res = new Medium_Ref();
-			for(int i = 0; i < weights.size(); ++i)
-				if (weights[i] > tol){
-					*res += *medium_ref[i] * (weights[i] / total);
-				}
-//			syn_medium_ref.push_back(std::unique_ptr<Medium_Ref>(res));			//garbage collecting
-		}
-		else if (nonzeros == 1){						//for the case of only 1 material
-			for(int i = 0; i < weights.size(); ++i) {
-				if (weights[i] > tol) {
-					res = medium_ref[i].get();
-					break;
-				}
-			}
-		}
-		
-		if (res == nullptr)
-			throw std::runtime_error("Illegal weights");
-		
-	/*	if (res->poles.size() == 0) {
-			throw std::runtime_error("It happened");
-		}*/
 		return res;
 	}
 }

@@ -45,28 +45,21 @@ namespace ffip {
 		~Lorentz_Pole() = default;
 	};
 	
-	struct Deybe_Pole : public Pole_Base{
-		real epsilon, tau;
+	struct Deybe_Pole : public CP_Pole{
 		
 		Deybe_Pole(real rel_perm, real relaxation);
 		~Deybe_Pole() = default;
-		
-		/* override functions*/
-		real get_a1() const override;
-		real get_a2() const override;
-		real get_b0() const override;
-		real get_b1() const override;
-		real get_b2() const override;
-		
 	};
 	
 	struct Drude_Pole : public CP_Pole{
+		
 		Drude_Pole(real freq, real inv_relaxation);
 		~Drude_Pole() = default;
 	};
 	
 	/* medium reference for use in actual computation
-	   it may hold information of several material allowing mixed material
+	   it holds a mixed bag of polarization information by pointers
+	 it can be added and multiplied to construct new material reference
 	 */
 	class Medium_Ref {
 	public:
@@ -76,9 +69,11 @@ namespace ffip {
 		real d1{0}, d2{0}, d3{0};
 	public:
 		Medium_Ref() = default;
-		Medium_Ref(const Medium_Ref&)= default;				//copy
+		//copiable
+		Medium_Ref(const Medium_Ref&)= default;
 		Medium_Ref& operator=(const Medium_Ref&) = default;
-		Medium_Ref(Medium_Ref&&) = default;					//move
+		//movable
+		Medium_Ref(Medium_Ref&&) = default;
 		Medium_Ref& operator=(Medium_Ref&&) = default;
 		
 		real update_field(real eh, real eh1, real norm_db, Dispersive_Field* f2) const;	//F(n) -> F(n+1), retunr F(n + 1), norm_jmd = jmd / e0
@@ -97,6 +92,7 @@ namespace ffip {
 	
 	Medium_Ref operator*(const real f, const Medium_Ref& A);
 	
+	/* Store medium information for */
 	class Medium {
 	private:
 		real e_inf{1}, sigma_e{0};
@@ -151,25 +147,5 @@ namespace ffip {
 		add_m_poles(pole);
 		add_m_poles(args...);
 	}
-	
-	/* medium factory */
-	extern std::vector<std::unique_ptr<Medium>> medium;
-	extern std::vector<std::unique_ptr<Medium_Ref>> e_medium_ref;
-	extern std::vector<std::unique_ptr<Medium_Ref>> m_medium_ref;
-	extern std::vector<std::unique_ptr<Medium_Ref>> syn_medium_ref;
-	
-	template<typename... Args>
-	Medium* make_medium(Args&&... args) {
-		size_t top = medium.size();
-	
-		medium.push_back(std::make_unique<Medium>(std::forward<Args>(args)...));
-		medium.back()->set_index(top);
-		return medium.back().get();
-	}
-	
-	Medium_Ref const* get_medium_ref(const bool is_electric_point, const std::vector<real>& weights);
-	std::vector<real> get_zero_weights();
-	void prepare_medium(const real _dt);
-	
 }
 

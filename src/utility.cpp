@@ -70,84 +70,30 @@ namespace ffip {
 		return static_cast<Coord_Type>(other ^ get_type());
 	}
 	
-	/* Gaussian functions */
-	Gaussian_Func::Gaussian_Func(real sigma_t, real _mu):mu(_mu) {
-		a = 0.5 / (sigma_t * sigma_t);
-	}
-	
-	Gaussian_Func::Gaussian_Func(real sigma_f) {
-		real sigma_t = 1 / (2 * pi) / sigma_f;
-		a = 0.5 / (sigma_t * sigma_t);
-	}
-	
-	void Gaussian_Func::set_dt(real _dt) {
-		dt = _dt;
-	}
-	
-	real Gaussian_Func::operator()(real time) const{
-		return exp(-a * time * time);
-	}
-	
-	real Gaussian_Func::operator[](int time) const{
-		return operator()(time * dt);
-	}
-	
-	auto Gaussian_Func::get_functor() -> std::function<real(const real)> const {
+	auto make_gaussian_func(real sigma_t, real d) -> std::function<real(const real)> {
+		real a = 0.5 / (sigma_t * sigma_t);
 		
-		return [a=this->a](const real time) -> real {
-			return exp(-a * time * time);
+		return [=](const real time) -> real {
+			return exp(-a * (time - d) * (time - d));
 		};
 	}
 	
-	/* Sinuosuidal Functions*/
-	Sinuosuidal_Func::Sinuosuidal_Func(real freq, real d): a(2 * pi * freq), phase(d / (2 * pi * freq)) {}
-	
-	real Sinuosuidal_Func::operator()(real time) const{
-		return sin(a * time - phase);
-	}
-	
-	real Sinuosuidal_Func::operator[](int time) const{
-		return operator()(time * dt);
-	}
-	
-	void Sinuosuidal_Func::set_dt(real _dt) {
-		dt = _dt;
-	}
-	
-	auto Sinuosuidal_Func::get_functor() -> std::function<real(const real)> const {
-		return [a = this->a, phase = this->phase](const real time) -> real {
-			return sin(a * time - phase);
+	auto make_sin_func(real freq, real d) -> std::function<real(const real)> {
+		real a = 2 * pi * freq;
+		
+		return [=](const real time) -> real {
+			return sin(a* (time - d));
 		};
 	}
 	
-	/* ricker wavelet function*/
-	Rickerwavelet_Func::Rickerwavelet_Func(real fp, real _d) {
-		a = (pi * fp) * (pi * fp);
-		d = _d;
-	}
-	
-	real Rickerwavelet_Func::operator()(real time) const{
-		real arg = a * (time - d) * (time - d);
-		//std::cout << "testing inside rickerwavelet function " << a  << " " << (time - d) << std::endl;
-		return (1 - 2 * arg) * exp(-arg);
-	}
-	
-	real Rickerwavelet_Func::operator[](int time) const{
-		return operator()(time * dt);
-	}
-	
-	void Rickerwavelet_Func::set_dt(real _dt) {
-		dt = _dt;
-	}
-	
-	auto Rickerwavelet_Func::get_functor() -> std::function<real(const real)> const {
-		return [a = this->a, d = this->d](const real time) -> real {
+	auto make_ricker_func(real fp, real d) -> std::function<real(const real)> {
+		real a = (pi * fp) * (pi * fp);
+		
+		return [=](const real time) -> real {
 			real arg = a * (time - d) * (time - d);
 			return (1 - 2 * arg) * exp(-arg);
 		};
 	}
-	
-	
 	
 	/* Gridded Interpolation class*/
 	GriddedInterp::GriddedInterp(string _file_name):file_name(_file_name) {
@@ -283,19 +229,8 @@ namespace ffip {
 	}
 	
 	/* PML */
-	PML::PML(Direction _dir, Side _side): dir(_dir), side(_side) {}
-	
-	PML::PML(Direction _dir, Side _side, int _d): d(_d), dir(_dir), side(_side) {}
-	
-	PML::PML(Direction _dir, Side _side, int _d, real _sigma_max): d(_d), sigma_max(_sigma_max), dir(_dir), side(_side) {}
-	
-	Direction PML::get_dir() const {
-		return dir;
-	}
-	
-	Side PML::get_side() const {
-		return side;
-	}
+	PML::PML(int _d, real _sigma_max): d(_d), sigma_max(_sigma_max) {}
+	PML::PML(int _d, real _sigma_max, real _k_max, real _a_max, real _m, real _m_a):d(_d), sigma_max(_sigma_max), k_max(_k_max), a_max(_a_max), m(_m), m_a(_m_a) {};
 	
 	int PML::get_d() const {
 		return d;
@@ -327,8 +262,12 @@ namespace ffip {
 	
 	Dispersive_Field::Dispersive_Field(const size_t num_poles) {
 		eh2 = 0;
-		jp.resize(num_poles, 0);
-		jp1.resize(num_poles, 0);
+		p.resize(num_poles, 0);
+		p1.resize(num_poles, 0);
+	}
+	
+	size_t Dispersive_Field::get_num_poles() const {
+		return p1.size();
 	}
 	
 	/* PML point constructor*/

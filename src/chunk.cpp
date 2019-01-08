@@ -16,6 +16,9 @@ namespace ffip {
 		medium_chunk.resize(eh.size(), nullptr);
 		dispersive_field_chunk.resize(eh.size(), nullptr);
 		
+		for (int i = 0; i < 8; ++i)
+			jumps[i] = (i & 1? ch_jump_x << 1 : 0) + (i & 2? ch_jump_y << 1 : 0) + (i & 4? ch_jump_z << 1 : 0);
+		
 		for(int i = 0; i < 8; ++i)
 			num_ones[i ^ 0b111] = 1 << (!(i & 1) + !(i & 2) + !(i & 4));
 	}
@@ -58,8 +61,16 @@ namespace ffip {
 		}
 	}
 	
-	void Chunk::add_source_internal(Source_Internal *const source) {
-		source_list.push_back(source);
+	void Chunk::add_dipoles(Dipole *dipole) {
+		if (is_E_point(dipole->get_ctype()))
+			e_dipoles_list.push_back(std::unique_ptr<Dipole>(dipole));
+		else
+			m_dipoles_list.push_back(std::unique_ptr<Dipole>(dipole));
+	}
+
+	
+	void Chunk::add_inc_internal(Inc_Internal* source) {
+		inc_list.push_back(std::unique_ptr<Inc_Internal>(source));
 	}
 	
 	template<>
@@ -118,7 +129,7 @@ namespace ffip {
 						break;
 						
 					case Hx :
-						h_PML.push_back(PML_Point(index, ch_jump_y, ch_jump_z, by[itr_sim.y], bz[itr_sim.z], cy[itr_sim.y], cz[itr_sim.z]));
+						m_PML.push_back(PML_Point(index, ch_jump_y, ch_jump_z, by[itr_sim.y], bz[itr_sim.z], cy[itr_sim.y], cz[itr_sim.z]));
 						break;
 						
 					case Ey :
@@ -126,7 +137,7 @@ namespace ffip {
 						break;
 						
 					case Hy :
-						h_PML.push_back(PML_Point(index, ch_jump_z, ch_jump_x, bz[itr_sim.z], bx[itr_sim.x], cz[itr_sim.z], cx[itr_sim.x]));
+						m_PML.push_back(PML_Point(index, ch_jump_z, ch_jump_x, bz[itr_sim.z], bx[itr_sim.x], cz[itr_sim.z], cx[itr_sim.x]));
 						break;
 						
 					case Ez :
@@ -134,7 +145,7 @@ namespace ffip {
 						break;
 						
 					case Hz :
-						h_PML.push_back(PML_Point(index, ch_jump_x, ch_jump_y, bx[itr_sim.x], by[itr_sim.y], cx[itr_sim.x], cy[itr_sim.y]));
+						m_PML.push_back(PML_Point(index, ch_jump_x, ch_jump_y, bx[itr_sim.x], by[itr_sim.y], cx[itr_sim.x], cy[itr_sim.y]));
 						break;
 						
 					default:
@@ -143,6 +154,7 @@ namespace ffip {
 			}
 		}
 		
+		//chop up the segment needed and add ghost points
 		this->kx.insert(this->kx.end(), kx.begin() + p1_sim.x, kx.begin() + p2_sim.x + 1);
 		this->kx.insert(this->kx.begin(), 1);
 		this->kx.insert(this->kx.end(), 1);
@@ -171,40 +183,58 @@ namespace ffip {
 		}
 	}
 
-	void Chunk::update_e_PML(const size_t rank) {
-		PML_update_helper(e_PML, rank);
-	}
-
-	void Chunk::update_m_PML(const size_t rank) {
-		PML_update_helper(h_PML, rank);
-	}
-
-	void Chunk::update_e_source(const real time, const size_t rank) {
-		if (rank == 0)
-			for (auto item : source_list) {
-				item->get_Jd(time, rank);
-				item->update_Jd(jmd, rank);
-			}
-	}
-
-	void Chunk::update_m_source(const real time, const size_t rank) {
-		if (rank == 0)
-			for (auto item : source_list) {
-				item->get_Md(time, rank);
-				item->update_Md(jmd, rank);
-			}
-	}
-	
 	void Chunk::update_Jd(const real time, const size_t rank) {
+		if (rank >= num_proc)
+			throw std::runtime_error("Rank cannot be bigger than number of processes");
+		
+		//curl updates
 		update_JMd_helper<ex_tag>(ch_p1, ch_p2, rank);
 		update_JMd_helper<ey_tag>(ch_p1, ch_p2, rank);
 		update_JMd_helper<ez_tag>(ch_p1, ch_p2, rank);
+		barrier->Sync();
+		
+		//PML updates
+		PML_update_helper(e_PML, rank);
+		barrier->Sync();
+		
+		//incident waves
+		for(auto& item :inc_list)
+			item->update_Jd(jmd, rank, num_proc);
+		barrier->Sync();
+		
+		//dipoles, non concurrent updates
+		if (rank == 0)
+			for(auto& item : e_dipoles_list)
+				item->update_jmd(jmd, time);
 	}
 	
 	void Chunk::update_Md(const real time, const size_t rank) {
+		if (rank >= num_proc)
+			throw std::runtime_error("Rank cannot be bigger than number of processes");
+		
 		update_JMd_helper<hx_tag>(ch_p1, ch_p2, rank);
 		update_JMd_helper<hy_tag>(ch_p1, ch_p2, rank);
 		update_JMd_helper<hz_tag>(ch_p1, ch_p2, rank);
+		barrier->Sync();
+		
+		//PML updates
+		PML_update_helper(m_PML, rank);
+		barrier->Sync();
+		
+		//incident waves
+		for(auto& item :inc_list)
+			item->update_Md(jmd, rank, num_proc);
+		barrier->Sync();
+		
+		//dipoles
+		if (rank == 0)
+			for(auto& item : m_dipoles_list)
+				item->update_jmd(jmd, time);
+		
+		//projector advances
+		if (rank == 0)
+			for (auto& item : inc_list)
+				item->advance_projector();
 	}
 	
 	void Chunk::update_B2H(const real time, const size_t rank) {
@@ -218,6 +248,38 @@ namespace ffip {
 		update_DEHB_helper(Ey, ch_p1, ch_p2, rank);
 		update_DEHB_helper(Ez, ch_p1, ch_p2, rank);
 	}
+	
+	void Chunk::update_D2E_v2(const real time, const size_t rank) {
+		real modifier = 1 / e0 * dt;
+		for (int i = 0; i < MAX_NUM_POLES; ++i) {
+			size_t idx1, idx2;
+			vector_divider(e_points[i], rank, num_proc, idx1, idx2);
+			for(int j = idx1; j < idx2; ++j) {
+				size_t index = e_points[i][j];
+				real tmp = eh[index];
+				
+				eh[index] = medium_chunk[index]->update_field(eh[index], eh1[index], modifier * jmd[index], dispersive_field_chunk[index]);
+				eh1[index] = tmp;
+			}
+		}
+	}
+	
+	void Chunk::update_B2H_v2(const real time, const size_t rank) {
+		real modifier = -1 / u0 * dt;
+		
+		for (int i = 0; i < MAX_NUM_POLES; ++i) {
+			size_t idx1, idx2;
+			vector_divider(m_points[i], rank, num_proc, idx1, idx2);
+			for(int j = idx1; j < idx2; ++j) {
+				size_t index = m_points[i][j];
+				real tmp = eh[index];
+				
+				eh[index] = medium_chunk[index]->update_field(eh[index], eh1[index], modifier * jmd[index], dispersive_field_chunk[index]);
+				eh1[index] = tmp;
+			}
+		}
+	}
+
 	
 	void Chunk::update_DEHB_helper(const Coord_Type F, const iVec3 p1, const iVec3 p2, const size_t rank) {
 		auto tmp = get_component_interior(p1, p2, F);
@@ -239,49 +301,42 @@ namespace ffip {
 		}
 	}
 	
-	void Chunk::update_padded_E(const real time) {}
+	void Chunk::update_ghost_E(const real time) {}
 	
-	void Chunk::update_padded_H(const real time) {}
+	void Chunk::update_ghost_H(const real time) {}
 	
 	real Chunk::at(const fVec3& p, const Coord_Type ctype) const{
 		return operator()(p / (dx / 2), ctype);
 	}
 
 	real Chunk::operator()(const iVec3 &p) const {
-		if (!ElementWise_Less_Eq(ch_p1, p) || !ElementWise_Less_Eq(p, ch_p2))
-			return 0;
+		if (!Is_Inside_Box(ch_p1, ch_p2, p))
+			throw Out_of_the_Domain{};
 
-		return eh[(p.x - ch_origin.x) * ch_jump_x + (p.y - ch_origin.y) * ch_jump_y + (p.z - ch_origin.z) * ch_jump_z];
+		return eh[get_index_ch(p)];
 	}
 
 	real Chunk::operator()(const iVec3& p, const Coord_Type ctype) const {
-		if (!ElementWise_Less_Eq(ch_p1, p) || !ElementWise_Less_Eq(p, ch_p2))
-			return 0;
+		if (!Is_Inside_Box(ch_p1, ch_p2, p))
+			throw Out_of_the_Domain{};
 
 		return ave(ctype ^ p.get_type(), get_index_ch(p));
 	}
 
-	real Chunk::interp_helper(const real* data, const real w) const{
-		return data[0] * (1 - w) + data[1] * w;
-	}
-
 	real Chunk::operator()(const fVec3& p, const Coord_Type ctype) const {
-		if (!ElementWise_Less_Eq(ch_p1, p) || !ElementWise_Less_Eq(p, ch_p2))
-			return 0;
+		static interp3 interp{2, 2, 2};
+		if (!Is_Inside_Box(ch_p1, ch_p2, p))
+			throw Out_of_the_Domain{};
  
-		real f[8];
+		real_arr f(8);
 		
-		auto tmp = get_nearest_point<side_low_tag>(p, ctype);
-		int base_index_ch = get_index_ch(tmp);
+		iVec3 base_p = get_nearest_point<side_low_tag>(p, ctype);
+		size_t base_index_ch = get_index_ch(base_p);
 
 		for (int i = 0; i < 8; ++i)
-			f[i] = eh[base_index_ch + (i & 1? ch_jump_x << 1 : 0) + (i & 2? ch_jump_y << 1 : 0) + (i & 4? ch_jump_z << 1 : 0)];
-
-		return interp_helper(f, 
-			(p.z - tmp.z) / 2,
-			(p.y - tmp.y) / 2,
-			(p.x - tmp.x) / 2
-			);
+			f[i] = eh[base_index_ch + jumps[i]];
+		
+		return interp.get(f, (p.z - base_p.z) / 2, (p.y - base_p.y) / 2, (p.x - base_p.x) / 2);
 	}
 	
 	real Chunk::operator[](const size_t index) const {
@@ -303,6 +358,33 @@ namespace ffip {
 
 	void Chunk::set_num_proc(size_t _num_proc) {
 		num_proc = _num_proc;
+		delete barrier;
+		barrier = new Barrier{num_proc};
+	}
+	
+	void Chunk::categorize_points() {
+		for(auto itr = my_iterator(ch_p1, ch_p2, Null); !itr.is_end(); itr.advance()) {
+			iVec3 pos = itr.get_vec();
+			Coord_Type ctype = pos.get_type();
+			size_t index = get_index_ch(pos);
+			size_t num_poles = 0;
+			
+			if (is_E_point(ctype)) {
+				if (dispersive_field_chunk[index])
+					num_poles = dispersive_field_chunk[index]->get_num_poles();
+				if (num_poles > MAX_NUM_POLES) num_poles = MAX_NUM_POLES;
+				
+				e_points[num_poles].push_back(index);
+			}
+			
+			if (is_M_point(ctype)) {
+				if (dispersive_field_chunk[index])
+					num_poles = dispersive_field_chunk[index]->get_num_poles();
+				if (num_poles > MAX_NUM_POLES) num_poles = MAX_NUM_POLES;
+				
+				m_points[num_poles].push_back(index);
+			}
+		}
 	}
 
 	real Chunk::measure() const {
@@ -311,4 +393,6 @@ namespace ffip {
 			res += abs(item);
 		return res;
 	}
+	
+
 }

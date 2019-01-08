@@ -10,15 +10,15 @@ eta0 = sqrt(u0 / e0);
 
 er_bg = 1;
 ur_bg = 1;
-PML_d = 8;
+PML_d = 6;
 Sc = 0.5;
 dx = 2e-9;
 dt = Sc * dx / c0;
-dim = [35, 35, 35];
+dim = [32, 32, 32];
 step = 3000;
 
-lam_min = 400e-9;
-lam_max = 700e-9;
+lam_min = 200e-9;
+lam_max = 1000e-9;
 lam = linspace(lam_min, lam_max, 50);
 ft = c0 ./ lam;
 Omega = 2 * pi * ft;
@@ -51,9 +51,11 @@ xlabel('Wavelength [nm]')
 axis tight
 
 % scattering coefficients setup
-c_scat_input_file = 'c_scat.in';
-c_scat_output_file = 'c_scat.out';
-fileID = fopen(c_scat_input_file, 'w');
+flux_input_file = 'flux.in';
+flux_output_file = 'flux.out';
+fileID = fopen(flux_input_file, 'w');
+fprintf(fileID, "%e %e %e\n", [-1, -1, -1] * dx);
+fprintf(fileID, "%e %e %e\n", (dim + 1) * dx);
 fprintf(fileID, '%d\n', numel(ft));
 fprintf(fileID, '%e\n', ft);
 fclose(fileID);
@@ -64,9 +66,10 @@ fileID = fopen('config.in', 'w');
 fprintf(fileID, "basic {\n");
 fprintf(fileID, "%e %e\n", dt, dx);
 fprintf(fileID, "%d %d %d\n", dim);
+fprintf(fileID, "%d\n", 2);
+fprintf(fileID, "%d\n", PML_d);
 fprintf(fileID, "%d\n", step);
 fprintf(fileID, "%e %e\n", er_bg, ur_bg);
-fprintf(fileID, "%d\n", PML_d);
 fprintf(fileID, "}\n");
 
 % medium configuration
@@ -93,12 +96,12 @@ fprintf(fileID, "}\n");
 % plane wave source
 fprintf(fileID, "source 1 {\n");
 fprintf(fileID, "{ ");
-fprintf(fileID, "eigen %d %e %e", dim(3), fp, delay);
+fprintf(fileID, "plane %d %e %e", dim(3), fp, delay);
 fprintf(fileID, " }\n");
 fprintf(fileID, "}\n");
 
-% scattering coefficients
-fprintf(fileID, "c_scat %s %s\n", c_scat_input_file, c_scat_output_file);
+% scattering coefficients calculated from poynting flux
+fprintf(fileID, "flux %s %s\n", flux_input_file, flux_output_file);
 
 disp('config.in created');
 
@@ -112,7 +115,7 @@ end
 
 
 %% numerical fields
-c_scat = load(c_scat_output_file);
+c_scat = load(flux_output_file);
 c_scat = c_scat ./ (0.5 * abs(ref).^2 / eta0 * pi * a^2);
 disp('Numerical Fields Extracted');
 

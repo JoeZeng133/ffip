@@ -1,9 +1,10 @@
 basic[string] {
-	dt[double] dx[double],
+	dt[double] dx[double]
 	dimx[int] dimy[int] dimz[int]
-	time_step
-	er[double] ur[double]
+	sf_thickness[int]
 	PML_thickness[int]
+	time_step[int]
+	er_bg[double] ur_bg[double]
 }
 
 medium[string] number_of_medium[integer]{
@@ -25,7 +26,7 @@ medium[string] number_of_medium[integer]{
 		...
 	}
 	...
-}
+} 
 
 geometry[string] number_of_geometry[int] {
 	{sphere[string] medium_idx[int] radius[double] x[double] y[double] z[double]}
@@ -34,18 +35,20 @@ geometry[string] number_of_geometry[int] {
 }
 
 source[string] number_of_sources[integer] {
-	{eigen[string] n[int] fp[double] d[double]}
+	{plane[string] n[int] fp[double] d[double]}
 	{dipole[string] filename[string]}
 	...
 }
 
-probe[string] input_file[string] output_file[string]
+nearfield[string] input_file[string] output_file[string]
 
 farfield[string] input_file[string] output_file[string]
 
-c_scat[string] input_file[string] output_file[string]
+flux[string] input_file[string] output_file[string]
 
-*********************** scattering coefficient file
+*********************** flux file
+x0[double] y0[double] z0[double]	#scattering box corner points coordinates (physical)
+x1[double] y1[double] z1[double]
 number_of_frequencies
 f[double]...
 
@@ -58,6 +61,8 @@ number_of_probes
 x[double] y[double] z[double] fp[double]
 
 *********************** far field probe file
+x0[double] y0[double] z0[double]	#n2f box corner points coordinates (physical)
+x1[double] y1[double] z1[double]
 number_of_probes
 theta[double] phi[double] rho[double] fp[double]
 

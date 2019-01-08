@@ -133,21 +133,4 @@ namespace ffip {
 		bool update_weights(const fVec3& p, std::vector<real>& weights) const override;
 	};
 	
-	/* geometry factory */
-	extern std::vector<Primitive*> primitive_holder;
-	
-	template<typename... Args>
-	Geometry_Node make_sphere(Args&&... args) {
-		primitive_holder.push_back(new Sphere{std::forward<Args>(args)...});
-		return Geometry_Node{primitive_holder.back()};
-	}
-	
-	template<typename... Args>
-	Geometry_Node make_box(Args&&... args) {
-		primitive_holder.push_back(new Box{std::forward<Args>(args)...});
-		return Geometry_Node{primitive_holder.back()};
-	}
-	
-	Solid const* make_solid(Medium const* m1, Medium const* m2, const std::string& filename);	//make inhomogeneous regions
-	Solid const* make_solid(Medium const* m, const Geometry_Node& geom);											//make homogeneous regions
 }

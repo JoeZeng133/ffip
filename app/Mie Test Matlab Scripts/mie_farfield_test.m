@@ -42,6 +42,8 @@ probes = [Th, Phi, Rho, Ft];
 % write to probes file
 filename_probes = 'probes.in';
 fileID = fopen(filename_probes, "w");
+fprintf(fileID, "%e %e %e\n", [-1, -1, -1] * dx);
+fprintf(fileID, "%e %e %e\n", (dim + 1) * dx);
 fprintf(fileID, "%d\n", size(probes, 1));
 fprintf(fileID, "%e %e %e %e\n", probes');
 fclose(fileID);
@@ -74,9 +76,10 @@ fileID = fopen('config.in', 'w');
 fprintf(fileID, "basic {\n");
 fprintf(fileID, "%e %e\n", dt, dx);
 fprintf(fileID, "%d %d %d\n", dim);
+fprintf(fileID, "%d\n", 2);
+fprintf(fileID, "%d\n", PML_d);
 fprintf(fileID, "%d\n", step);
 fprintf(fileID, "%e %e\n", er_bg, ur_bg);
-fprintf(fileID, "%d\n", PML_d);
 fprintf(fileID, "}\n");
 
 % medium configuration
@@ -94,7 +97,7 @@ fprintf(fileID, "{ Lorentz %e %e %e }\n", 0.5, 6e16, 1e16);
 fprintf(fileID, " }\n");
 fprintf(fileID, "}\n");
 
-% geometry configuration
+% % geometry configuration
 fprintf(fileID, "geometry 1 {\n");
 % geometry 0 gold sphere 60nm
 fprintf(fileID, "{ ");
@@ -105,7 +108,7 @@ fprintf(fileID, "}\n");
 % plane wave source
 fprintf(fileID, "source 1 {\n");
 fprintf(fileID, "{ ");
-fprintf(fileID, "eigen %d %e %e", dim(3), fp, d);
+fprintf(fileID, "plane %d %e %e", dim(3), fp, d);
 fprintf(fileID, " }\n");
 fprintf(fileID, "}\n");
 
