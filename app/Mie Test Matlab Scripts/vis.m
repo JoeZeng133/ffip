@@ -14,7 +14,7 @@ norm = max(abs(data(:)));
 timeinterval = 0.005;
 n = size(data, 4);
 tic
-for i = 1 : 1 : n
+for i = 1 : 10 : n
     st = toc;
     ex = reshape(data(:, :, :, i), dim(2:3)) / norm;
     surf(ex)

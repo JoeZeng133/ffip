@@ -1,6 +1,4 @@
-build_vc/*
-build/*
-build_xcode/*
+build*/
 *.in
 *.out
 *.mat

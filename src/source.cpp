@@ -42,10 +42,10 @@ namespace ffip {
 	}
 	
 	void Plane_Wave::udf_advance() {
-		for (int i = 2; i < dim; i += 2) {
+		/*for (int i = 2; i < dim; i += 2) {
 			os << eh[i] << " ";
 		}
-		os << "\n";
+		os << "\n";*/
 	}
 	
 	void Plane_Wave::init() {

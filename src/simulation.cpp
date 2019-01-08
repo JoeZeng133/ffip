@@ -240,18 +240,13 @@ namespace ffip {
 		auto func = [&, this](const int rank, const int num_proc) {
 			chunk->update_Md(time, rank);
 			barrier->Sync();
-			chunk->update_B2H(time, rank);
+			chunk->update_B2H_v2(time, rank);
 			barrier->Sync();
 
 			chunk->update_Jd(time + 0.5 * dt, rank);
 			barrier->Sync();
-			chunk->update_D2E(time + 0.5 * dt, rank);
+			chunk->update_D2E_v2(time + 0.5 * dt, rank);
 			barrier->Sync();
-
-//			chunk->update_ghost_E(time);
-//			glob_barrier->Sync();
-//			chunk->update_ghost_H(time);
-//			glob_barrier->Sync();
 
 			size_t idx1, idx2;
 			vector_divider(nearfield_probes, rank, num_proc, idx1, idx2);
@@ -273,7 +268,7 @@ namespace ffip {
 		for(auto &item : task_list)
 			item.get();
 		
-		os << chunk->measure() << "\n";
+		//os << chunk->measure() << "\n";
 		udf_advance();
 	}
 
@@ -329,9 +324,9 @@ namespace ffip {
 	}
 	
 	void Simulation::udf_advance() {
-		for(auto itr = my_iterator(tmp_p1, tmp_p2, Ex); !itr.is_end(); itr.advance()) {
+	/*	for(auto itr = my_iterator(tmp_p1, tmp_p2, Ex); !itr.is_end(); itr.advance()) {
 			os_tmp << (*chunk)(itr.get_vec()) << "\n";
-		}
+		}*/
 	}
 
 	void Simulation::udf_output() {

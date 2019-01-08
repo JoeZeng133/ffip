@@ -10,20 +10,20 @@ eta0 = sqrt(u0 / e0);
 
 er_bg = 1;
 ur_bg = 1;
-PML_d = 6;
+PML_d = 8;
 Sc = 0.5;
 dx = 2e-9;
 dt = Sc * dx / c0;
-dim = [32, 32, 32];
-step = 3000;
+dim = [62, 62, 62];
+step = 5000;
 
-lam_min = 200e-9;
-lam_max = 1000e-9;
+lam_min = 300e-9;
+lam_max = 600e-9;
 lam = linspace(lam_min, lam_max, 50);
 ft = c0 ./ lam;
 Omega = 2 * pi * ft;
 K = Omega / c0;
-er_func = @Au;
+er_func = @Ag;
 er = er_func(Omega);
 
 fp = c0 / (500e-9);
@@ -35,7 +35,7 @@ ref = sum(ref_signal .* exp(-1j * Omega(:) * t), 2);
 
 % sphere parameters
 m = sqrt(conj(er(:))); %exp(-jwt) dependence, use the conjugate
-a = 30e-9;
+a = 60e-9;
 size_param = K * a;
 
 lam_plot = linspace(200e-9, 1000e-9, 100);
@@ -74,12 +74,19 @@ fprintf(fileID, "}\n");
 
 % medium configuration
 fprintf(fileID, "medium 1 {\n");
-% medium 0, scatterer medium
+% % medium 0, Au
+% fprintf(fileID, "{ ");
+% fprintf(fileID, "%e %e %e %e 3\n", 1.1431, 0, 1, 0);
+% fprintf(fileID, "{ Drude %e %e }\n", 1.3202e16/(2*pi), 1.0805e14/(2*pi));
+% fprintf(fileID, "{ CP %e %e %e %e}\n", 0.26698, -1.2371, 3.8711e15/(2*pi), 4.4642e14/(2*pi));
+% fprintf(fileID, "{ CP %e %e %e %e}\n", 3.0834, -1.0968, 4.1684e15/(2*pi), 2.3555e15/(2*pi));
+% fprintf(fileID, "}\n");
+% medium 0, Au
 fprintf(fileID, "{ ");
-fprintf(fileID, "%e %e %e %e 3\n", 1.1431, 0, 1, 0);
-fprintf(fileID, "{ Drude %e %e }\n", 1.3202e16/(2*pi), 1.0805e14/(2*pi));
-fprintf(fileID, "{ CP %e %e %e %e}\n", 0.26698, -1.2371, 3.8711e15/(2*pi), 4.4642e14/(2*pi));
-fprintf(fileID, "{ CP %e %e %e %e}\n", 3.0834, -1.0968, 4.1684e15/(2*pi), 2.3555e15/(2*pi));
+fprintf(fileID, "%e %e %e %e 3\n", 1.4447, 0, 1, 0);
+fprintf(fileID, "{ Drude %e %e }\n", 1.3280e16/(2*pi), 9.1269e13/(2*pi));
+fprintf(fileID, "{ CP %e %e %e %e}\n", -1.5951, 3.1288, 8.2749e15/(2*pi), 5.177e15/(2*pi));
+fprintf(fileID, "{ CP %e %e %e %e}\n", 0.25261, -1.5066,  6.1998e15/(2*pi), 5.4126e14/(2*pi));
 fprintf(fileID, "}\n");
 % medium end
 fprintf(fileID, "}\n");

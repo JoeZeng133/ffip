@@ -236,7 +236,7 @@ Flux_Box const* read_flux(istream& fin, Simulation& sim) {
 
 int main(int argc, char const *argv[]) {
 	auto start = std::chrono::system_clock::now();
-	size_t num_threads = thread::hardware_concurrency();
+	size_t num_threads = thread::hardware_concurrency() / 2;
 	set_num_proc(num_threads);
 
 	int time_step;
