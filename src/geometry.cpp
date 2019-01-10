@@ -161,7 +161,7 @@ namespace ffip {
 	}
 	
 	bool Inhomogeneous_Box::update_weights(const fVec3& p, std::vector<real> &weights) const {
-		if (!is_in_closure(p))
+		if (!is_in_interior(p))
 			return 0;
 		else {
 			real density = get_density(p);
@@ -178,7 +178,7 @@ namespace ffip {
 	Homogeneous_Object::Homogeneous_Object(Medium const*  m, const Geometry_Node& _base): Geometry_Node(_base), medium(m) {}
 	
 	bool Homogeneous_Object::update_weights(const fVec3 &p, std::vector<real> &weights) const {
-		if (!is_in_closure(p))
+		if (!is_in_interior(p))
 			return 0;
 		else {
 			weights[medium->index] += 1;

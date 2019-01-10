@@ -8,22 +8,22 @@ u0 = 1.25663706e-6;
 c0 = 3e8;
 eta0 = sqrt(u0 / e0);
 
-Sc = 1 / sqrt(3);
-dt = 7.2e-17;
-dx = c0 * dt / Sc;
-dim = [30, 30, 30];
-step = 600;
+Sc = 0.5;
+dx = 2e-9;
+dt = Sc * dx / c0;
+step = 1000;
 PML_d = 6;
 er_bg = 1;
 ur_bg = 1;
 
-Np = 20;                            %center frequency of the rickerwavelet
-fp = c0 / (Np * dx);
+fp = c0 / (800e-9);
 delay = 1 / fp;
 ricker = @(t, fp, d) (1 - 2 * (pi * fp * (t - d)).^2) .* exp(-(pi * fp * (t - d)).^2);
 t = (0:step) * dt;
 ref_signal = ricker(t, fp, delay);
-G = 1 + 2j;                         %the point source is G
+G1 = 0.5 + 1j;
+G2 = 0.3 - 0.5j;
+G = G1 + G2;                         %the point source is G
 
 rho = linspace(10, 15, 10) * dx;
 phi = linspace(0, 2 * pi, 10);
@@ -45,8 +45,9 @@ fclose(fileID);
 % wriet to dipole source files
 filename_dipoles = 'dipoles.in';
 fileID = fopen(filename_dipoles, 'w');
-fprintf(fileID, '1\n');
-fprintf(fileID, '%e %e %e %e %e %e 4', dim * dx / 2, abs(G), fp, delay - angle(G) / (2 * pi * fp));
+fprintf(fileID, '2\n');
+fprintf(fileID, '%e %e %e %e %e %e 4\n', dim * dx / 2, abs(G1), fp, delay - angle(G1) / (2 * pi * fp));
+fprintf(fileID, '%e %e %e %e %e %e 4', dim * dx / 2, abs(G2), fp, delay - angle(G2) / (2 * pi * fp));
 fclose(fileID);
 
 %% theoretical fields
@@ -129,6 +130,7 @@ fclose(fileID);
 
 disp('config.in created');
 %% simulated fields
+call_exe('std_config')
 data = load('output.out');
 make_complex = @(x, y) x + 1j * y;
 ref = sum(ref_signal .* exp(-1j * 2 * pi * Ft(:) * t), 2);

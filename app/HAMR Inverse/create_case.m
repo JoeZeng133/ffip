@@ -12,65 +12,61 @@ eta0 = sqrt(u0 / e0);
 % basic configuration
 er_bg = 1;
 ur_bg = 1;
-
-% Sc = 1 / sqrt(3);
-% dt = 7.2e-17;
-% dx = c0 * dt / Sc;
-
-% gold
 Sc = 0.5;
-dx = 1e-9;
+dx = 2e-9;
 dt = Sc * dx / c0;
-
-dim = [46, 46, 22];
-% time_step = 600;
-time_step = 10000; %gold
+dim = [50, 50, 30];
+time_step = 20000;
 PMl_d = 6;
 
-% excitation reference and frequency of interests (1 frequency)
-% Np = 30;                           
-% fp = c0 / (Np * dx);
-
-fp = c0 / (500e-9); %gold at 800nm
+% excitation reference and frequency of interests (1 frequency)                         
+fp = c0 / (800e-9);
 delay = 1 / fp;
 ricker = @(t, fp, d) (1 - 2 * (pi * fp * (t - d)).^2) .* exp(-(pi * fp * (t - d)).^2);
 t = (0:time_step) * dt;
 ref_signal = ricker(t, fp, delay);
 ref_signal_fft = sum(ref_signal .* exp(-1j * 2 * pi * fp * t));
 
-% medium for the inhomogeneous region
-% Omega = 2 * pi * fp;
-% er_const = 2 - 0.2i;
-% sig_const = -imag(er_const) * (2 * pi * fp * e0);
-% er_func = @(w) (real(er_const) - 1j * sig_const ./ (w * e0));
+% medium for FePT layer
+Omega = 2 * pi * fp;
+fept_er = (2.9 - 1.5j)^2;
+fept_sig = -imag(fept_er) * (2 * pi * fp * e0);
+er_func = @(w) (real(fept_er) - 1j * fept_sig ./ (w * e0));
+fept_p1 = [5e-9, 5e-9, 34e-9];
+fept_p2 = [95e-9, 95e-9, 54e-9];
 
-er_const = Au(2 * pi * fp); %gold
-
-% Geometry for the inhomogeneous region
+% Geometry for the gold layer
 sphere_func = @(X, Y, Z, r, center) ((X - center(1)).^2 + (Y - center(2)).^2) <= r^2;
-geo_func = @(X, Y, Z) sphere_func(X, Y, Z, 20, dim / 2);
-inhom_p1 = [3, 3, 3];
-inhom_dim = [40, 40, 10];
-inhom_p2 = inhom_p1 + inhom_dim;
-inhom_x = inhom_p1(1):inhom_p2(1);
-inhom_y = inhom_p1(2):inhom_p2(2);
-inhom_z = inhom_p1(3):inhom_p2(3);
-[inhom_X, inhom_Y, inhom_Z] = ndgrid(inhom_x, inhom_y, inhom_z);
-inhom_pos = [inhom_X(:), inhom_Y(:), inhom_Z(:)];
-num_inhom_pos = size(inhom_pos, 1);
-rho_target = geo_func(inhom_X, inhom_Y, inhom_Z) * 1;
+aperture_p1 = [5e-9, 5e-9, 4e-9];
+aperture_p2 = [95e-9,95e-9,24e-9];
+aperture_dim = ceil((aperture_p2 - aperture_p1) / dx);
+aperture_dx = (aperture_p2 - aperture_p1) ./ aperture_dim;
+aperture_points = cell([1 3]);
+for i = 1 : 3
+    aperture_points{i} = linspace(aperture_p1(i), aperture_p2(i), aperture_dim(i) + 1);
+end
+[aperture_X, aperture_Y, aperture_Z] = ndgrid(aperture_points{1}, aperture_points{2}, aperture_points{3});
+aperture_pos = [aperture_X(:), aperture_Y(:), aperture_Z(:)];
+num_aperture_pos = size(aperture_pos, 1);
 
-[sim_X, sim_Y, sim_Z] = ndgrid([3, 10, 23, 36, 43], [3, 10, 23, 36, 43], [17]);
-probes_pos = [sim_X(:), sim_Y(:), sim_Z(:)];
+geo_func = @(X, Y, Z) 1 - sphere_func(X, Y, Z, 30e-9, (aperture_p1 + aperture_p2) / 2);
+rho_target = geo_func(aperture_X, aperture_Y, aperture_Z);
+
+% nearfield probe positions
+probe_x = linspace(20e-9, 80e-9, 5);
+probe_y = linspace(20e-9, 80e-9, 5);
+probe_z = 44e-9;
+[probe_X, probe_Y, probe_Z] = ndgrid(probe_x, probe_y, probe_z);
+probes_pos = [probe_X(:), probe_Y(:), probe_Z(:)];
 num_probes = size(probes_pos, 1);
 
 % write to geometry file
 file_geometry_target = 'target_geometry.in';
 fileID = fopen(file_geometry_target, 'w');
-fprintf(fileID, '%d %d %d\n', inhom_dim + 1);
-fprintf(fileID, '%e %e\n', inhom_p1(1) * dx, dx);
-fprintf(fileID, '%e %e\n', inhom_p1(2) * dx, dx);
-fprintf(fileID, '%e %e\n', inhom_p1(3) * dx, dx);
+fprintf(fileID, '%d %d %d\n', aperture_dim + 1);
+fprintf(fileID, '%e %e\n', aperture_p1(1), aperture_dx(1));
+fprintf(fileID, '%e %e\n', aperture_p1(2), aperture_dx(2));
+fprintf(fileID, '%e %e\n', aperture_p1(3), aperture_dx(3));
 fprintf(fileID, '%e ', rho_target(:));
 fclose(fileID);
 
@@ -78,7 +74,7 @@ fclose(fileID);
 file_probes_input_target = 'target_probes.in';
 fileID = fopen(file_probes_input_target, "w");
 fprintf(fileID, "%d\n", num_probes);
-fprintf(fileID, "%e %e %e %e\n", [probes_pos * dx, fp * ones([num_probes 1])]');
+fprintf(fileID, "%e %e %e %e\n", [probes_pos, fp * ones([num_probes 1])]');
 fclose(fileID);
 
 disp('geometry, probes files created');
@@ -94,25 +90,31 @@ fprintf(fileID, "%e %e\n", er_bg, ur_bg);
 fprintf(fileID, "}\n");
 
 % medium configuration
-fprintf(fileID, "medium 2 {\n");
+fprintf(fileID, "medium 3 {\n");
 % medium 0, background medium
 fprintf(fileID, "{ ");
 fprintf(fileID, "%e %e %e %e 0", er_bg, 0, ur_bg, 0);
 fprintf(fileID, " }\n");
-
-% medium 1, scatterer medium
+% medium 1 Au
 Au_print(fileID);
-% fprintf(fileID, "{ ");
-% fprintf(fileID, "%e %e %e %e 0", real(er_const), sig_const, ur_bg, 0);
-% fprintf(fileID, " }\n");
+% medium 2 FePt
+fprintf(fileID, "{ ");
+fprintf(fileID, "%e %e %e %e 0\n", real(fept_er), fept_sig, ur_bg, 0);
 fprintf(fileID, "}\n");
 
+fprintf(fileID, " }\n");
+
 % geometry configuration
-fprintf(fileID, "geometry 1 {\n");
-% geometry 0, the inhomogeneous region with mixed medium1 and medium0
+fprintf(fileID, "geometry 2 {\n");
+% geometry 0, the aperture
 fprintf(fileID, "{ ");
 fprintf(fileID, "inhom %d %d %s", 1, 0, file_geometry_target);
 fprintf(fileID, " }\n");
+% geometry 1, the FePt layer 20nm thick
+fprintf(fileID, "{ ");
+fprintf(fileID, "box %d %e %e %e %e %e %e", 2, fept_p1, fept_p2);
+fprintf(fileID, " }\n");
+
 fprintf(fileID, "}\n");
 
 % plane wave source
@@ -132,7 +134,7 @@ fclose(fileID);
 
 disp('objective configuration created');
 %% simulated fields
-call_exe('std_config');
+% call_exe('std_config');
 data = load(file_probes_output_target);
 make_complex = @(x, y) x + 1j * y;
 
@@ -146,7 +148,7 @@ save('case_configuration');
 disp('objective fields saved');
 
 figure
-v_rho_target = reshape(rho_target, inhom_dim + 1);
+v_rho_target = reshape(rho_target, aperture_dim + 1);
 v_rho_target = v_rho_target(:, :, 1);
 pcolor(v_rho_target)
 colorbar

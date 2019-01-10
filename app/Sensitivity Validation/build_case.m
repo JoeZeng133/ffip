@@ -54,9 +54,10 @@ fileID = fopen('config.in', 'w');
 fprintf(fileID, "basic {\n");
 fprintf(fileID, "%e %e\n", dt, dx);
 fprintf(fileID, "%d %d %d\n", dim);
+fprintf(fileID, "%d\n", 1);
+fprintf(fileID, "%d\n", PMl_d);
 fprintf(fileID, "%d\n", step);
 fprintf(fileID, "%e %e\n", er_bg, ur_bg);
-fprintf(fileID, "%d\n", PMl_d);
 fprintf(fileID, "}\n");
 
 % medium configuration
@@ -78,18 +79,21 @@ fprintf(fileID, "}\n");
 % plane wave source
 fprintf(fileID, "source 1 {\n");
 fprintf(fileID, "{ ");
-fprintf(fileID, "eigen %d %e %e", dim(3), fp, delay);
+fprintf(fileID, "plane %d %e %e", dim(3), fp, delay);
 fprintf(fileID, " }\n");
 fprintf(fileID, "}\n");
 
+% stop step output
+fprintf(fileID, "Stop_Step_Output\n");
+
 % probes
 file_output_probes_target = 'target_output.out';
-fprintf(fileID, "probe %s %s\n", file_probes_input_target, file_output_probes_target);
+fprintf(fileID, "nearfield %s %s\n", file_probes_input_target, file_output_probes_target);
 fclose(fileID);
 
 disp('case configuration done');
 %% forward simulation results
-!./std_config
+% call_exe('std_config');
 data = load(file_output_probes_target);
 make_complex = @(x, y) x + 1j * y;
 

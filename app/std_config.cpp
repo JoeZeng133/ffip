@@ -236,7 +236,7 @@ Flux_Box const* read_flux(istream& fin, Simulation& sim) {
 
 int main(int argc, char const *argv[]) {
 	auto start = std::chrono::system_clock::now();
-	size_t num_threads = thread::hardware_concurrency() / 2;
+	size_t num_threads = thread::hardware_concurrency();
 	set_num_proc(num_threads);
 
 	int time_step;
@@ -270,7 +270,7 @@ int main(int argc, char const *argv[]) {
 		if (field == "basic") {
 			time_step = read_basic_config(fin, sim);
 			assigned = true;
-			cout << field << " Complete \n";
+			//cout << field << " Complete \n";
 		}
 		
 		if (field == "medium") {
@@ -283,7 +283,7 @@ int main(int argc, char const *argv[]) {
 			assigned = true;
 			fin >> c;
 			
-			cout << field << " Complete \n";
+			//cout << field << " Complete \n";
 		}
 		
 		if (field == "geometry") {
@@ -297,7 +297,7 @@ int main(int argc, char const *argv[]) {
 			
 			fin >> c;
 			
-			cout << field << " Complete \n";
+			//cout << field << " Complete \n";
 		}
 		
 		if (field == "source") {
@@ -311,7 +311,7 @@ int main(int argc, char const *argv[]) {
 			
 			fin >> c;
 			
-			cout << field << " Complete \n";
+			//cout << field << " Complete \n";
 		}
 		
 		if (field == "nearfield") {
@@ -324,7 +324,7 @@ int main(int argc, char const *argv[]) {
 			
 			assigned = true;
 			
-			cout << field << " Complete \n";
+			//cout << field << " Complete \n";
 		}
 		
 		if (field == "farfield") {
@@ -337,7 +337,7 @@ int main(int argc, char const *argv[]) {
 			
 			assigned = true;
 			
-			cout << field << " Complete \n";
+			//cout << field << " Complete \n";
 		}
 		
 		if (field == "flux") {
@@ -350,7 +350,7 @@ int main(int argc, char const *argv[]) {
 			
 			assigned = true;
 			
-			cout << field << " Complete \n";
+			//cout << field << " Complete \n";
 		}
 		
 		if (field == "Stop_Step_Output") {
@@ -358,7 +358,7 @@ int main(int argc, char const *argv[]) {
 			
 			assigned = true;
 			
-			cout << field << "\n";
+			//cout << field << "\n";
 		}
 		
 		
@@ -397,6 +397,6 @@ int main(int argc, char const *argv[]) {
 	auto end = std::chrono::system_clock::now();
 	std::chrono::duration<double> elapsed_seconds = end-start;
 	cout << "\nRunning Time: " << elapsed_seconds.count() << endl;
-	cout << "Simulation Finished" << endl;
+	//cout << "Simulation Finished" << endl;
 	return 0;
 }

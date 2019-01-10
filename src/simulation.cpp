@@ -68,7 +68,7 @@ namespace ffip {
 			bg_medium = make_medium(1, 0, 1, 0);
 		
 		prepare_medium(dt);
-		const int N = 3;
+		const int N = 4;
 		real delta = dx / (2 * N);
 		std::vector<fVec3> sampled_points;
 		for(int i = 1; i < 2 * N; i += 2)
@@ -321,12 +321,31 @@ namespace ffip {
 		auto itr = my_iterator(tmp_p1, tmp_p2, Ex);
 		auto dim = itr.get_dim();
 		os_tmp << dim << "\n";
+
+	/*	size_t num_probes = nearfield_probes.size();
+		if (num_probes < 100)
+			os_tmp << num_probes;
+		else
+			os_tmp << 100;
+		os_tmp << "\n";*/
 	}
 	
 	void Simulation::udf_advance() {
-	/*	for(auto itr = my_iterator(tmp_p1, tmp_p2, Ex); !itr.is_end(); itr.advance()) {
+		/*for(auto itr = my_iterator(tmp_p1, tmp_p2, Ex); !itr.is_end(); itr.advance()) {
 			os_tmp << (*chunk)(itr.get_vec()) << "\n";
 		}*/
+
+		/*size_t num_probes = nearfield_probes.size();
+		if (num_probes < 100)
+			for (auto& item : nearfield_probes)
+				os_tmp << item->ex << " " << item->ey << " " << item->ez << " ";
+		else
+			for (int i = 0; i < 100; ++i) {
+				auto& item = nearfield_probes[i * num_probes / 100];
+				os_tmp << item->ex << " " << item->ey << " " << item->ez << " ";
+			}
+
+		os_tmp << "\n";*/
 	}
 
 	void Simulation::udf_output() {
