@@ -14,7 +14,7 @@ namespace ffip {
 	private:
 		// constructor parameters
 		real dx, dt;
-		int n;
+		int dim_neg, dim_pos, n;
 		PML pml;
 		real amp;
 		Direction polorization;
@@ -32,11 +32,15 @@ namespace ffip {
 		std::vector<real> b_z;
 		std::vector<real> c_z;
 		std::vector<real> k_z;
-		
+
+		real ref_pos{ 0 };
+
 		real er{1}, ur{1};
+
+		std::fstream *ref_output;
 	public:
 		Plane_Wave() = delete;										//no default constructor
-		Plane_Wave(const real _dx, const real _dt, const int _n);	//constructor
+		Plane_Wave(const real _dx, const real _dt, const int _dim_neg, const int _dim_pos);
 		Plane_Wave(const Plane_Wave&) = default;					//copy
 		Plane_Wave& operator=(Plane_Wave&) = default;
 		Plane_Wave(Plane_Wave&&) = default;							//move
@@ -47,6 +51,7 @@ namespace ffip {
 		void set_PML(const PML& _pml);							//set up PML layer in x+
 		void init();														//after set-up, it has to be initialized
 		void set_medium(const real er, const real ur);
+		void set_ref_output(const std::string& filename, const real pos = 0);
 		
 		real at(const fVec3& p, const Coord_Type ctype) const;					//access at float physical coordinates
 		
@@ -182,8 +187,8 @@ namespace ffip {
 		Inc_Internal& operator=(Inc_Internal&&) = delete;
 		
 		//concurrent updates
-		void update_Jd(std::vector<real>& jmd, const size_t rank = 0, const size_t num_proc = 1);
-		void update_Md(std::vector<real>& jmd, const size_t rank = 0, const size_t num_proc = 1);
+		void update_Jd(std::vector<real>& jmd, Barrier* barrier, const size_t rank = 0, const size_t num_proc = 1);
+		void update_Md(std::vector<real>& jmd, Barrier* barrier, const size_t rank = 0, const size_t num_proc = 1);
 		//advance projector
 		void advance_projector();
 		

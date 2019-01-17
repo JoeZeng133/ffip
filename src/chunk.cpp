@@ -198,8 +198,9 @@ namespace ffip {
 		barrier->Sync();
 		
 		//incident waves
+		//if (rank == 0)
 		for(auto& item :inc_list)
-			item->update_Jd(jmd, rank, num_proc);
+			item->update_Jd(jmd, barrier, rank, num_proc);
 		barrier->Sync();
 		
 		//dipoles, non concurrent updates
@@ -222,19 +223,20 @@ namespace ffip {
 		barrier->Sync();
 		
 		//incident waves
+		//if (rank == 0)
 		for(auto& item :inc_list)
-			item->update_Md(jmd, rank, num_proc);
+			item->update_Md(jmd, barrier, rank, num_proc);
 		barrier->Sync();
 		
-		//dipoles
-		if (rank == 0)
-			for(auto& item : m_dipoles_list)
+		//non paralell part
+		if (rank == 0) {
+			//dipoles	
+			for (auto& item : m_dipoles_list)
 				item->update_jmd(jmd, time);
-		
-		//projector advances
-		if (rank == 0)
+			//projector advances
 			for (auto& item : inc_list)
 				item->advance_projector();
+		}	
 	}
 	
 	void Chunk::update_B2H(const real time, const size_t rank) {

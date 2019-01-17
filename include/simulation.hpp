@@ -23,10 +23,12 @@ namespace ffip {
 		iVec3 sim_dim;
 		
 		int step;
-		iVec3 sim_p1, sim_p2;	//simulation corner points
-		iVec3 ch_p1, ch_p2;		//chunk corner points
-		iVec3 tf_p1, tf_p2;		//total field corner points
-		int sf_depth{0};		//Scattered field depth
+		iVec3 sim_p1, sim_p2;	//simulation region corner points
+		iVec3 ch_p1, ch_p2;		//chunk region corner points
+		iVec3 tf_p1, tf_p2;		//total field region corner points
+		iVec3 phys_p1, phys_p2; //physical region corner points
+		int sf_depth{0};		//Scattered field depth in computation unit
+		int tf_padded_depth{ 0 };//total field padded depth in computation unit
 		
 		Barrier* barrier{new Barrier{1}};		//local barrier
 		int num_proc{1};		//number of processes to use
@@ -74,6 +76,7 @@ namespace ffip {
 		//function members to be used before chunk is initialized
 		void add_inc_source(Inc_Source* source);
 		void add_sf_layer(const int d);
+		void add_tf_layer(const int d);
 		void add_PML_layer(const PML& pml, const Direction dir, const Side side);
 		void setup(const real _dx, const real _dt, const iVec3 _dim);
 		void chunk_init();
@@ -127,6 +130,9 @@ namespace ffip {
 		
 		template<typename... Args>
 		Geometry_Node make_box(Args&&... args);
+
+		template<typename... Args>
+		Geometry_Node make_disk(Args&&... args);
 		
 		//make inhomogeneous regions
 		Solid const* make_solid(Medium const* m1, Medium const* m2, const std::string& filename);
@@ -144,6 +150,12 @@ namespace ffip {
 	Geometry_Node Simulation::make_box(Args&&... args) {
 		primitive_holder.push_back(std::make_unique<Box>(std::forward<Args>(args)...));
 		return Geometry_Node{primitive_holder.back().get()};
+	}
+
+	template<typename... Args>
+	Geometry_Node Simulation::make_disk(Args&&... args) {
+		primitive_holder.push_back(std::make_unique<Disk>(std::forward<Args>(args)...));
+		return Geometry_Node{ primitive_holder.back().get() };
 	}
 	
 	template<typename... Args>

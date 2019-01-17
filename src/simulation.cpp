@@ -11,6 +11,10 @@ namespace ffip {
 	void Simulation::add_sf_layer(const int d) {
 		sf_depth = d;
 	}
+
+	void Simulation::add_tf_layer(const int d) {
+		tf_padded_depth = d;
+	}
 	
 	void Simulation::add_PML_layer(const PML& pml, const Direction dir, const Side side) {
 		if (side > 0)
@@ -26,17 +30,22 @@ namespace ffip {
 	void Simulation::chunk_init() {
 		//dimension is in computational units, so they are two times the original values
 		sim_dim = sim_dim * 2;
-		
-		sim_p1 = {0, 0, 0};
+
+		sim_p1 = { 0, 0, 0 };
 		sim_p2 = sim_dim;
-		
-		//scattered field region
-		if (sf_depth) {
-			tf_p1 = sim_p1;
-			tf_p2 = sim_p2;
-			sim_p1 = sim_p1 - 2 * iVec3{ sf_depth, sf_depth, sf_depth };
-			sim_p2 = sim_p2 + 2 * iVec3{ sf_depth, sf_depth, sf_depth };
-		}
+
+		//total field padded layer
+		sim_p1 = sim_p1 - iVec3{ tf_padded_depth, tf_padded_depth, tf_padded_depth };
+		sim_p2 = sim_p2 + iVec3{ tf_padded_depth, tf_padded_depth, tf_padded_depth };
+
+		//scattered field layer
+		tf_p1 = sim_p1;
+		tf_p2 = sim_p2;
+		sim_p1 = sim_p1 - iVec3{ sf_depth, sf_depth, sf_depth };
+		sim_p2 = sim_p2 + iVec3{ sf_depth, sf_depth, sf_depth };
+
+		phys_p1 = sim_p1;
+		phys_p2 = sim_p2;
 		
 		//add PML layers
 		sim_p1.x -= 2 * PMLs[0][0].get_d();
@@ -88,18 +97,18 @@ namespace ffip {
 				
 				/* staire case implementation
 				 */
-//				fVec3 sampled_point = p * dx / 2;
-//				auto weights = get_zero_weights();
-//				bool assigned = 0;
-//				for(auto item : solids) {
-//					if (item->update_weights(sampled_point, weights)) {	//it is true when it is inside the solid
-//						assigned = 1;
-//						break;
-//					}
-//				}
-//
-//				if (!assigned)			//assign background medium;
-//					weights[bg_medium->index] += 1;
+				//fVec3 sampled_point = p * dx / 2;
+				//auto weights = get_zero_weights();
+				//bool assigned = 0;
+				//for(auto item : solids) {
+				//	if (item->update_weights(sampled_point, weights)) {	//it is true when it is inside the solid
+				//		assigned = 1;
+				//		break;
+				//	}
+				//}
+
+				//if (!assigned)			//assign background medium;
+				//	weights[bg_medium->index] += 1;
 				
 				/* spatial averaging to get materials
 				 naive sampling integration over a cube
@@ -228,7 +237,7 @@ namespace ffip {
 	}
 	
 	PML Simulation::make_pml(const int d) {
-		return PML(d, 0.8 * 4 / (dx * bg_medium->get_z()), 7, 0, 3, 1);
+		return PML(d, 0.8 * 4 / (dx * bg_medium->get_z()), 0.1, 1, 3, 1);
 	}
 	
 	void Simulation::advance(std::ostream& os) {
@@ -312,7 +321,7 @@ namespace ffip {
 	iVec3 tmp_p1, tmp_p2;
 	
 	void Simulation::udf_unit() {
-		os_tmp = std::fstream{"debug.out", std::ios::out};
+		/*os_tmp = std::fstream{"snapshot.out", std::ios::out};
 		tmp_p1 = sim_p1;
 		tmp_p2 = sim_p2;
 		tmp_p1.x = (sim_p1.x + sim_p2.x) / 2;
@@ -320,7 +329,7 @@ namespace ffip {
 		
 		auto itr = my_iterator(tmp_p1, tmp_p2, Ex);
 		auto dim = itr.get_dim();
-		os_tmp << dim << "\n";
+		os_tmp << dim << "\n";*/
 
 	/*	size_t num_probes = nearfield_probes.size();
 		if (num_probes < 100)
@@ -331,7 +340,9 @@ namespace ffip {
 	}
 	
 	void Simulation::udf_advance() {
-		/*for(auto itr = my_iterator(tmp_p1, tmp_p2, Ex); !itr.is_end(); itr.advance()) {
+		/*if (step % 20 != 0) return;
+		os_tmp << std::scientific << std::setprecision(5);
+		for(auto itr = my_iterator(tmp_p1, tmp_p2, Ex); !itr.is_end(); itr.advance()) {
 			os_tmp << (*chunk)(itr.get_vec()) << "\n";
 		}*/
 

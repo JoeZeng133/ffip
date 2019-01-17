@@ -945,4 +945,13 @@ namespace ffip {
 		os << c.x << " " << c.y << " " << c.z;
 		return os;
 	}
+
+	// to pass around classes and stuff
+	struct Config {
+		real dt, dx;
+		iVec3 sim_p1, sim_p2;
+		iVec3 ch_p1, ch_p2;
+		iVec3 tf_p1, tf_p2;
+		iVec3 phys_p1, phys_p2;
+	};
 }

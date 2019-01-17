@@ -300,8 +300,6 @@ namespace ffip {
 		
 		index = 0;
 		end = size = get_size();
-		if (size == 0)
-			z = z1 + 1;
 	}
 	
 	my_iterator::my_iterator(const iVec3& p1, const iVec3& p2, const Coord_Type ctype, const size_t rank, const size_t num): my_iterator(p1, p2, ctype) {
@@ -317,11 +315,12 @@ namespace ffip {
 		index = idx1;
 		end = idx2;
 		
-		x = x0 + (idx1 % ((x1 - x0) / jump + 1)) * jump;
-		idx1 /= (x1 - x0) / jump + 1;
-		y = y0 + (idx1 % ((y1 - y0) / jump + 1)) * jump;
-		idx1 /= ((y1 - y0) / jump + 1);
-		z = z0 + (idx1 % ((z1 - z0) / jump + 1)) * jump;
+		sVec3 dim = get_dim();
+		x = x0 + (idx1 % dim.x) * jump;
+		idx1 /= dim.x;
+		y = y0 + (idx1 % dim.y) * jump;
+		idx1 /= dim.y;
+		z = z0 + (idx1 % dim.z) * jump;
 	}
 	
 	iVec3 my_iterator::get_vec(size_t index) const {

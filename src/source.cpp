@@ -3,7 +3,7 @@
 
 namespace ffip {
 	/* Plane_Wave definitions*/
-	Plane_Wave::Plane_Wave(const real _dx, const real _dt, const int _n): dx(_dx), dt(_dt), n(_n) {}
+	Plane_Wave::Plane_Wave(const real _dx, const real _dt, const int _dim_neg, const int _dim_pos) : dx(_dx), dt(_dt), dim_neg(_dim_neg), dim_pos(_dim_pos) {}
 	
 	void Plane_Wave::set_excitation(const std::function<real(const real)>& _f, const real _amp, const Direction _polorization) {
 		f = _f;
@@ -17,6 +17,14 @@ namespace ffip {
 	void Plane_Wave::set_PML(const PML &_pml) {
 		pml = _pml;
 	}
+
+	void Plane_Wave::set_ref_output(const std::string& filename, const real pos) {
+		ref_output = new std::fstream(filename, std::ios::out);
+		ref_pos = pos * (2 / dx);
+		if (ref_pos < -2 * dim_neg || ref_pos > 2 * dim_pos)
+			throw std::runtime_error("Reference Position out of region");
+
+	}
 	
 	void Plane_Wave::hard_E(real time)  {
 		real val = f(time) * amp;
@@ -24,6 +32,11 @@ namespace ffip {
 	}
 	
 	void Plane_Wave::advance() {
+		//output reference E field at a ref_pos(computation coordiante)
+		int ref_p1 = get_nearest_int<side_low_tag, even_tag>(ref_pos + origin);
+		real f = (ref_pos + origin - ref_p1) / 2;
+		(*ref_output) << eh[ref_p1] * (1 - f) + eh[ref_p1 + 2] * f << "\n";
+
 		update_H();
 		update_E();
 		hard_E((++time_step) * dt);
@@ -42,10 +55,11 @@ namespace ffip {
 	}
 	
 	void Plane_Wave::udf_advance() {
-		/*for (int i = 2; i < dim; i += 2) {
+		if (time_step % 10 != 0) return;
+		for (int i = 2; i < dim; i += 2) {
 			os << eh[i] << " ";
 		}
-		os << "\n";*/
+		os << "\n";
 	}
 	
 	void Plane_Wave::init() {
@@ -53,8 +67,9 @@ namespace ffip {
 		if (courant > 1)
 			throw std::runtime_error("Courant number has to be less than 1");
 		
-		dim = int((n + pml.get_d() + 2) * 2);	//[-0.5, n + 0.5] padded to be [-1, n + 1 + pml]
-		origin = 2;
+		n = dim_neg + dim_pos;
+		dim = int((n + pml.get_d()) * 2);	//[-dim_neg, dim_pos + pml]
+		origin = dim_neg * 2;
 		
 		eh.resize(dim + 1, 0);
 		psi_pos.resize(dim + 1, 0);
@@ -96,22 +111,32 @@ namespace ffip {
 	}
 	
 	real Plane_Wave::operator()(const iVec3 &p) const {
-		if (p.z < -1 || p.z > (2 * n + 1))
+		int z = p.z + origin;
+		Coord_Type ctype = p.get_type();
+		if (z < 0 || z > n * 2)
 			throw std::runtime_error("Access exceeds domain");
 		
 		if(polorization == Direction::X) {
-			if ((p.x & 1) && !(p.y & 1))
-				return eh[p.z + origin];
+			if (ctype == Ex || ctype == Hy)
+				return eh[z];
 		} else {
-			if (!(p.x & 1) && (p.y & 1))
-				return eh[p.z + origin];
+			if (ctype == Ey || ctype == Hx)
+				return eh[z];
 		}
 		
 		return 0;
 	}
 	
 	real Plane_Wave::operator()(const fVec3 &p, const Coord_Type ctype) const {
-		return ((*this)(get_nearest_point<side_low_tag>(p, ctype) ) + (*this)(get_nearest_point<side_high_tag>(p, ctype))) / 2;
+		iVec3 p1 = get_nearest_point<side_low_tag>(p, ctype); 
+		real f = (p.z - p1.z) / 2;
+		real val1 = (*this)(p1);
+		
+		p1.z += 2;
+		real val2 = (*this)(p1);
+
+		return val1 * (1 - f) + val2 * f;
+
 	}
 	
 	real Plane_Wave::at(const fVec3 &p, const Coord_Type ctype) const {
@@ -405,25 +430,27 @@ namespace ffip {
 		
 		//loop over the coord type with chunk, domain coordinates updating on the fly
 		for(auto ch_itr = my_iterator(int1_ch, int2_ch, int1_ch.get_type(), rank, num_proc), d_itr = my_iterator(interior.first, interior.second, ctype, rank, num_proc); !ch_itr.is_end(); ch_itr.advance(), d_itr.advance()) {
-			int index = ch_itr.x * jump_x + ch_itr.y * jump_y + ch_itr.z * jump_z;
+			size_t index = ch_itr.x * jump_x + ch_itr.y * jump_y + ch_itr.z * jump_z;
 			
 			jmd[index] += side * TFSF_Mat[dir][type_dir_int] * projector(d_itr.get_vec() + pos_offset) / dx;
 		}
 	}
 	
-	void Inc_Internal::update_Jd(std::vector<real> &jmd, const size_t rank, const size_t num_proc) {
+	void Inc_Internal::update_Jd(std::vector<real> &jmd, Barrier* barrier, const size_t rank, const size_t num_proc) {
 		for(auto& face : tfsf_list) {
 			update_helper(jmd, face, Coord_Type::Ex, rank, num_proc);
 			update_helper(jmd, face, Coord_Type::Ey, rank, num_proc);
 			update_helper(jmd, face, Coord_Type::Ez, rank, num_proc);
+			barrier->Sync();
 		}
 	}
 	
-	void Inc_Internal::update_Md(std::vector<real> &jmd, const size_t rank, const size_t num_proc) {
+	void Inc_Internal::update_Md(std::vector<real> &jmd, Barrier* barrier, const size_t rank, const size_t num_proc) {
 		for(auto& face : tfsf_list) {
 			update_helper(jmd, face, Coord_Type::Hx, rank, num_proc);
 			update_helper(jmd, face, Coord_Type::Hy, rank, num_proc);
 			update_helper(jmd, face, Coord_Type::Hz, rank, num_proc);
+			barrier->Sync();
 		}
 	}
 	

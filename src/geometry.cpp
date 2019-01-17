@@ -1,6 +1,53 @@
 #include <geometry.hpp>
 
 namespace ffip {
+	/* Disk geometry*/
+	Disk::Disk(const fVec3& _center, const real _radius, const real _height, const Direction _dir) : center(_center), radius(_radius), height(_height), dir(_dir) {
+		if (dir == Direction::X)
+			center = rotate_frame(center, dir_x_tag{});
+
+		if (dir == Direction::Y)
+			center = rotate_frame(center, dir_y_tag{});
+	}
+
+	bool Disk::is_in_interior(const fVec3& ip) const {
+		fVec3 p;
+		if (dir == Direction::X)
+			p = rotate_frame(ip, dir_x_tag{});
+
+		if (dir == Direction::Y)
+			p = rotate_frame(ip, dir_y_tag{});
+
+		if (dir == Direction::Z)
+			p = ip;
+
+		return (p.z < center.z + height / 2) && (p.z > center.z - height / 2) &&
+			((p.x - center.x) * (p.x - center.x) +
+			(p.y - center.y) * (p.y - center.y)
+			< radius * radius);
+	}
+
+	bool Disk::is_in_closure(const fVec3& ip) const {
+		fVec3 p;
+		if (dir == Direction::X)
+			p = rotate_frame(ip, dir_x_tag{});
+
+		if (dir == Direction::Y)
+			p = rotate_frame(ip, dir_y_tag{});
+
+		if (dir == Direction::Z)
+			p = ip;
+
+		return (p.z <= center.z + height / 2) && (p.z >= center.z - height / 2) &&
+			((p.x - center.x) * (p.x - center.x) +
+			(p.y - center.y) * (p.y - center.y)
+				<= radius * radius);
+	}
+
+	bool Disk::is_in_exterior(const fVec3& p) const {
+		return !is_in_closure(p);
+	}
+
 	/* Box Geometry*/
 	Box::Box(const fVec3& _center, const real _lenx, const real _leny, const real _lenz): lenx(_lenx), leny(_leny), lenz(_lenz), center(_center) {
 		auto temp = fVec3{lenx, leny, lenz} / 2;

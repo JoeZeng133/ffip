@@ -13,6 +13,27 @@ namespace ffip {
 		virtual bool is_in_closure(const fVec3& p) const = 0;
 		virtual bool is_in_exterior(const fVec3& p) const = 0;
 	};
+
+	/* disk geometry*/
+	class Disk : public Primitive {
+	private:
+		fVec3 center;
+		real radius;
+		real height;
+		Direction dir;
+
+	public:
+		Disk(const fVec3& center, const real radius, const real height, const Direction dir);
+		Disk() = default;
+		Disk(const Disk&) = default;
+		Disk& operator=(const Disk&) = default;
+		Disk(Disk&&) = default;
+		Disk& operator=(Disk&&) = default;
+
+		bool is_in_interior(const fVec3& p) const override;
+		bool is_in_closure(const fVec3& p) const override;
+		bool is_in_exterior(const fVec3& p) const override;
+	};
 	
 	/* box geometry */
 	class Box : public Primitive {

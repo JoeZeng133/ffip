@@ -107,8 +107,8 @@ namespace ffip {
 		int index;					//idex of the medium
 		~Medium();
 		Medium() = default;
-		Medium(const Medium&) = default; //copy
-		Medium& operator=(const Medium&) = default;
+		Medium(const Medium&) = delete; //not copiable
+		Medium& operator=(const Medium&) = delete;
 		Medium(Medium&&) = default; //move
 		Medium& operator=(Medium&&) = default;
 		
@@ -130,10 +130,14 @@ namespace ffip {
 		Medium_Ref get_m_medium_ref() const;
 		void set_index(const int index);
 		void set_dt(const real dt);
+
 		real get_e_inf() const;
 		real get_u_inf() const;
 		real get_c() const;			//light speed
 		real get_z() const;			//impedence
+
+		void read_config(const Config& config);
+		void init();
 	};
 	
 	template<typename... Args>

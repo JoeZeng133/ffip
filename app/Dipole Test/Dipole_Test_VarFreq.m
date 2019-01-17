@@ -1,5 +1,6 @@
 %% near-field dipole testclear
 clc
+clear
 close all
 
 
@@ -9,26 +10,25 @@ c0 = 3e8;
 eta0 = sqrt(u0 / e0);
 
 Sc = 0.5;
-dx = 2e-9;
+dx = 1e-9;
 dt = Sc * dx / c0;
-step = 1000;
+step = 15000;
 PML_d = 6;
+dim = [22, 22, 22];
 er_bg = 1;
 ur_bg = 1;
 
-fp = c0 / (800e-9);
+lam_min = 200e-9;
+lam_max = 1000e-9;
+lam = linspace(lam_min, lam_max, 100);
+fp = c0 / (500e-9);
 delay = 1 / fp;
-ricker = @(t, fp, d) (1 - 2 * (pi * fp * (t - d)).^2) .* exp(-(pi * fp * (t - d)).^2);
-t = (0:step) * dt;
-ref_signal = ricker(t, fp, delay);
-G1 = 0.5 + 1j;
-G2 = 0.3 - 0.5j;
-G = G1 + G2;                         %the point source is G
+G = 1;
 
-rho = linspace(10, 15, 10) * dx;
-phi = linspace(0, 2 * pi, 10);
-th = linspace(1 / 4 * pi, 3 / 4 * pi, 10);
-ft = fp;
+rho = 10 * dx;
+phi = pi / 4;
+th = pi / 4;
+ft = c0 ./ lam;
 
 [Rho, Phi, Th, Ft] = ndgrid(rho, phi, th, ft);
 [Xo, Yo, Zo] = sph2cart(Phi, pi / 2 - Th, Rho);
@@ -45,9 +45,8 @@ fclose(fileID);
 % wriet to dipole source files
 filename_dipoles = 'dipoles.in';
 fileID = fopen(filename_dipoles, 'w');
-fprintf(fileID, '2\n');
-fprintf(fileID, '%e %e %e %e %e %e 4\n', dim * dx / 2, abs(G1), fp, delay - angle(G1) / (2 * pi * fp));
-fprintf(fileID, '%e %e %e %e %e %e 4', dim * dx / 2, abs(G2), fp, delay - angle(G2) / (2 * pi * fp));
+fprintf(fileID, '1\n');
+fprintf(fileID, '%e %e %e %e %s %e %e 4\n', dim * dx / 2, abs(G), 'r', fp, delay);
 fclose(fileID);
 
 %% theoretical fields
@@ -56,23 +55,15 @@ lorentz = @(w, rel_e, fp, delta) rel_e ./ (1 + 1j * (w / (2 * pi * fp)) * (delta
 drude = @(w, fp, gamma) (2 * pi * fp)^2 ./ (1j * w * (2 * pi * gamma) - w.^2);
 deybe = @(w, rel_e, tau) rel_e ./ (1 + 1j * w * tau);
 
-% er_const = 2 - 0.2i;
-% sig_const = -imag(er_const) * (2 * pi * fp * e0);
-% er_func = @(w) (real(er_const) - 1j * sig_const ./ (w * e0));
-% er_func = @(w) (1 + deybe(w, rel_e, tau));
-er_func = @(w) (1 + drude(w, 2e14, 0.5e14));
-% er_func = @(w) (1 + lorentz(w, 3, 3e14, 0.5e14) + lorentz(w, 3, 5e14, 1e14));
-% er_func = @(w) (1 + drude(w, 2e14, 0.5e14) + lorentz(w, 3, 5e14, 1e14));
-% er_func = @(w) (1 + lorentz(w, 3, 5e14, 1e14));
-
-testf = linspace(0.5 * fp, 2 * fp, 1000);
+er_func = @Au;
+testf = ft;
 tester = er_func(2 * pi * testf);
 
 figure(1)
-plot(testf / (1e12), real(tester)), hold on
-plot(testf / (1e12), -imag(tester), '--'), hold off
+plot(3e8 ./ testf / 1e-9, real(tester)), hold on
+plot(3e8 ./ testf / 1e-9, -imag(tester), '--'), hold off
 legend({['Re ', char(949), '_r'], ['Im ', char(949), '_r']}, 'FontSize', 15)
-xlabel('f [THz]')
+xlabel('\lambda [nm]')
 
 er =  er_func(Omega);
 e = e0 * er;
@@ -93,7 +84,8 @@ fileID = fopen('config.in', 'w');
 fprintf(fileID, "basic {\n");
 fprintf(fileID, "%e %e\n", dt, dx);
 fprintf(fileID, "%d %d %d\n", dim);
-fprintf(fileID, "%d\n", 2);
+fprintf(fileID, "%d\n", 0);
+fprintf(fileID, "%d\n", 0);
 fprintf(fileID, "%d\n", PML_d);
 fprintf(fileID, "%d\n", step);
 fprintf(fileID, "%e %e\n", er_bg, ur_bg);
@@ -101,12 +93,8 @@ fprintf(fileID, "}\n");
 
 % medium configuration
 fprintf(fileID, "medium 1{\n");
-% medium 0, scatterer medium
-fprintf(fileID, "{ ");
-fprintf(fileID, "%e %e %e %e 1\n", er_bg, 0, ur_bg, 0);
-fprintf(fileID, "{ Drude %e %e }\n", 2e14, 0.5e14);
-% fprintf(fileID, "{ Lorentz %e %e %e }\n", 3, 5e14, 1e14);
-fprintf(fileID, " }\n");
+% Au
+Au_print(fileID);
 fprintf(fileID, "}\n");
 
 % geometry configuration
@@ -130,9 +118,13 @@ fclose(fileID);
 
 disp('config.in created');
 %% simulated fields
-call_exe('std_config')
+% call_exe('std_config')
 data = load('output.out');
 make_complex = @(x, y) x + 1j * y;
+ricker = @(t, fp, d) (1 - 2 * (pi * fp * (t - d)).^2) .* exp(-(pi * fp * (t - d)).^2);
+
+t = (0:step) * dt;
+ref_signal = ricker(t, fp, delay);
 ref = sum(ref_signal .* exp(-1j * 2 * pi * Ft(:) * t), 2);
 
 E = [make_complex(data(:, 1), data(:, 2)), make_complex(data(:, 3), data(:, 4)), make_complex(data(:, 5), data(:, 6))];
@@ -147,48 +139,26 @@ Eth = sum(E .* proj_th, 2) ./ ref;
 Hphi = sum(H .* proj_phi, 2) ./ ref;
 
 %% comparisons
-% figure(2)
-% plot(abs(Er(:)), 'r'), hold on
-% plot(abs(Er_p(:)), 'b')
+figure(2)
+subplot(1, 2, 1)
+plot(real(Er(:)), 'r'), hold on
+plot(real(Er_p(:)), 'b'), hold off
+subplot(1, 2, 2)
+plot(imag(Er(:)), 'r'), hold on
+plot(imag(Er_p(:)), 'b'), hold off
 
-%% correlation comparisons
 figure(3)
 subplot(1, 2, 1)
-plot(abs(Er(:)), abs(Er_p(:)), '*')
-axis equal
-axis tight
-title('Re E_r')
-
+plot(real(Eth(:)), 'r'), hold on
+plot(real(Eth_p(:)), 'b'), hold off
 subplot(1, 2, 2)
-plot(imag(Er(:)), imag(Er_p(:)), '*')
-axis equal
-axis tight
-title('Im E_r')
+plot(imag(Eth(:)), 'r'), hold on
+plot(imag(Eth_p(:)), 'b'), hold off
 
 figure(4)
 subplot(1, 2, 1)
-plot(abs(Eth(:)), abs(Eth_p(:)), '*')
-axis equal
-axis tight
-title('Re E_\theta')
-
+plot(real(Hphi(:)), 'r'), hold on
+plot(real(Hphi_p(:)), 'b'), hold off
 subplot(1, 2, 2)
-plot(imag(Eth(:)), imag(Eth_p(:)), '*')
-axis equal
-axis tight
-title('Im E_\theta')
-
-figure(5)
-subplot(1, 2, 1)
-plot(abs(Hphi(:)), abs(Hphi_p(:)), '*')
-axis equal
-axis tight
-title('Re H_\phi')
-
-subplot(1, 2, 2)
-plot(imag(Hphi(:)), imag(Hphi_p(:)), '*')
-axis equal
-axis tight
-title('Im H_\phi')
-
-
+plot(imag(Hphi(:)), 'r'), hold on
+plot(imag(Hphi_p(:)), 'b'), hold off

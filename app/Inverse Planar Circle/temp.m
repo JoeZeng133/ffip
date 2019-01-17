@@ -1,7 +1,3 @@
-for i = 2 : 27
-    figure(i)
-    colorbar
-    caxis([0 1])
-    axis tight
-    zlim([0 1])
+for i = 1 : 38
+    saveas(figure(i), ['itr' num2str(i + 2) '.fig'])
 end

@@ -184,17 +184,25 @@ namespace ffip {
 		index = _index;
 	}
 	
+	void Medium::read_config(const Config& config) {
+		dt = config.dt;
+	}
+
+	void Medium::init() {
+		for (auto item : e_poles) {
+			item->set_dt(dt);
+			e_poles_ref.push_back(new Pole_Ref{ item->get_ref() });
+		}
+
+		for (auto item : m_poles) {
+			item->set_dt(dt);
+			m_poles_ref.push_back(new Pole_Ref{ item->get_ref() });
+		}
+	}
+
 	void Medium::set_dt(const real _dt) {
 		dt = _dt;
-		for(auto item : e_poles) {
-			item->set_dt(dt);
-			e_poles_ref.push_back(new Pole_Ref{item->get_ref()});
-		}
-		
-		for(auto item : m_poles) {
-			item->set_dt(dt);
-			m_poles_ref.push_back(new Pole_Ref{item->get_ref()});
-		}
+		init();
 	}
 	
 	real Medium::get_e_inf() const {

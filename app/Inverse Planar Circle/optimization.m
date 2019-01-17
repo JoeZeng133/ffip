@@ -3,34 +3,60 @@ clc
 % close all
 
 load('case_configuration.mat');
-rho = ones(inhom_dim(1:2) + 1) * 0.7;                          %start with rho=1
+rho = ones(inhom_dim(1:2) + 1);                          %start with rho=1
 tol = 1e-4;
-step = 0.1;
+step = 0.02; 
 a = 0.9;
-max_itr = 30;
+max_itr = 1;
 itr = 0;
+max_size = [1 1000];
+
+% logging data
+obj_func = zeros(max_size);
+exp_obj_func = zeros(max_size);
+sens = cell(max_size);
+Se_list = cell(max_size);
+rho_list = cell(max_size);
+
 
 %% optimization
 while (itr < max_itr)
     itr = itr + 1;
     fprintf('################# Iteration %d\n', itr);
+    
+    if (mod(itr - 1, 1) == 0)
+        figure
+        surf(rho)
+%         pcolor(rho)
+        colorbar
+        shading flat
+        caxis([0 1])
+        zlim([0 1])
+        title(['Iteration ', num2str(itr)])
+        xlabel('y')
+        ylabel('x')
+       
+        getframe;
+    end
+    
+    rho_list{itr} = rho;
     % forward simulation configuration
     % write to geometry file
     rho_out = rho .* ones([1, 1, inhom_dim(3) + 1]);
     file_geometry_forward = 'forward_geometry.in';
     fileID = fopen(file_geometry_forward, 'w');
     fprintf(fileID, '%d %d %d\n', inhom_dim + 1);
-    fprintf(fileID, '%e %e\n', inhom_p1(1) * dx, dx);
-    fprintf(fileID, '%e %e\n', inhom_p1(2) * dx, dx);
-    fprintf(fileID, '%e %e\n', inhom_p1(3) * dx, dx);
-    fprintf(fileID, '%e ', rho_out);
+    for i = 1 : 3
+        fprintf(fileID, '%e %e\n', inhom_p1(i), inhom_dx(i));
+    end
+    fprintf(fileID, '%e ', rho_out(:));
     fclose(fileID);
 
     % write to probes file
     file_probes_input_forward = 'forward_probes.in';
     fileID = fopen(file_probes_input_forward, "w");
     fprintf(fileID, "%d\n", num_probes + num_inhom_pos);
-    fprintf(fileID, "%e %e %e %e\n", [[probes_pos; inhom_pos] * dx, fp * ones([num_probes + num_inhom_pos, 1])]');
+    fprintf(fileID, "%e %e %e %e\n", [[probes_pos; inhom_pos], ft * ones([num_probes + num_inhom_pos, 1])]');
     fclose(fileID);
 
     % basic configuration
@@ -38,33 +64,42 @@ while (itr < max_itr)
     fprintf(fileID, "basic {\n");
     fprintf(fileID, "%e %e\n", dt, dx);
     fprintf(fileID, "%d %d %d\n", dim);
-    fprintf(fileID, "%d\n", 1);
+    fprintf(fileID, "%d\n", 2);
     fprintf(fileID, "%d\n", PMl_d);
     fprintf(fileID, "%d\n", time_step);
     fprintf(fileID, "%e %e\n", er_bg, ur_bg);
     fprintf(fileID, "}\n");
 
     % medium configuration
-    fprintf(fileID, "medium 2 {\n");
+    fprintf(fileID, "medium 3 {\n");
     % medium 0, background medium
     fprintf(fileID, "{ ");
     fprintf(fileID, "%e %e %e %e 0", er_bg, 0, ur_bg, 0);
     fprintf(fileID, " }\n");
+    % medium 1 Au
+    Au2_print(fileID);
+    % medium 2 FePt
+    fprintf(fileID, "{ ");
+    fprintf(fileID, "%e %e %e %e 0", real(fept_er), fept_sig, ur_bg, 0);
+    fprintf(fileID, " }\n");
 
-    % medium 1, scatterer medium
-    Au_print(fileID);
-%     fprintf(fileID, "{ ");
-%     fprintf(fileID, "%e %e %e %e 0", real(er_const), sig_const, ur_bg, 0);
-%     fprintf(fileID, " }\n");
-    
     fprintf(fileID, "}\n");
 
     % geometry configuration
-    fprintf(fileID, "geometry 1 {\n");
-    % geometry 0, the inhomogeneous region with mixed medium1 and medium0
+    fprintf(fileID, "geometry 2 {\n");
+    % geometry 0 gold aperture
     fprintf(fileID, "{ ");
     fprintf(fileID, "inhom %d %d %s", 1, 0, file_geometry_forward);
     fprintf(fileID, " }\n");
+    % geometry 1 Gold layer
+    fprintf(fileID, "{ ");
+    fprintf(fileID, "box %d %e %e %e %e %e %e", 1, [dx, dx, inhom_p1(3)], [p2(1) - dx, p2(2) - dx, inhom_p2(3)]);
+    fprintf(fileID, " }\n");
+    % % geometry 2 FePt Layer
+    % fprintf(fileID, "{ ");
+    % fprintf(fileID, "box %d %e %e %e %e %e %e", 2, [1e-9, 1e-9, 21e-9], [201e-9, 201e-9, 31e-9]);
+    % fprintf(fileID, " }\n");
+
     fprintf(fileID, "}\n");
 
     % plane wave source
@@ -98,11 +133,9 @@ while (itr < max_itr)
     E_forward_inhom = E_forward(num_probes + 1:end, :);
     H_forward_inhom = H_forward(num_probes + 1:end, :);
 
-    target_func = 0.5 * sum(sum(abs(E_forward_probes - E_target_probes).^2, 2), 1);
-    fprintf('Current objective function is evaluated at : %e\n', target_func);
-%     if (target_func < tol)
-%         break;
-%     end
+%     target_func = 0.5 * sum(abs(E_forward_probes(:, 3) - E_target_probes(:, 3)).^2, 1); %only Ez
+    obj_func(itr) = 0.5 * sum(sum(abs(E_forward_probes - E_target_probes).^2, 2), 1);
+    fprintf('Current objective function is evaluated at : %e\n', obj_func(itr));
     
     % adjoint simulation configuration
     Ex = 1;
@@ -111,9 +144,15 @@ while (itr < max_itr)
     dipoles = conj(E_forward_probes - E_target_probes);
     % dipoles = 2 * (abs(E_forward_probes) - abs(E_target_probes)) .* (E_forward_probes) ./ abs(E_forward_probes);
     amp = abs(dipoles);
-    dipoles_delay = delay - angle(dipoles)  / (2 * pi * fp);
+    dipoles_delay =  - angle(dipoles)  / (2 * pi * fp);
     ctype = [Ex * ones([num_probes, 1]); Ey * ones([num_probes, 1]); Ez * ones([num_probes, 1])];
-    dipoles_pos = [probes_pos;probes_pos;probes_pos] * dx;
+    dipoles_pos = [probes_pos;probes_pos;probes_pos];
+    
+%     dipoles = conj(E_forward_probes(:, 3) - E_target_probes(:, 3));
+%     amp = abs(dipoles);
+%     dipoles_delay = delay - angle(dipoles)  / (2 * pi * ft);
+%     ctype = Ez * ones([num_probes, 1]);
+%     dipoles_pos = probes_pos * dx;
     
     % write dipoles
     output_dipoles = [dipoles_pos, amp(:), fp * ones(size(amp(:))), dipoles_delay(:), ctype];
@@ -135,27 +174,37 @@ while (itr < max_itr)
     fprintf(fileID, "}\n");
 
     % medium configuration
-    fprintf(fileID, "medium 2 {\n");
+    fprintf(fileID, "medium 3 {\n");
     % medium 0, background medium
     fprintf(fileID, "{ ");
     fprintf(fileID, "%e %e %e %e 0", er_bg, 0, ur_bg, 0);
     fprintf(fileID, " }\n");
-
-    % medium 1, scatterer medium
-    Au_print(fileID);
-%     fprintf(fileID, "{ ");
-%     fprintf(fileID, "%e %e %e %e 0", real(er_const), sig_const, ur_bg, 0);
-%     fprintf(fileID, " }\n");
+    % medium 1 Au
+    Au2_print(fileID);
+    % medium 2 FePt
+    fprintf(fileID, "{ ");
+    fprintf(fileID, "%e %e %e %e 0", real(fept_er), fept_sig, ur_bg, 0);
+    fprintf(fileID, " }\n");
 
     fprintf(fileID, "}\n");
 
     % geometry configuration
-    fprintf(fileID, "geometry 1 {\n");
-    % geometry 0, the inhomogeneous region with mixed medium1 and medium0
+    fprintf(fileID, "geometry 2 {\n");
+    % geometry 0 gold aperture
     fprintf(fileID, "{ ");
     fprintf(fileID, "inhom %d %d %s", 1, 0, file_geometry_forward);
     fprintf(fileID, " }\n");
+    % geometry 1 Gold layer
+    fprintf(fileID, "{ ");
+    fprintf(fileID, "box %d %e %e %e %e %e %e", 1, [dx, dx, inhom_p1(3)], [p2(1) - dx, p2(2) - dx, inhom_p2(3)]);
+    fprintf(fileID, " }\n");
+    % % geometry 2 FePt Layer
+    % fprintf(fileID, "{ ");
+    % fprintf(fileID, "box %d %e %e %e %e %e %e", 2, [1e-9, 1e-9, 21e-9], [201e-9, 201e-9, 31e-9]);
+    % fprintf(fileID, " }\n");
+
     fprintf(fileID, "}\n");
+
 
     % dipole sources
     fprintf(fileID, "source 1 {\n");
@@ -199,37 +248,26 @@ while (itr < max_itr)
     A = reshape(A, inhom_dim + 1);
     A = sum(A, 3);
 
+    Se_list{itr} = Se;
+    sens{itr} = A;
+    
     disp('sensitivity calculation complete')
     % Optimization
     step = a * step;
     
     lb = max(-rho(:), -step);
-    ub = min(1 - rho(:), step);
+    ub = min(1.5 - rho(:), step);
     delta_rho = linprog(A(:), [], [], [], [], lb, ub);
     
 %     delta_rho = -A(:) * step;
     
-    new_target_func = target_func + sum(delta_rho .* A(:));
-     fprintf('The new objective function is expected to be : %e\n', new_target_func);
+    exp_obj_func(itr) = obj_func(itr) + sum(delta_rho .* A(:));
+    fprintf('The new objective function is expected to be : %e\n', exp_obj_func(itr));
 
     % updates
     rho = reshape(delta_rho, size(rho)) + rho;
     disp('updated');
-    if (mod(itr - 1, 1) == 0)
-        figure
-%         subplot(1, 2, 1)
-        surf(rho)
-%         pcolor(rho)
-%         colorbar
-%         shading flat
-        title(['Iteration ', num2str(itr)])
-        xlabel('y')
-        ylabel('x')
-        
-%         subplot(1, 2, 2)
-%         surf(A)
-        getframe;
-    end
+    
 end
 
 

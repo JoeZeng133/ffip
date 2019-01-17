@@ -12,6 +12,7 @@ int read_basic_config(istream& fin, Simulation& sim) {
 	double dt, dx;
 	int dimx, dimy, dimz;
 	int sf_thickness;
+	int tf_padded_thickness;
 	int PML_thickness;
 	int time_step;
 	double er, ur;
@@ -20,7 +21,7 @@ int read_basic_config(istream& fin, Simulation& sim) {
 	if (c != '{')
 		throw runtime_error("basic format is not right");
 	
-	fin >> dt >> dx >> dimx >> dimy >> dimz >> sf_thickness >> PML_thickness >> time_step >> er >> ur;
+	fin >> dt >> dx >> dimx >> dimy >> dimz >> sf_thickness >> tf_padded_thickness >> PML_thickness >> time_step >> er >> ur;
 	sim.setup(dx, dt, {dimx, dimy, dimz});
 	sim.set_background_medium(sim.make_medium(er, 0, ur, 0));
 	
@@ -33,6 +34,7 @@ int read_basic_config(istream& fin, Simulation& sim) {
 		sim.add_PML_layer(sim.make_pml(PML_thickness), Z, Low);
 	}
 	sim.add_sf_layer(sf_thickness);
+	sim.add_tf_layer(tf_padded_thickness);
 	sim.chunk_init();
 	
 	fin >> c;
@@ -134,6 +136,13 @@ void read_geometry(istream& fin, Simulation& sim, const vector<Medium*>& medium_
 		fin >> idx >> x0 >> y0 >> z0 >> x1 >> y1 >> z1;
 		sim.add_solid(sim.make_solid(medium_gather[idx], sim.make_box(fVec3{ x0, y0, z0 }, fVec3{ x1, y1, z1 })));
 	}
+
+	if (type == "disk") {
+		int idx, dir;
+		double radius, x, y, z, height;
+		fin >> idx >> x >> y >> z >> radius >> height >> dir;
+		sim.add_solid(sim.make_solid(medium_gather[idx], sim.make_disk(fVec3{ x,y,z }, radius, height, (Direction)dir)));
+	}
 	
 	fin >> c;
 	if (c != '}')
@@ -152,14 +161,26 @@ void read_source(istream& fin, Simulation& sim) {
 	
 	fin >> type;
 	if (type == "plane") {
-		fin >> n >> fp >> d;
+		int dim_neg, dim_pos;
+		char c;
+		double ref_pos;
+		fin >> dim_neg >> dim_pos >> c >> fp >> d >> ref_pos;
 		
 		Medium const* bg_medium = sim.get_bg_medium();
-		Plane_Wave projector(sim.get_dx(), sim.get_dt(), n);
+		Plane_Wave projector(sim.get_dx(), sim.get_dt(), dim_neg, dim_pos);
 		
 		projector.set_medium(bg_medium->get_e_inf(), bg_medium->get_u_inf());
 		projector.set_PML(PML(6, 0.8 * 4 / (sim.get_dx() * z0), 1, 0, 3, 1));
-		projector.set_excitation(make_ricker_func(fp, d));
+
+		if (c == 'r') {
+			projector.set_excitation(make_ricker_func(fp, d));
+		}
+
+		if (c == 's') {
+			projector.set_excitation(make_sin_func(fp, d));
+		}
+		
+		projector.set_ref_output("reference.out", ref_pos);
 		
 		sim.add_inc_source(new Inc_Source(projector));
 	}
@@ -168,14 +189,19 @@ void read_source(istream& fin, Simulation& sim) {
 		string filename;
 		int n;double x, y, z, amp;
 		int ctype;
+		char c;
 		
 		fin >> filename;
 		
 		fstream dipole_file{filename, ios::in};
 		dipole_file >> n;
 		for (int i = 0; i < n; ++i) {
-			dipole_file >> x >> y >> z >> amp >> fp >> d >> ctype;
-			sim.add_dipole(amp, {x, y, z}, (Coord_Type)ctype, make_ricker_func(fp, d));
+			dipole_file >> x >> y >> z >> amp >> c >> fp >> d >> ctype;
+			if (c == 'r')
+				sim.add_dipole(amp, {x, y, z}, (Coord_Type)ctype, make_ricker_func(fp, d));
+
+			if (c == 's') 
+				sim.add_dipole(amp, { x, y, z }, (Coord_Type)ctype, make_sin_func(fp, d));
 		}
 	}
 	
@@ -193,6 +219,29 @@ void read_nearfield_probe(istream& fin, Simulation& sim) {
 	for (int i = 0; i < n; ++i) {
 		fin >> x >> y >> z >> freq;
 		nearfield_probes.push_back(sim.add_nearfield_probe(freq, {x, y, z}));
+	}
+}
+
+vector<Nearfield_Probe const*> nearfield_convergence;
+void read_nearfield_probe_convergence(istream& fin, Simulation& sim) {
+	int n;
+	double x, y, z, freq;
+
+	fin >> n;
+	for (int i = 0; i < n; ++i) {
+		fin >> x >> y >> z >> freq;
+		nearfield_convergence.push_back(sim.add_nearfield_probe(freq, { x, y, z }));
+	}
+}
+
+vector<fVec3> nearfield_time;
+void read_nearfield_time(istream& fin) {
+	int n;
+	double x, y, z;
+	fin >> n;
+	for (int i = 0; i < n; ++i) {
+		fin >> x >> y >> z;
+		nearfield_time.emplace_back(x, y, z);
 	}
 }
 
@@ -259,18 +308,25 @@ int main(int argc, char const *argv[]) {
 	fstream farfield_output_file;
 	fstream flux_output_file;
 	fstream flux_input_file;
+	fstream nearfield_convergence_output_file;
+	fstream nearfield_convergence_input_file;
+	fstream nearfield_time_output_file;
+	fstream nearfield_time_input_file;
 	
 	Flux_Box const* flux_box{nullptr};
 	N2F_Box const* n2f_box{nullptr};
 	
-	string field;
-	fin >> field;
+	
 	while(!fin.eof()) {
-		bool assigned = false;
+		string field;
+		fin >> field;
+
 		if (field == "basic") {
 			time_step = read_basic_config(fin, sim);
-			assigned = true;
+			
 			//cout << field << " Complete \n";
+
+			continue;
 		}
 		
 		if (field == "medium") {
@@ -280,10 +336,11 @@ int main(int argc, char const *argv[]) {
 			
 			for(int i = 0; i < n; ++i)
 				medium_gather.push_back(read_medium(fin, sim));
-			assigned = true;
+
 			fin >> c;
-			
 			//cout << field << " Complete \n";
+
+			continue;
 		}
 		
 		if (field == "geometry") {
@@ -293,11 +350,12 @@ int main(int argc, char const *argv[]) {
 			
 			for(int i = 0; i < n; ++i)
 				read_geometry(fin, sim, medium_gather);
-			assigned = true;
 			
 			fin >> c;
-			
+
 			//cout << field << " Complete \n";
+
+			continue;
 		}
 		
 		if (field == "source") {
@@ -307,11 +365,23 @@ int main(int argc, char const *argv[]) {
 			
 			for(int i = 0; i < n; ++i)
 				read_source(fin, sim);
-			assigned = true;
 			
 			fin >> c;
 			
 			//cout << field << " Complete \n";
+
+			continue;
+		}
+
+		if (field == "nearfield_time") {
+			string filename;
+			fin >> filename;
+			nearfield_time_input_file = fstream{ filename, ios::in };
+			fin >> filename;
+			nearfield_time_output_file = fstream{ filename, ios::out };
+			read_nearfield_time(nearfield_time_input_file);
+
+			continue;
 		}
 		
 		if (field == "nearfield") {
@@ -322,9 +392,20 @@ int main(int argc, char const *argv[]) {
 			nearfield_output_file = fstream{filename, ios::out};
 			read_nearfield_probe(nearfield_input_file, sim);
 			
-			assigned = true;
-			
 			//cout << field << " Complete \n";
+
+			continue;
+		}
+
+		if (field == "nearfield_convergence") {
+			string filename;
+			fin >> filename;
+			nearfield_convergence_input_file = fstream{ filename, ios::in };
+			fin >> filename;
+			nearfield_convergence_output_file = fstream{ filename, ios::out };
+			read_nearfield_probe_convergence(nearfield_convergence_input_file, sim);
+
+			continue;
 		}
 		
 		if (field == "farfield") {
@@ -335,9 +416,8 @@ int main(int argc, char const *argv[]) {
 			farfield_output_file = fstream{filename, ios::out};
 			n2f_box = read_farfield_probe(farfield_input_file, sim);
 			
-			assigned = true;
-			
 			//cout << field << " Complete \n";
+			continue;
 		}
 		
 		if (field == "flux") {
@@ -348,30 +428,34 @@ int main(int argc, char const *argv[]) {
 			flux_output_file = fstream{filename, ios::out};
 			flux_box = read_flux(flux_input_file, sim);
 			
-			assigned = true;
-			
 			//cout << field << " Complete \n";
+
+			continue;
 		}
 		
 		if (field == "Stop_Step_Output") {
 			sim.output_step_number = false;
 			
-			assigned = true;
-			
 			//cout << field << "\n";
+			continue;
 		}
-		
-		
-		if (!assigned)
-			break;
-		fin >> field;
 	}
 	
 	sim.init();
 	
-	
+	int skip = 10;
 	for(int i = 0; i < time_step; ++i) {
 		sim.advance(fo);
+		if (i % skip == 0) {
+			for (auto item : nearfield_convergence)
+				item->output(nearfield_convergence_output_file);
+
+			for (auto pos : nearfield_time) {
+				nearfield_time_output_file << sim.at(pos, Ex) << " " << sim.at(pos, Ey) << " " << sim.at(pos, Ez)
+					<< " " << sim.at(pos, Hx) << " " << sim.at(pos, Hy) << " " << sim.at(pos, Hz) << "\n";
+			}
+		}
+			
 	}
 	
 	sim.udf_output();
@@ -396,7 +480,7 @@ int main(int argc, char const *argv[]) {
 
 	auto end = std::chrono::system_clock::now();
 	std::chrono::duration<double> elapsed_seconds = end-start;
-	cout << "\nRunning Time: " << elapsed_seconds.count() << endl;
+	std::cout << "\nRunning Time: " << elapsed_seconds.count() << endl;
 	//cout << "Simulation Finished" << endl;
 	return 0;
 }
