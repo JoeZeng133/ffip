@@ -281,17 +281,6 @@ namespace ffip {
 	constexpr Vec3<decltype(T1{} * T2{})> operator*(const T1 b, const Vec3<T2>& a) {
 		return {a.x * b, a.y * b, a.z * b};
 	}
-
-	/* right scalar addition */
-	template<typename T1, typename T2>
-	constexpr Vec3<decltype(T1{} + T2{})> operator+(const Vec3<T1>& a, const T2 b) {
-		return { a.x + b, a.y + b, a.z + b };
-	}
-	/* left scalar addition*/
-	template<typename T1, typename T2>
-	constexpr Vec3<decltype(T1{} + T2{})> operator+(const T1 b, const Vec3<T2>& a) {
-		return { a.x + b, a.y + b, a.z + b };
-	}
 	
 	/* point wise addtion */
 	template<typename T1, typename T2>

@@ -30,17 +30,6 @@ namespace ffip {
 			jmd[index] += c1 * ft(c2);
 		}
 	};
-
-	struct CU_PML : CU {
-		const real c1;
-		const real c2;
-		const real* p1;
-		const real* p2;
-		real ct{ 0 };
-
-		CU_PML(const size_t index, const real c1, const real c2, const real* p1, const real* p2);
-		void update(std::vector<real>& jmd, const real time) override final;
-	};
 	
 	/* Dipole current update*/
 	struct CU_Dipole : CU {
@@ -63,7 +52,6 @@ namespace ffip {
 		int num_ones[8];
 		real dx, dt;
 		
-		my_iterator ch_itr;
 	public:
 		Chunk(const iVec3& _sim_p1, const iVec3& _sim_p2, const iVec3& _ch_p1, const iVec3& _ch_p2, real _dx, real _dt);
 		//thread safe access at physical coordinates
@@ -106,8 +94,6 @@ namespace ffip {
 		std::vector<real> kx, ky, kz;
 	public:
 		// concurrent PML points update
-		void e_PML_push(const size_t rank);
-		void m_PML_push(const size_t rank);
 		void PML_update_helper(std::vector<PML_Point>& PML, const size_t rank);
 		// PML layer initializations
 		void PML_init(const real_arr& kx, const real_arr& ky, const real_arr& kz,
@@ -155,7 +141,6 @@ namespace ffip {
 		iVec3 get_origin() const;
 		iVec3 get_p1() const;
 		iVec3 get_p2() const;
-		iVec3 get_pos(const size_t index) const;
 		size_t get_index_ch(const iVec3& p) const;			//get index relative to chunk origin
 		
 		/* update members*/
@@ -195,7 +180,6 @@ namespace ffip {
 		std::mutex e_currents;
 		std::mutex m_currents;
 	public:
-		void add_current_update(CU* cu, const iVec3& pos);
 		void add_e_current_update(CU* cu);
 		void add_m_current_update(CU* cu);
 		void organize_current_updates();

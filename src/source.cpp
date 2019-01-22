@@ -512,9 +512,9 @@ namespace ffip {
 			size_t index = ch_itr.x * jump_x + ch_itr.y * jump_y + ch_itr.z * jump_z;
 			
 			if (is_E_point(ctype)) {
-				chunk->add_e_current_update(new CU_Inc<decltype(projector)>(index, side * TFSF_Mat[dir][type_dir_int] / dx, projector, d_itr.get_vec() + pos_offset));
+				chunk->add_e_current_update(new CU_Inc{index, side * TFSF_Mat[dir][type_dir_int] / dx, projector, d_itr.get_vec() + pos_offset});
 			} else
-				chunk->add_m_current_update(new CU_Inc<decltype(projector)>(index, side * TFSF_Mat[dir][type_dir_int] / dx, projector, d_itr.get_vec() + pos_offset));
+				chunk->add_m_current_update(new CU_Inc{index, side * TFSF_Mat[dir][type_dir_int] / dx, projector, d_itr.get_vec() + pos_offset});
 		}
 	}
 }
