@@ -1,11 +1,11 @@
 #include <chunk.hpp>
 
 namespace ffip {
-	Chunk::Chunk(const iVec3& _sim_p1, const iVec3& _sim_p2, const iVec3& _ch_p1, const iVec3& _ch_p2, real _dx, real _dt):  ch_p1(_ch_p1), ch_p2(_ch_p2), sim_p1(_sim_p1), sim_p2(_sim_p2), dx(_dx), dt(_dt) {
+	Chunk::Chunk(const iVec3& sim_p1, const iVec3& sim_p2, const iVec3& ch_p1, const iVec3& ch_p2, real dx, real dt):  ch_p1(ch_p1), ch_p2(ch_p2), sim_p1(sim_p1), sim_p2(sim_p2), dx(dx), dt(dt), ch_itr(ch_p1 - iVec3{ 1, 1, 1 }, ch_p2 + iVec3{ 1, 1, 1 }, Null) {
 		
 		ch_origin = ch_p1 - iVec3{1, 1, 1};
 		ch_dim = ch_p2 - ch_p1 + iVec3{3, 3, 3};
-		
+
 		ch_jump_x = 1;
 		ch_jump_y = ch_dim.x;
 		ch_jump_z = (size_t)ch_dim.x * ch_dim.y;
@@ -50,6 +50,10 @@ namespace ffip {
 	size_t Chunk::get_index_ch(const iVec3& p) const {
 		return (p.x - ch_origin.x) * ch_jump_x + (p.y - ch_origin.y) * ch_jump_y + (p.z - ch_origin.z) * ch_jump_z;
 	}
+
+	iVec3 Chunk::get_pos(const size_t index) const {
+		return ch_itr.get_vec(index);
+	}
 	
 	void Chunk::set_medium_point(const iVec3 &point, Medium_Ref const* medium_ref) {
 		int index = get_index_ch(point);
@@ -74,7 +78,7 @@ namespace ffip {
 		source->push_Md(this);
 		
 		
-//		inc_list.push_back(std::unique_ptr<Inc_Internal>(source));
+		inc_list.push_back(std::unique_ptr<Inc_Internal>(source));
 	}
 	
 	template<>
@@ -170,6 +174,9 @@ namespace ffip {
 		this->kz.insert(this->kz.end(), kz.begin() + p1_sim.z, kz.begin() + p2_sim.z + 1);
 		this->kz.insert(this->kz.begin(), 1);
 		this->kz.insert(this->kz.end(), 1);
+
+		e_PML_push(1);
+		m_PML_push(1);
 	}
 	
 	void Chunk::PML_update_helper(std::vector<PML_Point>& PML, const size_t rank) {
@@ -187,6 +194,26 @@ namespace ffip {
 		}
 	}
 
+	void Chunk::e_PML_push(const size_t rank) {
+		size_t idx1, idx2;
+		vector_divider(e_PML, 0, 1, idx1, idx2);
+
+		for (auto itr = e_PML.begin() + idx1; itr != e_PML.begin() + idx2; itr++) {
+			add_e_current_update(new CU_PML(itr->index, itr->b_pos, itr->c_pos / dx, &eh[itr->index + itr->jump_pos], &eh[itr->index - itr->jump_pos]));
+			add_e_current_update(new CU_PML(itr->index, itr->b_neg, -itr->c_neg / dx, &eh[itr->index + itr->jump_neg], &eh[itr->index - itr->jump_neg]));
+		}
+	}
+
+	void Chunk::m_PML_push(const size_t rank) {
+		size_t idx1, idx2;
+		vector_divider(m_PML, 0, 1, idx1, idx2);
+
+		for (auto itr = m_PML.begin() + idx1; itr != m_PML.begin() + idx2; itr++) {
+			add_m_current_update(new CU_PML(itr->index, itr->b_pos, itr->c_pos / dx, &eh[itr->index + itr->jump_pos], &eh[itr->index - itr->jump_pos]));
+			add_m_current_update(new CU_PML(itr->index, itr->b_neg, -itr->c_neg / dx, &eh[itr->index + itr->jump_neg], &eh[itr->index - itr->jump_neg]));
+		}
+	}
+
 	void Chunk::update_Jd(const real time, const size_t rank) {
 		if (rank >= num_proc)
 			throw std::runtime_error("Rank cannot be bigger than number of processes");
@@ -198,14 +225,14 @@ namespace ffip {
 		barrier->Sync();
 		
 		//PML updates
-		PML_update_helper(e_PML, rank);
-		barrier->Sync();
+		/*PML_update_helper(e_PML, rank);
+		barrier->Sync();*/
 		
 		//incident waves
 		reset_scheduler();
 		barrier->Sync();
 		
-		dynamic_e_current_update(time, 5);
+		dynamic_e_current_update(time, 1000);
 //		for(auto& item :inc_list)
 //			item->update_Jd(jmd, barrier, rank, num_proc);
 		barrier->Sync();
@@ -226,14 +253,14 @@ namespace ffip {
 		barrier->Sync();
 		
 		//PML updates
-		PML_update_helper(m_PML, rank);
-		barrier->Sync();
+		/*PML_update_helper(m_PML, rank);
+		barrier->Sync();*/
 		
 		//incident waves
 		reset_scheduler();
 		barrier->Sync();
 		
-		dynamic_m_current_update(time, 5);
+		dynamic_m_current_update(time, 1000);
 		
 //		for(auto& item :inc_list)
 //			item->update_Md(jmd, barrier, rank, num_proc);
@@ -406,6 +433,14 @@ namespace ffip {
 			res += abs(item);
 		return res;
 	}
+
+	void Chunk::add_current_update(CU* cu, const iVec3& pos) {
+		if (is_E_point(pos.get_type()))
+			add_e_current_update(cu);
+
+		if (is_M_point(pos.get_type()))
+			add_m_current_update(cu);
+	}
 	
 	void Chunk::add_e_current_update(CU *cu) {
 		std::lock_guard<std::mutex> lock(e_currents);
@@ -483,5 +518,12 @@ namespace ffip {
 	
 	void Chunk::reset_scheduler() {
 		top = 0;
+	}
+
+	CU_PML::CU_PML(const size_t index, const real c1, const real c2, const real* p1, const real* p2) :CU(index), c1(c1), c2(c2), p1(p1), p2(p2) {}
+	
+	void CU_PML::update(std::vector<real>& jmd, const real time) {
+		ct = c1 * ct + c2 * (*p1 - *p2);
+		jmd[index] += ct;
 	}
 }

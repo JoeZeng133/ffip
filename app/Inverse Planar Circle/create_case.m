@@ -15,20 +15,18 @@ ur_bg = 1;
 Sc = 0.5;
 dx = 2e-9;
 dt = Sc * dx / c0;
-dim = [52, 52, 50];
-time_step = 10000; %gold
-PMl_d = 8;
+dim = [50, 50, 50];
+time_step = 10000;
+tf_layer = 2;
+sf_layer = 1;
+projector_padding = ceil((tf_layer + 1) / 2);
+PML_d = 8;
 
 ricker = @(t, fp, d) (1 - 2 * (pi * fp * (t - d)).^2) .* exp(-(pi * fp * (t - d)).^2);
-
+fs = c0 / (800e-9); %center frequency of the pulse
 ft = c0 / (800e-9); %frequency to extract fields at
-fp = c0 / (800e-9); %center frequency of the pulse
 delay = 0;
-t = (0:time_step) * dt;
-% ref_signal = ricker(t, fp, delay);
-ref_signal = sin(2 * pi * ft * t);
-ref_signal_fft = sum(ref_signal .* exp(-1j * 2 * pi * ft * t));
-fprintf('Equal to %.2f times of full pulse width\n', time_step * dt * fp);
+fprintf('Equal to %.2f times of full pulse width\n', time_step * dt * fs);
 
 center = dim / 2 * dx;
 p2 = dim * dx;
@@ -42,7 +40,7 @@ fept_center = [center(1), center(2), 60e-9];
 fept_p1 = fept_center - [fept_len, fept_len, fept_h] / 2;
 fept_p2 = fept_center + [fept_len, fept_len, fept_h] / 2;
 
-er_const = Au2(2 * pi * ft); %gold
+er_const = Au(2 * pi * ft); %gold
 
 % disk aperture
 disk_length = 70e-9;
@@ -64,9 +62,9 @@ num_inhom_pos = size(inhom_pos, 1);
 rho_target = ((inhom_coord_grid{1} - center(1)).^2 + (inhom_coord_grid{2} - center(2)).^2 > disk_radius^2) * 1;
 
 % nearfield probe
-target_x = (0:4:52) * dx;
-target_y = (0:4:52) * dx;
-target_z = 55e-9;
+target_x = linspace(0, p2(1), 10);
+target_y = linspace(0, p2(2), 10);
+target_z = 60e-9;
 [target_X, target_Y, target_Z] = ndgrid(target_x, target_y, target_z);
 probes_pos = [target_X(:), target_Y(:), target_Z(:)];
 num_probes = size(probes_pos, 1);
@@ -78,7 +76,7 @@ fprintf(fileID, '%d %d %d\n', inhom_dim + 1);
 for i = 1 : 3
     fprintf(fileID, '%e %e\n', inhom_p1(i), inhom_dx(i));
 end
-fprintf(fileID, '%e ', rho_target(:));
+fprintf(fileID, '%e\n', rho_target(:));
 fclose(fileID);
 
 % write to probes file
@@ -91,14 +89,15 @@ fclose(fileID);
 disp('geometry, probes files created');
 % basic configuration
 fileID = fopen('config.in', 'w');
-fprintf(fileID, "basic {\n");
-fprintf(fileID, "%e %e\n", dt, dx);
-fprintf(fileID, "%d %d %d\n", dim);
-fprintf(fileID, "%d\n", 2);
-fprintf(fileID, "%d\n", PMl_d);
-fprintf(fileID, "%d\n", time_step);
-fprintf(fileID, "%e %e\n", er_bg, ur_bg);
-fprintf(fileID, "}\n");
+fprintf(fileID, 'basic {\n');
+fprintf(fileID, '%e %e\n', dt, dx);
+fprintf(fileID, '%d %d %d\n', dim);
+fprintf(fileID, '%d\n', sf_layer);
+fprintf(fileID, '%d\n', tf_layer);
+fprintf(fileID, '%d\n', PML_d);
+fprintf(fileID, '%d\n', time_step);
+fprintf(fileID, '%e %e\n', er_bg, ur_bg);
+fprintf(fileID, '}\n');
 
 % medium configuration
 fprintf(fileID, "medium 3 {\n");
@@ -107,7 +106,7 @@ fprintf(fileID, "{ ");
 fprintf(fileID, "%e %e %e %e 0", er_bg, 0, ur_bg, 0);
 fprintf(fileID, " }\n");
 % medium 1 Au
-Au2_print(fileID);
+Au_print(fileID);
 % medium 2 FePt
 fprintf(fileID, "{ ");
 fprintf(fileID, "%e %e %e %e 0", real(fept_er), fept_sig, ur_bg, 0);
@@ -116,26 +115,26 @@ fprintf(fileID, " }\n");
 fprintf(fileID, "}\n");
 
 % geometry configuration
-fprintf(fileID, "geometry 2 {\n");
+fprintf(fileID, "geometry 3 {\n");
 % geometry 0 gold aperture
 fprintf(fileID, "{ ");
 fprintf(fileID, "inhom %d %d %s", 1, 0, file_geometry_target);
 fprintf(fileID, " }\n");
 % geometry 1 Gold layer
 fprintf(fileID, "{ ");
-fprintf(fileID, "box %d %e %e %e %e %e %e", 1, [dx, dx, inhom_p1(3)], [p2(1) - dx, p2(2) - dx, inhom_p2(3)]);
+fprintf(fileID, "box %d %e %e %e %e %e %e", 1, [0, 0, inhom_p1(3)], [p2(1), p2(2), inhom_p2(3)]);
 fprintf(fileID, " }\n");
 % % geometry 2 FePt Layer
-% fprintf(fileID, "{ ");
-% fprintf(fileID, "box %d %e %e %e %e %e %e", 2, fept_p1, fept_p2);
-% fprintf(fileID, " }\n");
+fprintf(fileID, "{ ");
+fprintf(fileID, "box %d %e %e %e %e %e %e", 2, fept_p1, fept_p2);
+fprintf(fileID, " }\n");
 
 fprintf(fileID, "}\n");
 
 % plane wave source
 fprintf(fileID, "source 1 {\n");
 fprintf(fileID, "{ ");
-fprintf(fileID, "plane %d %e %e", dim(3), fp, 0);
+fprintf(fileID, 'plane %d %d %s %e %e %e', projector_padding, dim(3) + projector_padding, 's', fs, delay, 0);
 fprintf(fileID, " }\n");
 fprintf(fileID, "}\n");
 
@@ -148,6 +147,11 @@ disp('objective configuration created');
 call_exe('std_config');
 
 %% load data
+ref_signal = load('reference.out');
+ref_signal = reshape(ref_signal, 1, []);
+t = (0:numel(ref_signal) - 1) * dt;
+ref_signal_fft = sum(ref_signal .* exp(-1j * 2 * pi * ft(:) * t), 2);
+
 data = load(file_probes_output_target);
 make_complex = @(x, y) x + 1j * y;
 
@@ -172,7 +176,15 @@ xlabel('y')
 ylabel('x')
 
 figure
+H = sqrt(sum(abs(H_target_probes).^2, 2));
+H = reshape(H, size(target_X));
+surf(target_x, target_y, H')
+shading flat
+title('|H|')
+
+figure
 E = sqrt(sum(abs(E_target_probes).^2, 2));
 E = reshape(E, size(target_X));
 surf(target_x, target_y, E')
-
+shading flat
+title('|E|')
