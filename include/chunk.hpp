@@ -8,6 +8,41 @@ namespace ffip {
 	class Inc_Internal;
 	class Dipole;
 	
+	/* Current update element */
+	struct CU {
+		const size_t index;
+		CU(const size_t _index): index(_index) {}
+		virtual void update(std::vector<real>& jmd, const real time) = 0;
+		virtual ~CU() {};
+	};
+	
+	/* Incident current update */
+	template<typename F>
+	struct CU_Inc : CU {
+		const real c1;
+		F& ft;
+		const iVec3 c2;
+		
+		CU_Inc(const size_t index, const real c1, F& ft, const iVec3 c2)
+		: CU{index}, c1(c1), ft(ft), c2(c2) {}
+		
+		void update(std::vector<real>& jmd, const real time) override final {
+			jmd[index] += c1 * ft(c2);
+		}
+	};
+	
+	/* Dipole current update*/
+	struct CU_Dipole : CU {
+		using func = std::function<real(const real)>;
+		const real c;
+		func f;
+		
+		CU_Dipole(const size_t index, const real c, const func& f): CU(index), c(c), f(f) {}
+		void update(std::vector<real>& jmd, const real time) override final {
+			jmd[index] += c * f(time);
+		}
+	};
+	
 	class Chunk {
 		/* constructor, indexing and field accessing members*/
 	private:
@@ -133,6 +168,24 @@ namespace ffip {
 		/* miscellaneous*/
 	public:
 		real measure() const;
+		
+		/* Generic Currents Updates */
+	private:
+		std::vector<size_t> e_cu_indexes;
+		std::vector<size_t> m_cu_indexes;
+		std::vector<CU*> e_current_updates;
+		std::vector<CU*> m_current_updates;
+		
+		std::atomic<size_t> top;
+		std::mutex e_currents;
+		std::mutex m_currents;
+	public:
+		void add_e_current_update(CU* cu);
+		void add_m_current_update(CU* cu);
+		void organize_current_updates();
+		void dynamic_e_current_update(const real time, const size_t chunk_size);
+		void dynamic_m_current_update(const real time, const size_t chunk_size);
+		void reset_scheduler();
 	};
 	
 	template<typename... Args>

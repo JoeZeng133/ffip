@@ -70,7 +70,11 @@ namespace ffip {
 
 	
 	void Chunk::add_inc_internal(Inc_Internal* source) {
-		inc_list.push_back(std::unique_ptr<Inc_Internal>(source));
+		source->push_Jd(this);
+		source->push_Md(this);
+		
+		
+//		inc_list.push_back(std::unique_ptr<Inc_Internal>(source));
 	}
 	
 	template<>
@@ -198,9 +202,12 @@ namespace ffip {
 		barrier->Sync();
 		
 		//incident waves
-		//if (rank == 0)
-		for(auto& item :inc_list)
-			item->update_Jd(jmd, barrier, rank, num_proc);
+		reset_scheduler();
+		barrier->Sync();
+		
+		dynamic_e_current_update(time, 5);
+//		for(auto& item :inc_list)
+//			item->update_Jd(jmd, barrier, rank, num_proc);
 		barrier->Sync();
 		
 		//dipoles, non concurrent updates
@@ -223,9 +230,13 @@ namespace ffip {
 		barrier->Sync();
 		
 		//incident waves
-		//if (rank == 0)
-		for(auto& item :inc_list)
-			item->update_Md(jmd, barrier, rank, num_proc);
+		reset_scheduler();
+		barrier->Sync();
+		
+		dynamic_m_current_update(time, 5);
+		
+//		for(auto& item :inc_list)
+//			item->update_Md(jmd, barrier, rank, num_proc);
 		barrier->Sync();
 		
 		//non paralell part
@@ -396,5 +407,81 @@ namespace ffip {
 		return res;
 	}
 	
-
+	void Chunk::add_e_current_update(CU *cu) {
+		std::lock_guard<std::mutex> lock(e_currents);
+		
+		if (cu)
+			e_current_updates.push_back(cu);
+		else
+			throw std::runtime_error("Invalid Current Update");
+	}
+	
+	void Chunk::add_m_current_update(CU *cu) {
+		std::lock_guard<std::mutex> lock(m_currents);
+		
+		if (cu)
+			m_current_updates.push_back(cu);
+		else
+			throw  std::runtime_error("Invalid Current Update");
+	}
+	
+	void Chunk::organize_current_updates() {
+		{
+			std::sort(e_current_updates.begin(), e_current_updates.end(), [](CU* a, CU* b){return a->index < b->index;});
+			size_t cur_index = -1;
+			
+			for (int i = 0; i < e_current_updates.size(); ++i) {
+				if (e_current_updates[i]->index != cur_index) {
+					cur_index = e_current_updates[i]->index;
+					e_cu_indexes.push_back(i);
+				}
+			}
+			e_cu_indexes.push_back(e_current_updates.size());	//extra point to simplify if statements
+		}
+		
+		{
+			std::sort(m_current_updates.begin(), m_current_updates.end(), [](CU* a, CU* b){return a->index < b->index;});
+			size_t cur_index = -1;
+			
+			for (int i = 0; i < m_current_updates.size(); ++i) {
+				if (m_current_updates[i]->index != cur_index) {
+					cur_index = m_current_updates[i]->index;
+					m_cu_indexes.push_back(i);
+				}
+			}
+			m_cu_indexes.push_back(m_current_updates.size());	//extra point to simplify if statements
+		}
+	}
+	
+	void Chunk::dynamic_e_current_update(const real time, const size_t chunk_size) {
+		size_t assigned_index;
+		size_t end = e_cu_indexes.size() - 1;
+		
+		while((assigned_index = top.fetch_add(chunk_size)) < end) {
+			size_t end_index = std::min(assigned_index + chunk_size, end);
+			size_t index_s = e_cu_indexes[assigned_index];
+			size_t index_t = e_cu_indexes[end_index];
+			
+			for (size_t j = index_s; j < index_t; ++j)
+				e_current_updates[j]->update(jmd, time);
+		}
+	}
+	
+	void Chunk::dynamic_m_current_update(const real time, const size_t chunk_size) {
+		size_t assigned_index;
+		size_t end = m_cu_indexes.size() - 1;
+		
+		while((assigned_index = top.fetch_add(chunk_size)) < end) {
+			size_t end_index = std::min(assigned_index + chunk_size, end);
+			size_t index_s = m_cu_indexes[assigned_index];
+			size_t index_t = m_cu_indexes[end_index];
+			
+			for (size_t j = index_s; j < index_t; ++j)
+				m_current_updates[j]->update(jmd, time);
+		}
+	}
+	
+	void Chunk::reset_scheduler() {
+		top = 0;
+	}
 }

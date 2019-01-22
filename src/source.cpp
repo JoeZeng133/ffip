@@ -457,4 +457,64 @@ namespace ffip {
 	void Inc_Internal::advance_projector() {
 		projector.advance();	//this updates
 	}
+	
+	void Inc_Internal::push_Jd(Chunk *chunk, const size_t rank, const size_t num_proc) {
+		for(auto& face : tfsf_list) {
+			push_helper(chunk, face, Coord_Type::Ex, rank, num_proc);
+			push_helper(chunk, face, Coord_Type::Ey, rank, num_proc);
+			push_helper(chunk, face, Coord_Type::Ez, rank, num_proc);
+		}
+	}
+	
+	void Inc_Internal::push_Md(Chunk *chunk, const size_t rank, const size_t num_proc) {
+		for(auto& face : tfsf_list) {
+			push_helper(chunk, face, Coord_Type::Hx, rank, num_proc);
+			push_helper(chunk, face, Coord_Type::Hy, rank, num_proc);
+			push_helper(chunk, face, Coord_Type::Hz, rank, num_proc);
+		}
+	}
+	
+	void Inc_Internal::push_helper(Chunk* chunk, const TFSF_Surface face, Coord_Type ctype, const size_t rank, const size_t num_proc) {
+		switch (face.dir) {
+			case Direction::X:
+				if(ctype == Coord_Type::Ex || ctype == Coord_Type::Hx)
+					return;
+				break;
+				
+			case Direction::Y:
+				if(ctype == Coord_Type::Ey || ctype == Coord_Type::Hy)
+					return;
+				break;
+				
+			case Direction::Z:
+				if(ctype == Coord_Type::Ez || ctype == Coord_Type::Hz)
+					return;
+				break;
+				
+			default:
+				throw std::runtime_error("Direction of the TF/SF surface is illegal");
+				break;
+		}
+		
+		auto interior = get_component_interior(face.d1, face.d2, ctype);
+		if(!ElementWise_Less_Eq(interior.first, interior.second))	//return if the interior is empty
+			return;
+		
+		int side = static_cast<int>(face.side);
+		int dir = static_cast<int>(face.dir);
+		int type_dir_int = Ctype2DirInt(ctype);
+		iVec3 pos_offset = face.get_pos_offset();
+		iVec3 int1_ch = interior.first - ch_origin;			//chunk coordinate
+		iVec3 int2_ch = interior.second - ch_origin;
+		
+		//loop over the coord type with chunk, domain coordinates updating on the fly
+		for(auto ch_itr = my_iterator(int1_ch, int2_ch, int1_ch.get_type(), rank, num_proc), d_itr = my_iterator(interior.first, interior.second, ctype, rank, num_proc); !ch_itr.is_end(); ch_itr.advance(), d_itr.advance()) {
+			size_t index = ch_itr.x * jump_x + ch_itr.y * jump_y + ch_itr.z * jump_z;
+			
+			if (is_E_point(ctype)) {
+				chunk->add_e_current_update(new CU_Inc{index, side * TFSF_Mat[dir][type_dir_int] / dx, projector, d_itr.get_vec() + pos_offset});
+			} else
+				chunk->add_m_current_update(new CU_Inc{index, side * TFSF_Mat[dir][type_dir_int] / dx, projector, d_itr.get_vec() + pos_offset});
+		}
+	}
 }

@@ -150,6 +150,8 @@ namespace ffip {
 			item->init(tf_p1, tf_p2, chunk->get_dim(), chunk->get_origin(), ch_p1, ch_p2, dx);
 			chunk->add_inc_internal(item->get_source_internal());
 		}
+		
+		chunk->organize_current_updates();
 	}
 	
 	void Simulation::PML_init() {

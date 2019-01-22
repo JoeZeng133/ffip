@@ -189,10 +189,14 @@ namespace ffip {
 		//concurrent updates
 		void update_Jd(std::vector<real>& jmd, Barrier* barrier, const size_t rank = 0, const size_t num_proc = 1);
 		void update_Md(std::vector<real>& jmd, Barrier* barrier, const size_t rank = 0, const size_t num_proc = 1);
-		//advance projector
-		void advance_projector();
-		
 		void update_helper(std::vector<real>& jmd, const TFSF_Surface face, Coord_Type type, const size_t rank = 0, const size_t num_proc = 1);	//helper functions for update_Jd, update_Md
+		
+		void push_Md(Chunk* chunk, const size_t rank = 0, const size_t num_proc = 1);
+		void push_Jd(Chunk* chunk, const size_t rank = 0, const size_t num_proc = 1);
+		void push_helper(Chunk* chunk, const TFSF_Surface face, Coord_Type type, const size_t rank = 0, const size_t num_proc = 1);
+		//advance projector
+		
+		void advance_projector();
 	private:
 		std::vector<TFSF_Surface> tfsf_list;
 		Plane_Wave projector;

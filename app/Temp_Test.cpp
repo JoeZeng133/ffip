@@ -8,16 +8,44 @@
 using namespace std;
 using namespace ffip;
 
-int func(double x) {
-	return 1 / x;
+constexpr int N = 10000000;
+atomic<size_t> top;
+int a[N];
+
+struct A {
+	int x;
+	A(const int x): x(x) {}
+};
+
+void func() {
+	size_t cur;
+	
+	while ((cur = top++) < N) {
+		a[cur]++;
+	}
 }
 
 int  main(int argc, char const *argv[]) {
 	auto start = std::chrono::system_clock::now();
 	
+	A tmp(2);
+	cout << tmp.x << endl;
+	std::vector<std::future<void>> task_list;
+	for(int i = 0; i < 3; ++i) {
+		task_list.push_back(std::async(std::launch::async, func));
+	}
+	for(auto &item : task_list)
+		item.get();
 	
-	Primitive* ptr = new Disk({0, 0, 0}, 1, 1, Z);
-	cout << ptr->is_in_closure({ 0.51, 0.501, 0.51 }) << "\n";
+	bool no = false;
+	for (int i = 0; i < N; ++i)
+		if (a[i] > 1)
+			no = true;
+	
+	if (no)
+		cout << "No" << endl;
+	else
+		cout << "Ye" << endl;
 	
 	auto end = std::chrono::system_clock::now();
 	std::chrono::duration<double> elapsed_seconds = end - start;
