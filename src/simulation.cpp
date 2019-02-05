@@ -1,6 +1,10 @@
 #include <simulation.hpp>
 #include <iostream>
 
+#include <cvmarkersobj.h>
+
+using namespace Concurrency;
+
 namespace ffip {
 	void Simulation::setup(const real _dx, const real _dt, const iVec3 _dim) {
 		dx = _dx;
@@ -24,47 +28,38 @@ namespace ffip {
 	}
 	
 	void Simulation::add_inc_source(Inc_Source* source) {
-		Inc_Sources.push_back(source);
+		if (source)
+			excitation = source;
 	}
 	
 	void Simulation::chunk_init() {
 		//dimension is in computational units, so they are two times the original values
-		sim_dim = sim_dim * 2;
-
-		sim_p1 = { 0, 0, 0 };
-		sim_p2 = sim_dim;
+		roi_p1 = { 0, 0, 0 };
+		roi_p2 = sim_dim * 2;
 
 		//total field padded layer
-		sim_p1 = sim_p1 - iVec3{ tf_padded_depth, tf_padded_depth, tf_padded_depth };
-		sim_p2 = sim_p2 + iVec3{ tf_padded_depth, tf_padded_depth, tf_padded_depth };
+		tf_p1 = roi_p1 - iVec3{ tf_padded_depth, tf_padded_depth, tf_padded_depth };
+		tf_p2 = roi_p2 + iVec3{ tf_padded_depth, tf_padded_depth, tf_padded_depth };
 
 		//scattered field layer
-		tf_p1 = sim_p1;
-		tf_p2 = sim_p2;
-		sim_p1 = sim_p1 - iVec3{ sf_depth, sf_depth, sf_depth };
-		sim_p2 = sim_p2 + iVec3{ sf_depth, sf_depth, sf_depth };
-
-		phys_p1 = sim_p1;
-		phys_p2 = sim_p2;
+		phys_p1 = tf_p1 - iVec3{ sf_depth, sf_depth, sf_depth };
+		phys_p2 = tf_p2 + iVec3{ sf_depth, sf_depth, sf_depth };
 		
 		//add PML layers
-		sim_p1.x -= 2 * PMLs[0][0].get_d();
-		sim_p1.y -= 2 * PMLs[1][0].get_d();
-		sim_p1.z -= 2 * PMLs[2][0].get_d();
+		sim_p1 = phys_p1 - 2 * iVec3{ PMLs[0][0].get_d() , PMLs[1][0].get_d(), PMLs[2][0].get_d() };
+		sim_p2 = phys_p2 + 2 * iVec3{ PMLs[0][1].get_d() , PMLs[1][1].get_d(), PMLs[2][1].get_d() };
 		
-		sim_p2.x += 2 * PMLs[0][1].get_d();
-		sim_p2.y += 2 * PMLs[1][1].get_d();
-		sim_p2.z += 2 * PMLs[2][1].get_d();
-		
+		//chunk region, reserved for MPI implementation
+		ch_p1 = sim_p1;
+		ch_p2 = sim_p2;
+
+		config = Config{dt, dx, roi_p1, roi_p2, sim_p1, sim_p2, ch_p1, ch_p2, tf_p1, tf_p2, phys_p1, phys_p2};
 		//implementaions of MPI, for now 1 chunk covers the whole region
-		chunk = new Chunk{sim_p1, sim_p2, sim_p1, sim_p2, dx, dt};
-		ch_p1 = chunk->get_p1();
-		ch_p2 = chunk->get_p2();
-		chunk->set_num_proc(num_proc);
+		chunk = new Chunk{config};
 	}
 	
-	void Simulation::add_dipole(const real amp, const fVec3 pos, const Coord_Type ctype, const std::function<real (const real)> &profile) {
-		chunk->add_dipoles(new Dipole(pos * (2 / dx), amp / (dx * dx * dx), profile, ctype, chunk));
+	void Simulation::add_dipole(real amp, fVec3 pos, const Coord_Type ctype, const Func func_type, const real fp, const real delay) {
+		dipole_configs.push_back(Dipole_Config{ amp, pos, ctype, func_type, fp, delay });
 	}
 	
 	void Simulation::set_background_medium(Medium const*  m) {
@@ -85,81 +80,196 @@ namespace ffip {
 				for(int k = 1; k < 2 * N; k += 2) {
 					sampled_points.push_back({i * delta, j * delta, k * delta});
 				}
-	
-		auto func = [&, this](my_iterator itr) {
-			for(; !itr.is_end(); itr.advance()) {
-				/* assign material only when it is E or H*/
-				auto p = itr.get_vec();
-				auto ctype = p.get_type();
-				
-				if (!is_M_point(ctype) && !is_E_point(ctype))			//exclude non-material points
-					continue;
-				
-				/* staire case implementation
-				 */
-				//fVec3 sampled_point = p * dx / 2;
-				//auto weights = get_zero_weights();
-				//bool assigned = 0;
-				//for(auto item : solids) {
-				//	if (item->update_weights(sampled_point, weights)) {	//it is true when it is inside the solid
-				//		assigned = 1;
-				//		break;
-				//	}
-				//}
 
-				//if (!assigned)			//assign background medium;
-				//	weights[bg_medium->index] += 1;
-				
-				/* spatial averaging to get materials
-				 naive sampling integration over a cube
-				 can be improved using adaptive quadrature
-				 and ray tracing
-				 */
-				fVec3 box_p1{(p.x - 1) * dx / 2, (p.y - 1) * dx / 2, (p.z - 1) * dx / 2};
-				auto weights = get_zero_weights();
+		std::vector<std::future<void>> task_list;
+		std::vector<Medium_Voxel> medium_voxels(my_iterator(ch_p1, ch_p2, All).get_size());
+		auto strides = dim2stride(ch_p2 - ch_p1 + 1);
 
-				for(auto& item : sampled_points) {
-					auto sampled_point = box_p1 + item;
-					bool assigned = 0;
+		auto get_index = [=, ch_p1 = this->ch_p1](const iVec3& p) {
+			return inner_prod(p - ch_p1, strides);
+		};
 
-					for(auto item : solids) {
-						if (item->update_weights(sampled_point, weights)) {	//it is true when it is inside the solid
-							assigned = 1;
-							break;
+		//average to get property for each point
+		{
+			auto solid_assign = [&, this](const size_t rank) {
+				for (auto itr = my_iterator(ch_p1, ch_p2, All, rank, num_proc); !itr.is_end(); itr.advance()) {
+					/* assign material only when it is E or H*/
+					auto p = itr.get_vec();
+					auto ctype = p.get_type();
+
+					if (!is_M_Point(ctype) && !is_E_Point(ctype))			//exclude non-material points
+						continue;
+
+					/* spatial averaging to get materials
+					naive sampling integration over a cube
+					can be improved using adaptive quadrature
+					and ray tracing
+					*/
+					fVec3 box_p1{ (p.x - 1) * dx / 2, (p.y - 1) * dx / 2, (p.z - 1) * dx / 2 };
+					auto weights = get_zero_weights();
+
+					for (auto& item : sampled_points) {
+						auto sampled_point = box_p1 + item;
+						bool assigned = 0;
+
+						for (auto item : solids) {
+							if (item->update_weights(sampled_point, weights)) {	//it is true when it is inside the solid
+								assigned = 1;
+								break;
+							}
 						}
+
+						if (!assigned)			//assign background medium;
+							weights[bg_medium->index] += 1;
 					}
 
-					if (!assigned)			//assign background medium;
-						weights[bg_medium->index] += 1;
+					medium_voxels[itr.index] = weights / weights.sum();
 				}
-				
-				chunk->set_medium_point(p, get_medium_ref(ctype, weights));
-			}
-		};
+			};
+
+			for (int i = 1; i < num_proc; ++i)
+				task_list.push_back(std::async(std::launch::async, solid_assign, i));
+			solid_assign(0);
+			for (auto& item : task_list)
+				item.get();
+			task_list.clear();
+		}
 		
-		std::vector<std::future<void>> task_list;
-		for(int i = 1; i < num_proc; ++i)
-			task_list.push_back(std::async(std::launch::async, func, my_iterator(ch_p1, ch_p2, Null, i, num_proc)));
-		func(my_iterator(ch_p1, ch_p2, Null, 0, num_proc));
-		for(auto& item : task_list)
-			item.get();
+
+		// blobs material implementation 1 (source like interpolation) not recommended
+		/*{
+			real weight[8];
+			interpn<3> interp(2, 2, 2);
+
+			for (auto& item : medium_blobs) {
+				for (int ctype_int = 1; ctype_int < 7; ctype_int++) {
+					Coord_Type ctype = static_cast<Coord_Type>(ctype_int);
+					iVec3 base = get_nearest_point<side_low_tag>(item.pos, ctype);
+					fVec3 dp = (item.pos - base) / 2;
+
+					interp.put_helper(weight, item.amp, dp.z, dp.y, dp.x);
+					for (auto itr = my_iterator(base, base + iVec3{ 2, 2, 2 }, ctype); !itr.is_end(); itr.advance()) {
+						medium_voxels[get_index(itr.get_vec())][item.medium->index] += weight[itr.index];
+					}
+				}
+			}
+		}*/
+		
+		// blobs material implementation 2 (small box implementation)
+		{
+			for (auto& item : medium_blobs) {
+				if (!Is_Inside_Box(config.roi_p1, config.roi_p2, item.pos))
+					throw Out_of_the_Domain{};
+
+				iVec3 low(floor(item.pos - 1));
+				iVec3 high(ceil(item.pos + 1));
+
+				for (auto itr = my_iterator(low, high, All); !itr.is_end(); itr.advance()) {
+					auto p = itr.get_vec();
+					fVec3 dist = abs(item.pos - p);
+					real weight = prod(2 - dist) / 8.0;
+
+					size_t cur_index = get_index(p);
+					if (medium_voxels[cur_index].size())
+						medium_voxels[cur_index][item.medium->index] += weight * item.amp;
+				}
+			}
+		}
+		
+		// inhomogeneous region
+		{
+			for (auto inhom : inhoms) {
+				auto p1 = inhom->get_p1() * (2 / dx);
+				auto p2 = inhom->get_p2() * (2 / dx);
+				if (!Is_Inside_Box(roi_p1, roi_p2, p1) || !Is_Inside_Box(roi_p1, roi_p2, p2))
+					throw Out_of_the_Domain{};
+
+				for (auto itr = my_iterator(p1, p2, All); !itr.is_end(); itr.advance()) {
+					auto p = itr.get_vec();
+					auto ctype = p.get_type();
+
+					if (!is_M_Point(ctype) && !is_E_Point(ctype))			//exclude non-material points
+						continue;
+
+					auto weights = get_zero_weights();
+
+					if (inhom->update_weights(p * (dx / 2), weights))
+						medium_voxels[inner_prod(p - ch_p1, strides)] = weights;
+				}
+			}
+		}
+
+		//{
+		//	auto fo = std::fstream{ "medium.out", std::ios::out };
+		//	//auto voxel = medium_voxels[inner_prod(iVec3{ 41, 40, 41 } - ch_p1, strides)];
+		//	for (auto itr = my_iterator(ch_p1, ch_p2, All); !itr.is_end(); itr.advance()) {
+		//		if (medium_voxels[itr.index].size() && medium_voxels[itr.index][1] > 0.2) {
+		//			fo << itr.get_vec() << " " << medium_voxels[itr.index][1] << "\n";
+		//		}
+		//	}
+		//}
+
+		//push medium to chunk
+		{
+			auto push_func = [&, this](const size_t rank) {
+				for (auto itr = my_iterator(ch_p1, ch_p2, All, rank, num_proc); !itr.is_end(); itr.advance()) {
+					/* assign material only when it is E or H*/
+					auto p = itr.get_vec();
+					auto ctype = p.get_type();
+
+					if (!is_M_Point(ctype) && !is_E_Point(ctype))			//exclude non-material points
+						continue;
+					chunk->set_medium_point(p, get_medium_ref(ctype, medium_voxels[itr.index]));
+				}
+			};
+
+			for (int i = 1; i < num_proc; ++i)
+				task_list.push_back(std::async(std::launch::async, push_func, i));
+			push_func(0);
+			for (auto& item : task_list)
+				item.get();
+		}
 	}
 	
 	void Simulation::source_init() {
-		for(auto item : Inc_Sources) {
-			item->init(tf_p1, tf_p2, chunk->get_dim(), chunk->get_origin(), ch_p1, ch_p2, dx);
-			chunk->add_inc_internal(item->get_source_internal());
+		//projector initialization
+		if (excitation) {
+			excitation->init(config);
+			excitation->push(chunk);
 		}
 		
-		chunk->organize_current_updates();
+		//dipole sources initialization
+		real weight[8];
+		interpn<3> interp{ 2, 2, 2 };
+		real vol = dx * dx * dx;
+
+		for (auto& dipole : dipole_configs) {
+			//reversion of amplitude for electric dipoles
+			if (is_E_Point(dipole.ctype))
+				dipole.amp = -dipole.amp;
+
+			dipole.pos = dipole.pos * (2 / dx);
+			if (!Is_Inside_Box(config.roi_p1, config.roi_p2, dipole.pos))
+				throw std::runtime_error("Dipole must be inside region of interests");
+
+			iVec3 base = get_nearest_point<side_low_tag>(dipole.pos, dipole.ctype);
+			fVec3 dp = (dipole.pos - base) / 2;
+			interp.put_helper(weight, 1.0, dp.z, dp.y, dp.x);
+
+			for (auto itr = my_iterator(base, base + iVec3{ 2, 2, 2 }, dipole.ctype); !itr.is_end(); itr.advance()) {
+				chunk->add_dipole(dipole.type, itr.get_vec(), dipole.amp * weight[itr.index] / vol, dipole.delay, dipole.fp);
+			}
+		}
 	}
 	
 	void Simulation::PML_init() {
-		PML_init_helper(PMLs[0][0], PMLs[0][1], kx, bx, cx, sim_p1.x, sim_p2.x);
-		PML_init_helper(PMLs[1][0], PMLs[1][1], ky, by, cy, sim_p1.y, sim_p2.y);
-		PML_init_helper(PMLs[2][0], PMLs[2][1], kz, bz, cz, sim_p1.z, sim_p2.z);
+		std::array<real_arr, 3> k, b, c;
+
+		PML_init_helper(PMLs[0][0], PMLs[0][1], k[0], b[0], c[0], sim_p1.x, sim_p2.x);
+		PML_init_helper(PMLs[1][0], PMLs[1][1], k[1], b[1], c[1], sim_p1.y, sim_p2.y);
+		PML_init_helper(PMLs[2][0], PMLs[2][1], k[2], b[2], c[2], sim_p1.z, sim_p2.z);
 		
-		chunk->PML_init(kx, ky, kz, bx, by, bz, cx, cy, cz);
+		chunk->PML_init(k, b, c);
 	}
 	
 	void Simulation::PML_init_helper(const PML& neg, const PML& pos, real_arr& k, real_arr& b, real_arr& c, const int p1, const int p2) {
@@ -193,22 +303,37 @@ namespace ffip {
 	}
 	
 	void Simulation::init() {
+		chunk_init();
 		PML_init();
 		source_init();
 		medium_init();
 		udf_unit();
-		chunk->categorize_points();
+		chunk->init();
 		step = 0;
 		std::cout << "Initialization Complete\n";
 	}
 	
+	void Simulation::add_blob(fVec3 pos, real amp, Medium const* medium) {
+		pos = pos * (2 / dx);
+		medium_blobs.push_back(Medium_Blob{ medium, pos, amp });
+	}
+
 	void Simulation::add_solid(Solid const* solid) {
-		solids.push_back(solid);
+		if (solid) {
+			auto ptr = dynamic_cast<Inhomogeneous_Box const*>(solid);
+			if (ptr)
+				inhoms.push_back(ptr);
+			else
+				solids.push_back(solid);
+		}			
 	}
 
 	Nearfield_Probe const* Simulation::add_nearfield_probe(const real freq, fVec3 pos) {
+		if (chunk == nullptr)
+			throw std::runtime_error("Initialize Simulation First");
+
 		pos = pos * (2 / dx);
-		if (!Is_Inside_Box(ch_p1, ch_p2, pos))
+		if (!Is_Inside_Box(config.sim_p1, config.sim_p2, pos))
 			throw Out_of_the_Domain{};
 		
 		auto res = new Nearfield_Probe{freq, pos, chunk};
@@ -217,9 +342,12 @@ namespace ffip {
 	}
 	
 	Flux_Box const* Simulation::add_flux_box(fVec3 p1, fVec3 p2, const real_arr& freq) {
+		if (chunk == nullptr)
+			throw std::runtime_error("Initialize Simulation First");
+
 		p1 = p1 * (2 / dx);
 		p2 = p2 * (2 / dx);
-		if (!Is_Inside_Box(ch_p1, ch_p2, p1) || !Is_Inside_Box(ch_p1, ch_p2, p2))
+		if (!Is_Inside_Box(config.phys_p1, config.phys_p2, p1) || !Is_Inside_Box(config.phys_p1, config.phys_p2, p2))
 			throw Out_of_the_Domain{};
 		
 		auto res = new Flux_Box(p1, p2, freq, chunk);
@@ -228,9 +356,12 @@ namespace ffip {
 	}
 	
 	N2F_Box const* Simulation::add_n2f_box(fVec3 p1, fVec3 p2, const real_arr& freq) {
+		if (chunk == nullptr)
+			throw std::runtime_error("Initialize Simulation First");
+
 		p1 = p1 * (2 / dx);
 		p2 = p2 * (2 / dx);
-		if (!Is_Inside_Box(ch_p1, ch_p2, p1) || !Is_Inside_Box(ch_p1, ch_p2, p2))
+		if (!Is_Inside_Box(config.phys_p1, config.phys_p2, p1) || !Is_Inside_Box(config.phys_p1, config.phys_p2, p2))
 			throw Out_of_the_Domain{};
 		
 		auto res = new N2F_Box(p1, p2, freq, chunk, bg_medium->get_c(), bg_medium->get_z());
@@ -239,7 +370,9 @@ namespace ffip {
 	}
 	
 	PML Simulation::make_pml(const int d) {
-		return PML(d, 0.8 * 4 / (dx * bg_medium->get_z()), 0.1, 1, 3, 1);
+		real a_max = 0.8 * 4 / (dx * bg_medium->get_z());
+
+		return PML(d, a_max, 1, 0.1, 3, 1);
 	}
 	
 	void Simulation::advance(std::ostream& os) {
@@ -247,28 +380,61 @@ namespace ffip {
 			std::cout << "\n" << std::setfill('0') << std::setw(4) << step;
 		
 		real time = (step ++ ) * dt;
+
+		diagnostic::marker_series pp("Simulation");
 		
 		auto func = [&, this](const int rank, const int num_proc) {
-			chunk->update_Md(time, rank);
+			{
+				diagnostic::span span(pp, "Md");
+				chunk->update_Md(time, rank, barrier);
+			}
+
 			barrier->Sync();
-			chunk->update_B2H_v2(time, rank);
+			
+			{
+				diagnostic::span span(pp, "B2H");
+				chunk->update_B2H_v2(time, rank, barrier);
+			}
+
 			barrier->Sync();
 
-			chunk->update_Jd(time + 0.5 * dt, rank);
+			if (rank == 0 && excitation) {
+				excitation->advance();
+			}
+
+			{
+				diagnostic::span span(pp, "Jd");
+				chunk->update_Jd(time + 0.5 * dt, rank, barrier);
+			}
+
 			barrier->Sync();
-			chunk->update_D2E_v2(time + 0.5 * dt, rank);
+			
+			{
+				diagnostic::span span(pp, "D2E");
+				chunk->update_D2E_v2(time + 0.5 * dt, rank, barrier);
+			}
+
 			barrier->Sync();
 
-			size_t idx1, idx2;
-			vector_divider(nearfield_probes, rank, num_proc, idx1, idx2);
-			for(auto itr = nearfield_probes.begin() + idx1; itr != nearfield_probes.begin() + idx2; ++itr)
-				(*itr)->update(step);
+			{
+				diagnostic::span span(pp, "probes");
+				size_t idx1, idx2;
+				vector_divider(nearfield_probes, rank, num_proc, idx1, idx2);
+				for (auto itr = nearfield_probes.begin() + idx1; itr != nearfield_probes.begin() + idx2; ++itr)
+					(*itr)->update(step);
+			}
 			
-			for(auto& item : n2f_boxes)
-				item->update(step, rank, num_proc);
+			{
+				diagnostic::span span(pp, "n2f");
+				for (auto& item : n2f_boxes)
+					item->update(step, rank, num_proc);
+			}
 			
-			for(auto& item : flux_boxes)
-				item->update(step, rank, num_proc);
+			{
+				diagnostic::span span(pp, "flux");
+				for (auto& item : flux_boxes)
+					item->update(step, rank, num_proc);
+			}
 		};
 		
 		std::vector<std::future<void>> task_list;
@@ -312,7 +478,7 @@ namespace ffip {
 	}
 	
 	iVec3 Simulation::get_dim() const {
-		return sim_dim / 2;
+		return sim_dim;
 	}
 	
 	Medium const* Simulation::get_bg_medium() const {
@@ -373,14 +539,14 @@ namespace ffip {
 		}
 	}
 	
-	std::vector<real> Simulation::get_zero_weights() {
-		return std::vector<real>(medium.size(), 0);
+	Medium_Voxel Simulation::get_zero_weights() {
+		return Medium_Voxel(0.0, medium.size());
 	}
 	
-	Medium_Ref const* Simulation::get_medium_ref(const Coord_Type ctype, const std::vector<real>& weights) {
+	Medium_Ref const* Simulation::get_medium_ref(const Coord_Type ctype, const Medium_Voxel& weights) {
 		
-		bool is_electric_point = is_E_point(ctype);
-		constexpr real tol = 1e-4;
+		bool is_electric_point = is_E_Point(ctype);
+		constexpr real tol = 1e-3;
 		int nonzeros = 0;
 		real total = 0;
 		Medium_Ref* res = nullptr;
@@ -390,17 +556,16 @@ namespace ffip {
 			throw std::runtime_error("Mixing numbers have wrong length");
 		
 		/* rounding down parameters*/
-		for(auto& x : weights) {
+		for(auto x : weights) {
 			if(x > tol) {
 				nonzeros ++;
-				total += x;
 			}
 		}
 		
 		if(nonzeros > 1) {								//for the case of mixing more than 1 material
 			res = new Medium_Ref();
 			for(int i = 0; i < weights.size(); ++i)
-				if (weights[i] > tol) *res += *medium_ref[i] * (weights[i] / total);
+				if (weights[i] > tol) *res += *medium_ref[i] * weights[i];
 			
 			std::lock_guard<std::mutex> guard(medium_mutex);
 			syn_medium_ref.push_back(std::unique_ptr<Medium_Ref>(res));			//garbage collecting

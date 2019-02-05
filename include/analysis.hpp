@@ -175,7 +175,7 @@ namespace ffip {
 	void N2F_Face<Dir>::prepare(const size_t rank, const size_t num_proc) const{
 		real side_float = side;
 		
-		for(auto itr = my_iterator(iVec3(0, 0, 0), iVec3(nx1, nx2, 0), Null, rank, num_proc); !itr.is_end(); itr.advance()) {
+		for(auto itr = my_iterator(iVec3(0, 0, 0), iVec3(nx1, nx2, 0), All, rank, num_proc); !itr.is_end(); itr.advance()) {
 			fVec3 sample_point = p1;
 			choose<x1>::get(sample_point) += itr.x * dx1;
 			choose<x2>::get(sample_point) += itr.y * dx2;
@@ -208,7 +208,7 @@ namespace ffip {
 		auto& m1 = m1_list[f_index];
 		auto& m2 = m2_list[f_index];
 		
-		for(auto itr = my_iterator(iVec3(0, 0, 0), iVec3(nx1, nx2, 0), Null); !itr.is_end(); itr.advance()) {
+		for(auto itr = my_iterator(iVec3(0, 0, 0), iVec3(nx1, nx2, 0), All); !itr.is_end(); itr.advance()) {
 			
 			fVec3 sample_point = tmp;
 			choose<x1>::get(sample_point) += itr.x * dx1;
@@ -314,8 +314,8 @@ namespace ffip {
 		auto dp = p2 - p1;
 		lx1 = choose<x1>::get(dp);
 		lx2 = choose<x2>::get(dp);
-		nx1 = ceil(lx1 / 2 + 1);
-		nx2 = ceil(lx2 / 2 + 1);
+		nx1 = std::ceil(lx1 / 2 + 1);
+		nx2 = std::ceil(lx2 / 2 + 1);
 		dx1 = lx1 / nx1;
 		dx2 = lx2 / nx2;
 		

@@ -96,15 +96,15 @@ namespace ffip {
 		return !is_in_closure(p);
 	}
 	
-	fVec3 Box::get_p1() {
+	fVec3 Box::get_p1() const{
 		return p1;
 	}
 	
-	fVec3 Box::get_p2() {
+	fVec3 Box::get_p2() const{
 		return p2;
 	}
 	
-	fVec3 Box::get_center() {
+	fVec3 Box::get_center() const{
 		return center;
 	}
 	/* sphere geometry*/
@@ -207,24 +207,24 @@ namespace ffip {
 		Box::init(interp.get_p1(), interp.get_p2());
 	}
 	
-	bool Inhomogeneous_Box::update_weights(const fVec3& p, std::vector<real> &weights) const {
+	bool Inhomogeneous_Box::update_weights(const fVec3& p, Medium_Voxel &weights) const {
 		if (!is_in_interior(p))
 			return 0;
 		else {
 			real density = get_density(p);
-			weights[medium1->index] += density;
-			weights[medium2->index] += 1 - density;
+			weights[medium1->index] = density;
+			weights[medium2->index] = 1 - density;
 			return 1;
 		}
 	}
 	
 	real Inhomogeneous_Box::get_density(const fVec3 &p) const {
-		return interp.request_value(p);
+		return interp.get(p);
 	}
 	
 	Homogeneous_Object::Homogeneous_Object(Medium const*  m, const Geometry_Node& _base): Geometry_Node(_base), medium(m) {}
 	
-	bool Homogeneous_Object::update_weights(const fVec3 &p, std::vector<real> &weights) const {
+	bool Homogeneous_Object::update_weights(const fVec3 &p, Medium_Voxel &weights) const {
 		if (!is_in_interior(p))
 			return 0;
 		else {

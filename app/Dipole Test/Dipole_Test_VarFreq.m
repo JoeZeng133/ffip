@@ -17,12 +17,16 @@ PML_d = 6;
 dim = [22, 22, 22];
 er_bg = 1;
 ur_bg = 1;
+tf_layer = 0;
+sf_layer = 0;
+projector_padding = ceil((tf_layer + 1) / 2);
+center = dim * dx / 2;
 
 lam_min = 200e-9;
 lam_max = 1000e-9;
 lam = linspace(lam_min, lam_max, 100);
-fp = c0 / (500e-9);
-delay = 1 / fp;
+fs = c0 / (500e-9);
+delay = 1 / fs;
 G = 1;
 
 rho = 10 * dx;
@@ -33,39 +37,19 @@ ft = c0 ./ lam;
 [Rho, Phi, Th, Ft] = ndgrid(rho, phi, th, ft);
 [Xo, Yo, Zo] = sph2cart(Phi, pi / 2 - Th, Rho);
 
-probes = [[Xo(:), Yo(:), Zo(:)] + dim * dx / 2, Ft(:)];
-
-% write to probes file
-filename_probes = 'probes.in';
-fileID = fopen(filename_probes, "w");
-fprintf(fileID, "%d\n", size(probes, 1));
-fprintf(fileID, "%e %e %e %e\n", probes');
-fclose(fileID);
-
-% wriet to dipole source files
-filename_dipoles = 'dipoles.in';
-fileID = fopen(filename_dipoles, 'w');
-fprintf(fileID, '1\n');
-fprintf(fileID, '%e %e %e %e %s %e %e 4\n', dim * dx / 2, abs(G), 'r', fp, delay);
-fclose(fileID);
-
 %% theoretical fields
 Omega = 2 * pi * Ft;
-lorentz = @(w, rel_e, fp, delta) rel_e ./ (1 + 1j * (w / (2 * pi * fp)) * (delta / fp) - (w / (2 * pi * fp)).^2);
-drude = @(w, fp, gamma) (2 * pi * fp)^2 ./ (1j * w * (2 * pi * gamma) - w.^2);
-deybe = @(w, rel_e, tau) rel_e ./ (1 + 1j * w * tau);
-
 er_func = @Au;
-testf = ft;
-tester = er_func(2 * pi * testf);
 
 figure(1)
-plot(3e8 ./ testf / 1e-9, real(tester)), hold on
-plot(3e8 ./ testf / 1e-9, -imag(tester), '--'), hold off
+ft_samples = ft;
+[~, er_samples] = er_func(2 * pi * ft_samples);
+plot(3e8 ./ ft_samples / 1e-9, real(er_samples)), hold on
+plot(3e8 ./ ft_samples / 1e-9, -imag(er_samples), '--'), hold off
 legend({['Re ', char(949), '_r'], ['Im ', char(949), '_r']}, 'FontSize', 15)
 xlabel('\lambda [nm]')
 
-er =  er_func(Omega);
+[~, er] = er_func(Omega);
 e = e0 * er;
 
 u = u0;
@@ -79,52 +63,39 @@ Er_p = G * 1 / (4 * pi) * exp(-1j * K .* Rho) .* (2 * eta ./ Rho.^2 + 2 ./ (1j *
 Eth_p = G * 1 / (4 * pi) * exp(-1j * K .* Rho) .* (1j * Omega .* u ./ Rho + 1 ./ (1j * Omega .* e .* Rho.^3) + eta ./ Rho.^2) .* sin(Th);
 
 %% write configurations
-% basic configuration
-fileID = fopen('config.in', 'w');
-fprintf(fileID, "basic {\n");
-fprintf(fileID, "%e %e\n", dt, dx);
-fprintf(fileID, "%d %d %d\n", dim);
-fprintf(fileID, "%d\n", 0);
-fprintf(fileID, "%d\n", 0);
-fprintf(fileID, "%d\n", PML_d);
-fprintf(fileID, "%d\n", step);
-fprintf(fileID, "%e %e\n", er_bg, ur_bg);
-fprintf(fileID, "}\n");
+basic.er_bg = er_bg;
+basic.ur_bg = ur_bg;
+basic.PML_d = PML_d;
+basic.dx = dx;
+basic.dt = dt;
+basic.dim = dim;
+basic.step = step;
+basic.tf_layer = tf_layer;
+basic.sf_layer = sf_layer;
 
-% medium configuration
-fprintf(fileID, "medium 1{\n");
-% Au
-Au_print(fileID);
-fprintf(fileID, "}\n");
+medium{1} = Au();
 
-% geometry configuration
-fprintf(fileID, "geometry 1 {\n");
-% geometry 0, the box region that covers all the fields
-fprintf(fileID, "{ ");
-fprintf(fileID, "box 0 -1 -1 -1 1 1 1");
-fprintf(fileID, " }\n");
-fprintf(fileID, "}\n");
+geometry{1} = struct('type', 'box', 'medium_idx', 0, 'lower_position', [-1 -1 -1], 'upper_position', [1 1 1]);
 
-% dipole sources
-fprintf(fileID, "source 1 {\n");
-fprintf(fileID, "{ ");
-fprintf(fileID, "dipole %s", filename_dipoles);
-fprintf(fileID, " }\n");
-fprintf(fileID, "}\n");
+source{1} = struct('type', 'dipole', 'filename', 'dipoles.in', 'x', center(1), 'y', center(2), 'z', center(3),...
+    'amp', abs(G), 'fp', fs, 'func_type', double('r'), 'delay', delay, 'ctype', 4);
 
-% nearfield probes
-fprintf(fileID, "nearfield %s %s\n", filename_probes, 'output.out');
-fclose(fileID);
+nf.x = Xo + center(1);
+nf.y = Yo + center(2);
+nf.z = Zo + center(3);
+nf.freq = Ft;
+nf.input_file = 'nf.in';
+nf.output_file = 'output.out';
 
-disp('config.in created');
+gen_config(basic, medium, geometry, source, 'nearfield', nf);
+
 %% simulated fields
-% call_exe('std_config')
-data = load('output.out');
+data = load(nf.output_file);
 make_complex = @(x, y) x + 1j * y;
 ricker = @(t, fp, d) (1 - 2 * (pi * fp * (t - d)).^2) .* exp(-(pi * fp * (t - d)).^2);
 
 t = (0:step) * dt;
-ref_signal = ricker(t, fp, delay);
+ref_signal = ricker(t, fs, delay);
 ref = sum(ref_signal .* exp(-1j * 2 * pi * Ft(:) * t), 2);
 
 E = [make_complex(data(:, 1), data(:, 2)), make_complex(data(:, 3), data(:, 4)), make_complex(data(:, 5), data(:, 6))];

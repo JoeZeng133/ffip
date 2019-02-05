@@ -9,6 +9,7 @@ namespace ffip {
 	 it can used as a stand-alone 1D simulation
 	 */
 	class Chunk;
+	class Plane_Wave;
 	
 	class Plane_Wave {
 	private:
@@ -155,8 +156,8 @@ namespace ffip {
 //
 //		Coord_Type ctype;						//Coord type
 //		iVec3 dp;								//p2 - p1
-//		int ch_jump_x, ch_jump_y, ch_jump_z;	//jumps in chunk
-//		int amp_jump_x, amp_jump_y, amp_jump_z;	//jumps in amp
+//		int ch_stride_x, ch_stride_y, ch_stride_z;	//strides in chunk
+//		int amp_stride_x, amp_stride_y, amp_stride_z;	//strides in amp
 //		int base_index_ch;						//chunk p1 index
 //		real cur_phase;							//f(t) updated by get_Jd or get_Md
 //	};
@@ -175,52 +176,44 @@ namespace ffip {
 		TFSF_Surface(const std::pair<iVec3, iVec3>& d, const Direction dir, const Side side, int sign_correction);
 	};
 	
-	/* Incident wave used in chunk*/
-	class Inc_Internal {
-		static int TFSF_Mat[3][3];
-		
-	public:
-		Inc_Internal(const std::vector<TFSF_Surface>& _tsfs_list, const Plane_Wave& _projector, const iVec3& _ch_dim, const iVec3& _ch_origin, const real _dx);	//copy every thing inside
-		Inc_Internal(const Inc_Internal&) = delete; //no copy
-		Inc_Internal& operator=(const Inc_Internal&) = delete;
-		Inc_Internal(Inc_Internal&&) = delete; //no move
-		Inc_Internal& operator=(Inc_Internal&&) = delete;
-		
-		//concurrent updates
-		void update_Jd(std::vector<real>& jmd, Barrier* barrier, const size_t rank = 0, const size_t num_proc = 1);
-		void update_Md(std::vector<real>& jmd, Barrier* barrier, const size_t rank = 0, const size_t num_proc = 1);
-		void update_helper(std::vector<real>& jmd, const TFSF_Surface face, Coord_Type type, const size_t rank = 0, const size_t num_proc = 1);	//helper functions for update_Jd, update_Md
-		
-		void push_Md(Chunk* chunk, const size_t rank = 0, const size_t num_proc = 1);
-		void push_Jd(Chunk* chunk, const size_t rank = 0, const size_t num_proc = 1);
-		void push_helper(Chunk* chunk, const TFSF_Surface face, Coord_Type type, const size_t rank = 0, const size_t num_proc = 1);
-		//advance projector
-		
-		void advance_projector();
-	private:
-		std::vector<TFSF_Surface> tfsf_list;
-		Plane_Wave projector;
-		iVec3 ch_dim, ch_origin;	//information about chunk
-		int jump_x, jump_y, jump_z;
-		real dx;
-	};
-	
 	/* Inc_Source provided with different types of projectors, plane wave so far */
 	class Inc_Source {
 	public:
 		Inc_Source(const Plane_Wave& _projector);
-		Inc_Internal* get_source_internal();
-		void init(const iVec3& _tf1, const iVec3& _tf2,
-				  const iVec3& _ch_dim, const iVec3& _ch_origin,
-				  const iVec3& _ch_p1, const iVec3& _ch_p2, const real _dx);
+		void init(const Config& config);
+		
+		void push(Chunk* chunk);
+
+		template<typename x1>
+		void push_helper(Chunk* chunk, const TFSF_Surface& face);
+		void advance();
 		
 	private:
 		Plane_Wave projector;
-		iVec3 ch_p1, ch_p2, tf1, tf2, ch_dim, ch_origin;
-		real dx;
+		Config config;
+		std::vector<TFSF_Surface> tfsf_list;
 	};
-	
-	
+
+	template<typename x1>
+	void Inc_Source::push_helper(Chunk* chunk, const TFSF_Surface& face) {
+		using x2 = typename x1::x1;
+		using x3 = typename x1::x2;
+
+		// direction should be paralell to the face
+		if (x1::val == face.dir)
+			return;
+
+		real amp = face.side * ((face.dir == x2::val) ? 1 : -1) / config.dx;
+		iVec3 pos_offset = face.get_pos_offset();
+
+		for (auto itr = my_iterator(face.d1, face.d2, x1::E); !itr.is_end(); itr.advance()) {
+			chunk->add_projector_update(itr.get_vec(), amp, itr.get_vec() + pos_offset);
+		}
+
+		for (auto itr = my_iterator(face.d1, face.d2, x1::H); !itr.is_end(); itr.advance()) {
+			chunk->add_projector_update(itr.get_vec(), amp, itr.get_vec() + pos_offset);
+		}
+	}
 }
 
 

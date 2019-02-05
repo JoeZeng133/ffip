@@ -15,7 +15,7 @@ PML_d = 6;
 Sc = 0.5;
 dx = 2e-9;
 dt = Sc * dx / c0;
-dim = [60, 60, 60];
+dim = [30, 30, 30];
 step = 10000;
 tf_layer = 2;
 sf_layer = 1;
@@ -24,30 +24,17 @@ projector_padding = ceil((tf_layer + 1) / 2);
 fs = c0 / 500e-9;
 delay = 1 / fs;
 
-lambda = 800e-9;
+lambda = 500e-9;
 ft = c0 / lambda;
 a = 40e-9;
 
 center = dim * dx / 2;
-rho = a + linspace(10e-9, 20e-9, 10);
-phi = linspace(0, 2 * pi, 10);
-th = linspace(0,  pi, 10);
-[xc, yc, zc] = sph2cart(phi, pi / 2 - th, rho);
-[Xc, Yc, Zc, Ft] = ndgrid(xc, yc, zc, ft);
-
 Omega = 2 * pi * Ft;
 K = Omega / c0;
 [~, er] = Au(2 * pi * ft);
 
 ns = sqrt(conj(er));
 nm = 1;
-
-% blob geometry
-roi = cell([1 3]);
-[roi{1}, roi{2}, roi{3}] = ndgrid((0:dim(1)) * dx, (0:dim(2)) * dx, (0:dim(3)) * dx);
-rho = (roi{1} - center(1)).^2 + (roi{2} - center(2)).^2 + (roi{3} - center(3)).^2 <= a^2;
-num_rho = sum(rho(:));
-output_blobs = [roi{1}(rho), roi{2}(rho), roi{3}(rho), ones([num_rho, 1]), ones([num_rho, 1])];
 %% generate configuration
 basic.er_bg = er_bg;
 basic.ur_bg = ur_bg;
@@ -62,7 +49,7 @@ basic.sf_layer = sf_layer;
 medium{1} = Air();
 medium{2} = Au();
 
-geometry{1} = struct('type', 'sphere', 'medium_idx', 1, 'radius', a, 'position', dim * dx / 2);
+geometry = {};
 
 source{1} = struct('type', 'plane', 'dim_neg', projector_padding, 'dim_pos', ...
     dim(3) + projector_padding, 'func_type', 'r', 'fp', fs, 'delay', delay, 'ref_pos', dim(3) / 2 * dx);
@@ -77,9 +64,6 @@ nf.output_file = 'output.out';
 gen_config(basic, medium, geometry, source, 'nearfield', nf);
 
 disp('config.in created');
-
-%% theoretical fields
-[E, H] = calcmie_nf( a, ns, nm, lambda, Xc(:), Yc(:), Zc(:), 'TotalField', true );
 
 %% numerical fields
 data = load(nf.output_file);
@@ -105,21 +89,18 @@ for i = 1 : 3
     plot(real(E(:, i)), real(E(:, i))), hold off
     xlabel('Analytical')
     axis equal
-    title(num2str(i))
     
     subplot(2, 2, 2)
     plot(imag(E(:, i)), -imag(En(:, i)), '.'), hold on
     plot(imag(E(:, i)), imag(E(:, i))), hold off
     xlabel('Analytical')
     axis equal
-    title('E')
 
     subplot(2, 2, 3)
     plot(real(H(:, i)), real(Hn(:, i)), '.'), hold on
     plot(real(H(:, i)), real(H(:, i))), hold off
     xlabel('Analytical')
     axis equal
-    title('H')
     
     subplot(2, 2, 4)
     plot(imag(H(:, i)), -imag(Hn(:, i)), '.'), hold on

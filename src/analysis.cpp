@@ -47,14 +47,14 @@ namespace ffip {
 		for(auto& item : raw_fields)
 			item.resize(itr.size, 0);
 		
-		if (is_M_point(F))
+		if (is_M_Point(F))
 			step_correction = -0.5;
 		else
 			step_correction = 0;
 	}
 	
 	void Box_Freq_Req::validity_check() const {
-		if (F == Null)
+		if (F == All)
 			throw Invalide_Coord_Type{};
 		
 		if (!Is_Inside_Box(chunk->get_p1(), chunk->get_p2(), p1) || !Is_Inside_Box(chunk->get_p1(), chunk->get_p2(), p2))

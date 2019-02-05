@@ -31,7 +31,7 @@ K = Omega / c0;
 fs = c0 / (500e-9);
 delay = 1/fs;
 er_func = @Au;
-er = er_func(Omega);
+[~, er] = er_func(Omega);
 
 % sphere parameters
 m = sqrt(conj(er(:))); %exp(-jwt) dependence, use the conjugate
@@ -39,63 +39,45 @@ size_param = K * a;
 
 figure(1)
 ft_samples = ft;
-plot(c0 ./ ft_samples / 1e-9, real(er_func(ft_samples * 2 * pi)), 'r-'), hold on
-plot(c0 ./ ft_samples / 1e-9, -imag(er_func(ft_samples * 2 * pi)), 'b-')
+[~, er_samples] = er_func(ft_samples * 2 * pi);
+plot(c0 ./ ft_samples / 1e-9, real(er_samples), 'r-'), hold on
+plot(c0 ./ ft_samples / 1e-9, -imag(er_samples), 'b-')
 xlabel('Wavelength [nm]')
 legend({'$\textrm{Re}(\varepsilon_r)$', '$\textrm{Im}(\varepsilon_r)$'}, 'interpreter', 'latex','fontsize', 15)
 axis tight
 
-% scattering coefficients setup
-flux_input_file = 'flux.in';
-flux_output_file = 'flux.out';
-fileID = fopen(flux_input_file, 'w');
-fprintf(fileID, "%e %e %e\n", [-1, -1, -1] * dx);
-fprintf(fileID, "%e %e %e\n", (dim + 1) * dx);
-fprintf(fileID, '%d\n', numel(ft));
-fprintf(fileID, '%e\n', ft);
-fclose(fileID);
+flux_p1 = [-1, -1, -1] * dx;
+flux_p2 = (dim + 1) * dx;
 
-% basic configuration
-fileID = fopen('config.in', 'w');
-fprintf(fileID, 'basic {\n');
-fprintf(fileID, '%e %e\n', dt, dx);
-fprintf(fileID, '%d %d %d\n', dim);
-fprintf(fileID, '%d\n', sf_layer);
-fprintf(fileID, '%d\n', tf_layer);
-fprintf(fileID, '%d\n', PML_d);
-fprintf(fileID, '%d\n', step);
-fprintf(fileID, '%e %e\n', er_bg, ur_bg);
-fprintf(fileID, '}\n');
+%%
+basic.er_bg = er_bg;
+basic.ur_bg = ur_bg;
+basic.PML_d = PML_d;
+basic.dx = dx;
+basic.dt = dt;
+basic.dim = dim;
+basic.step = step;
+basic.tf_layer = tf_layer;
+basic.sf_layer = sf_layer;
 
+medium{1} = Air();
+medium{2} = Au();
 
-% medium configuration
-fprintf(fileID, "medium 1 {\n");
-% medium Au
-Au_print(fileID);
-fprintf(fileID, "}\n");
+geometry{1} = struct('type', 'sphere', 'medium_idx', 1, 'radius', a, 'position', dim * dx / 2);
 
-% geometry configuration
-fprintf(fileID, "geometry 1 {\n");
-% geometry 0 gold sphere
-fprintf(fileID, "{ ");
-fprintf(fileID, "sphere 0 %e %e %e %e", a, dim * dx / 2);
-fprintf(fileID, " }\n");
-% geometry end
-fprintf(fileID, "}\n");
+source{1} = struct('type', 'plane', 'dim_neg', projector_padding, 'dim_pos', ...
+    dim(3) + projector_padding, 'func_type', 'r', 'fp', fs, 'delay', delay, 'ref_pos', dim(3) / 2 * dx);
 
-% plane wave source
-fprintf(fileID, "source 1 {\n");
-fprintf(fileID, "{ ");
-fprintf(fileID, 'plane %d %d %s %e %e 0', projector_padding, dim(3) + projector_padding, 'r', fs, delay);
-fprintf(fileID, " }\n");
-fprintf(fileID, "}\n");
+flux.lower_position = flux_p1;
+flux.upper_position = flux_p2;
+flux.freq = ft;
+flux.input_file = 'flux.in';
+flux.output_file = 'flux.out';
 
-% scattering coefficients calculated from poynting flux
-fprintf(fileID, "flux %s %s\n", flux_input_file, flux_output_file);
-
+gen_config(basic, medium, geometry, source, 'flux', flux);
 disp('config.in created');
 
-% theoretical fields
+%% theoretical fields
 c_scat_phy = zeros(size(m));
 c_abs_phy = zeros(size(m));
 
@@ -110,7 +92,7 @@ ref_signal = load('reference.out');
 ref_signal = reshape(ref_signal, 1, []);
 t = (0:numel(ref_signal) - 1) * dt;
 ref = sum(ref_signal .* exp(-1j * Omega(:) * t), 2);
-c_scat = load(flux_output_file);
+c_scat = load(flux.output_file);
 c_scat = -c_scat ./ (0.5 * abs(ref).^2 / eta0 * pi * a^2);
 disp('Numerical Fields Extracted');
 

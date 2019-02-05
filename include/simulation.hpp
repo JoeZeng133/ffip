@@ -7,7 +7,6 @@
 #include <chunk.hpp>
 #include <analysis.hpp>
 #include <map>
-
 #include <memory>
 #include <vector>
 
@@ -16,6 +15,12 @@ namespace ffip {
 	class Nearfield_Probe;
 	class N2F_Box;
 	class Flux_Box;
+
+	struct Medium_Blob {
+		Medium const* medium;
+		fVec3 pos;
+		real amp;
+	};
 	
 	class Simulation {
 	private:
@@ -23,12 +28,14 @@ namespace ffip {
 		iVec3 sim_dim;
 		
 		int step;
+		iVec3 roi_p1, roi_p2;
 		iVec3 sim_p1, sim_p2;	//simulation region corner points
 		iVec3 ch_p1, ch_p2;		//chunk region corner points
 		iVec3 tf_p1, tf_p2;		//total field region corner points
 		iVec3 phys_p1, phys_p2; //physical region corner points
 		int sf_depth{0};		//Scattered field depth in computation unit
 		int tf_padded_depth{ 0 };//total field padded depth in computation unit
+		Config config;
 		
 		Barrier* barrier{new Barrier{1}};		//local barrier
 		int num_proc{1};		//number of processes to use
@@ -36,10 +43,21 @@ namespace ffip {
 		Chunk* chunk{nullptr};
 		Medium const* bg_medium{nullptr};
 		
-		
-		
 		std::vector<const Solid*> solids;
-		std::vector<Inc_Source*> Inc_Sources;
+		std::vector<const Inhomogeneous_Box*> inhoms;
+		std::vector<Medium_Blob> medium_blobs;
+		Inc_Source* excitation{ nullptr };
+
+		//dipoles
+		struct Dipole_Config {
+			real amp;
+			fVec3 pos;
+			Coord_Type ctype;
+			Func type;
+			real fp;
+			real delay;
+		};
+		std::vector<Dipole_Config> dipole_configs;
 		
 		//nearfield probes, near to far field conversion, flux box
 		std::vector<std::unique_ptr<Nearfield_Probe>> nearfield_probes;
@@ -48,7 +66,6 @@ namespace ffip {
 
 		//CPML members
 		PML PMLs[3][2];
-		std::vector<real> kx, ky, kz, bx, by, bz, cx, cy, cz;
 		
 		//medium factory
 		std::vector<std::unique_ptr<Medium>> medium;
@@ -73,32 +90,34 @@ namespace ffip {
 		
 		Simulation() = default;		//allow delayed initializations
 		
-		//function members to be used before chunk is initialized
+		/* configuring simulation */
 		void add_inc_source(Inc_Source* source);
 		void add_sf_layer(const int d);
 		void add_tf_layer(const int d);
 		void add_PML_layer(const PML& pml, const Direction dir, const Side side);
 		void setup(const real _dx, const real _dt, const iVec3 _dim);
-		void chunk_init();
-		
-		//functin members to be used that doesn't care whether chunk is initialized
 		void add_solid(Solid const* solid);
+		void add_blob(fVec3 pos, real amp, Medium const* medium);
+		void add_dipole(real amp, fVec3 pos, const Coord_Type ctype, const Func func_type, const real fp, const real delay);
+		void set_background_medium(Medium const* m);
+		void set_num_proc(const int _num_proc);
 		
-		//function members to be used after chunk is initialized
+		//initialization
+		void init();
+		void chunk_init();
+		//advance
+		void advance(std::ostream& os);
+
+		//fields calculation
 		Nearfield_Probe const* add_nearfield_probe(const real freq, fVec3 pos);
-		PML make_pml(const int d);
 		Flux_Box const* add_flux_box(fVec3 p1, fVec3 p2, const real_arr& freq);
 		N2F_Box const* add_n2f_box(fVec3 p1, fVec3 p2, const real_arr& freq);
 		
-		void add_dipole(const real amp, const fVec3 pos, const Coord_Type ctype, const std::function<real(const real)>& profile);
-		void set_background_medium(Medium const* m);
-		void set_num_proc(const int _num_proc);
-		void init();
-		
+		//user defined behaviors
 		void udf_unit();
 		void udf_advance();
 		void udf_output();
-		void advance(std::ostream& os);
+
 		/* field access functions*/
 		real at(const fVec3& p, const Coord_Type ctype) const;					//access at float physical coordinates
 
@@ -113,15 +132,13 @@ namespace ffip {
 		real get_dx() const;
 		iVec3 get_dim() const;
 		Medium const* get_bg_medium() const;
-		
-		void output_farfield(std::ostream& os);
-		
+		PML make_pml(const int d);
+
 		//medium factory
 		template<typename... Args>
 		Medium* make_medium(Args&&... args);
-		
-		Medium_Ref const* get_medium_ref(const Coord_Type ctype, const std::vector<real>& weights);
-		std::vector<real> get_zero_weights();
+		Medium_Ref const* get_medium_ref(const Coord_Type ctype, const Medium_Voxel& weights);
+		Medium_Voxel get_zero_weights();
 		void prepare_medium(const real _dt);
 		
 		//geometry factory

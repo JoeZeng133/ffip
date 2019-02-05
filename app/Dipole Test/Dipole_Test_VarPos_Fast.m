@@ -3,16 +3,15 @@ clc
 clear
 close all
 
-
 e0 = 8.85418782e-12;
 u0 = 1.25663706e-6;
 c0 = 3e8;
 eta0 = sqrt(u0 / e0);
 
 Sc = 0.5;
-dx = 1e-9;
-dt = Sc * dx / c0;
-step = 15000;
+dt = 7.2e-17;
+dx = c0 * dt / Sc;
+step = 1000;
 PML_d = 6;
 dim = [22, 22, 22];
 er_bg = 1;
@@ -22,8 +21,9 @@ sf_layer = 0;
 projector_padding = ceil((tf_layer + 1) / 2);
 center = dim * dx / 2;
 
-ft = c0 / (800e-9);
-fs = c0 / (500e-9);
+l = 30 * dx;
+ft = c0 / l;
+fs = c0 / l;
 delay = 1 / fs;
 G1 = 1 - 0.3j;
 G2 = 2 + 1j;
@@ -54,10 +54,10 @@ lorentz = @(w, rel_e, fp, delta) rel_e ./ (1 + 1j * (w / (2 * pi * fp)) * (delta
 drude = @(w, fp, gamma) (2 * pi * fp)^2 ./ (1j * w * (2 * pi * gamma) - w.^2);
 deybe = @(w, rel_e, tau) rel_e ./ (1 + 1j * w * tau);
 
-er_func = @Au;
+er_func = @fic1;
 
 figure(1)
-ft_samples = c0 ./ linspace(200e-9, 1000e-9, 100);
+ft_samples = c0 ./ linspace(100e-9, 2000e-9, 100);
 [~, er_samples] = er_func(2 * pi * ft_samples);
 plot(3e8 ./ ft_samples / 1e-9, real(er_samples)), hold on
 plot(3e8 ./ ft_samples / 1e-9, -imag(er_samples), '--'), hold off
@@ -88,7 +88,7 @@ basic.step = step;
 basic.tf_layer = 1;
 basic.sf_layer = 0;
 
-medium{1} = Au();
+medium{1} = fic1();
 
 geometry{1} = struct('type', 'box', 'medium_idx', 0, 'lower_position', [-1 -1 -1], 'upper_position', [1 1 1]);
 
@@ -169,5 +169,7 @@ plot(imag(Hphi(:)), imag(Hphi(:))), hold on
 axis equal
 axis tight
 title('Im H_\phi')
+
+
 
 

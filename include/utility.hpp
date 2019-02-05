@@ -16,6 +16,9 @@
 #include <mutex>
 #include <numeric>
 #include <future>
+#include <valarray>
+#include <type_traits>
+
 
 namespace ffip {
 	/* Exception*/
@@ -39,15 +42,14 @@ namespace ffip {
 	/* enums with implied bit pattern for calculations*/
 	enum Direction {X = 0, Y = 1, Z = 2};
 	enum Side {Low = -1, High = 1};
-	enum Coord_Type {Ex = 0b001, Ey = 0b010, Ez = 0b100, Hx = 0b110, Hy = 0b101, Hz = 0b011, Corner = 0b000, Center = 0b111, All = -2, Null = -1};
+	enum Coord_Type {Ex = 0b001, Ey = 0b010, Ez = 0b100, Hx = 0b110, Hy = 0b101, Hz = 0b011, 
+		Corner = 0b000, Center = 0b111, All = 0b1111, None = 0b1000};
 	
-	int Ctype2DirInt(const Coord_Type ctype);
-	
-	constexpr bool is_E_point(const Coord_Type ctype) {
+	constexpr bool is_E_Point(const Coord_Type ctype) {
 		return (ctype == Ex || ctype == Ey || ctype == Ez);
 	}
 	
-	constexpr bool is_M_point(const Coord_Type ctype) {
+	constexpr bool is_M_Point(const Coord_Type ctype) {
 		return (ctype == Hx || ctype == Hy || ctype == Hz);
 	}
 	/* forward declrations */
@@ -192,19 +194,6 @@ namespace ffip {
 		static const Coord_Type ctype;
 	};
 	
-	template<typename D>
-	struct dir_traits {
-		//orientation preserving
-		using x1 = typename D::x1;
-		using x2 = typename D::x2;
-		using x3 = D;
-		using z = typename D::z;		//rotate_frame<D::z> (rotate_frame<D>() ) = Identity map
-		
-		//array arrangement preserving
-		using x1_a = typename D::x1_a;
-		using x2_a = typename D::x2_a;
-	};
-	
 	template<typename T = real>
 	struct Vec3{
 		using value_type = T;
@@ -222,12 +211,16 @@ namespace ffip {
 		Vec3& operator=(const Vec3<T2>&) ;		//copy assignment
 
 		/* function members */
-		Coord_Type get_type() const;						//get Coord_Type for the given comp coordinates
-		Coord_Type get_type(const Coord_Type other) const;	//get Coord_Type for the given relative comp coordinates
+
+		//get Coord_Type for the given comp coordinates
+		template<typename = std::enable_if_t<std::is_integral<T>::value>>
+		Coord_Type get_type() const {
+			return static_cast<Coord_Type>((x & 1) | ((y & 1) << 1) | ((z & 1) << 2));
+		}
 	};
 	
-	using iVec3 = Vec3<int>;
-	using fVec3 = Vec3<real>;
+	using iVec3 = Vec3<int>;			//the most frequent 
+	using fVec3 = Vec3<real>;			//the 
 	using cVec3 = Vec3<complex_num>;
 	using sVec3 = Vec3<size_t>;
 	
@@ -236,9 +229,34 @@ namespace ffip {
 	Vec3<T>::Vec3(const Vec3<T2>& other): x(other.x), y(other.y), z(other.z) {}
 	
 	template<typename T>
+	Vec3<T> ceil(const Vec3<T>& p) {
+		return { std::ceil(p.x), std::ceil(p.y), std::ceil(p.z) };
+	}
+
+	template<typename T>
+	Vec3<T> floor(const Vec3<T>& p) {
+		return { std::floor(p.x), std::floor(p.y), std::floor(p.z) };
+	}
+
+	template<typename T>
+	Vec3<T> abs(const Vec3<T>& p) {
+		return { std::abs(p.x),  std::abs(p.y), std::abs(p.z) };
+	}
+
+	template<typename T>
+	T prod(const Vec3<T>& p) {
+		return p.x * p.y * p.z;
+	}
+
+	template<typename T>
 		template<typename T2>
 	Vec3<T>& Vec3<T>::operator=(const Vec3<T2>& other) {
 		return Vec3<T>{other};
+	}
+
+	template<typename T, typename = std::enable_if_t<std::is_integral_v<T>>>
+	constexpr Vec3<T> dim2stride(const Vec3<T>& dim) {
+		return { 1, dim.x, dim.x * dim.y }; 
 	}
 	
 	/* point wise less */
@@ -259,16 +277,16 @@ namespace ffip {
 		return (ElementWise_Less_Eq(p1, tp) && ElementWise_Less_Eq(tp, p2));
 	}
 	
-	/* dot product */
-	template<typename T1, typename T2>
-	constexpr Vec3<decltype(T1{} * T2{})> operator*(const Vec3<T1>& a, const Vec3<T2>& b) {
-		return {a.x * b.x, a.y * b.y, a.z * b.z};
-	}
-	
 	/* inner product*/
 	template<typename T1, typename T2>
 	constexpr decltype(T1{} * T2{}) inner_prod(const Vec3<T1>& a, const Vec3<T2>& b) {
 		return a.x * b.x + a.y * b.y +a.z * b.z;
+	}
+
+	/* dot product */
+	template<typename T1, typename T2>
+	constexpr Vec3<decltype(T1{} *T2{})> operator*(const Vec3<T1>& a, const Vec3<T2>& b) {
+		return { a.x * b.x, a.y * b.y, a.z * b.z };
 	}
 	
 	/* right scalar product */
@@ -303,6 +321,18 @@ namespace ffip {
 	template<typename T1, typename T2>
 	constexpr Vec3<decltype(T1{} - T2{})> operator-(const Vec3<T1>& a, const Vec3<T2>& b) {
 		return {a.x - b.x, a.y - b.y, a.z - b.z};
+	}
+
+	/* point wise substraction */
+	template<typename T1, typename T2>
+	constexpr Vec3<decltype(T1{} -T2{})> operator-(const T1 a, const Vec3<T2>& b) {
+		return { a - b.x, a - b.y, a - b.z };
+	}
+
+	/* point wise substraction */
+	template<typename T1, typename T2>
+	constexpr Vec3<decltype(T1{} -T2{})> operator-(const Vec3<T1>& a, const T2 b) {
+		return { a.x - b, a.y - b, a.z - b };
 	}
 	
 	/* right scaler division*/
@@ -345,41 +375,42 @@ namespace ffip {
 	struct choose {
 		
 		template<typename T>
-		static typename T::value_type& get(T&);
+		static typename T::value_type& get(T& v);
+
 		template<typename T>
-		static typename T::value_type const& get(const T&);
+		static typename T::value_type const& get(const T& v);
 	};
-	
+
 	template<>
 	template<typename T>
 	typename T::value_type& choose<dir_x_tag>::get(T& v) {
 		return v.x;
 	}
-	
+
 	template<>
 	template<typename T>
 	typename T::value_type& choose<dir_y_tag>::get(T& v) {
 		return v.y;
 	}
-	
+
 	template<>
 	template<typename T>
 	typename T::value_type& choose<dir_z_tag>::get(T& v) {
 		return v.z;
 	}
-	
+
 	template<>
 	template<typename T>
 	typename T::value_type const& choose<dir_x_tag>::get(const T& v) {
 		return v.x;
 	}
-	
+
 	template<>
 	template<typename T>
 	typename T::value_type const& choose<dir_y_tag>::get(const T& v) {
 		return v.y;
 	}
-	
+
 	template<>
 	template<typename T>
 	typename T::value_type const& choose<dir_z_tag>::get(const T& v) {
@@ -417,8 +448,8 @@ namespace ffip {
 	 */
 	template<typename T1, typename T2>
 	inline std::pair<iVec3, iVec3> get_component_interior(const Vec3<T1>& p1, const Vec3<T2>& p2, const Coord_Type type) {
-		if (type == Coord_Type::Null)
-			return {iVec3(ceil(p1.x), ceil(p1.y), ceil(p1.z)), iVec3(floor(p2.x), floor(p2.y), floor(p2.z))};
+		if (type == Coord_Type::All)
+			return {iVec3(std::ceil(p1.x), std::ceil(p1.y), std::ceil(p1.z)), iVec3(std::floor(p2.x), std::floor(p2.y), std::floor(p2.z))};
 
 		return std::make_pair(	get_nearest_point<side_high_tag>(p1, type),
 								get_nearest_point<side_low_tag>(p2, type));
@@ -427,8 +458,8 @@ namespace ffip {
 	/* return the smallest box*/
 	template<typename T1, typename T2>
 	inline std::pair<iVec3, iVec3> get_component_closure(const Vec3<T1>& p1, const Vec3<T2>& p2, const Coord_Type type) {
-		if (type == Coord_Type::Null)
-			return {iVec3(floor(p1.x), floor(p1.y), floor(p1.z)), iVec3(ceil(p2.x), ceil(p2.y), ceil(p2.z))};
+		if (type == Coord_Type::All)
+			return {iVec3(std::floor(p1.x), floor(p1.y), std::floor(p1.z)), iVec3(std::ceil(p2.x), std::ceil(p2.y), std::ceil(p2.z))};
 
 		return std::make_pair(	get_nearest_point<side_low_tag>(p1, type),
 								get_nearest_point<side_high_tag>(p2, type));
@@ -449,6 +480,8 @@ namespace ffip {
 	}
 
     /* source functions */
+	enum Func { ricker, sine, gaussian };
+
 	auto make_gaussian_func(real sigma_t, real d = 0) -> std::function<real(const real)>;
 	auto make_sin_func(real freq, real d = 0) -> std::function<real(const real)>;
 	auto make_ricker_func(real fp, real d = 0) -> std::function<real(const real)>;
@@ -470,7 +503,7 @@ namespace ffip {
 			if (x < 0 || x >= dimx - 1)
 				throw Out_of_the_Domain{};
 			
-			size_t x_b = floor(x);
+			size_t x_b = std::floor(x);
 			return data[x_b] * (x_b + 1 - x) + data[x_b + 1] * (x - x_b);
 		}
 	};
@@ -480,14 +513,14 @@ namespace ffip {
 	class interp2 {
 	public:
 		size_t dimx, dimy;
-		size_t size, jump_y;
+		size_t size, stride_y;
 		
 		interp2(const size_t _dimx, const size_t _dimy): dimx(_dimx), dimy(_dimy) {
 			if (dimx <= 1 || dimy <= 1)
 				throw std::runtime_error("Invalid Size");
 			
 			size = dimx * dimy;
-			jump_y = dimx;
+			stride_y = dimx;
 		}
 		
 		template<typename T>
@@ -498,16 +531,16 @@ namespace ffip {
 			if (x < 0 || x > dimx - 1 || y < 0 || y > dimy - 1)
 				throw Out_of_the_Domain{};
 			
-			size_t xb = floor(x);
-			size_t yb = floor(y);
+			size_t xb = std::floor(x);
+			size_t yb = std::floor(y);
 			real tx = x - xb;
 			real ty = y - yb;
-			T const* ptr = &data[xb + yb * jump_y];
+			T const* ptr = &data[xb + yb * stride_y];
 			
 			return (1 - tx) * (1 - ty) * ptr[0] +
 			tx * (1 - ty) * ptr[1] +
-			(1 - tx) * ty * ptr[jump_y] +
-			tx * ty * ptr[1 + jump_y];
+			(1 - tx) * ty * ptr[stride_y] +
+			tx * ty * ptr[1 + stride_y];
 		}
 	};
 	
@@ -516,41 +549,42 @@ namespace ffip {
 	class interp3 {
 	public:
 		size_t dimx, dimy, dimz;
-		size_t size, jump_y, jump_z;
+		size_t size, stride_y, stride_z;
 		
+		interp3() = default;
 		interp3(const size_t _dimx, const size_t _dimy, const size_t _dimz): dimx(_dimx), dimy(_dimy), dimz(_dimz) {
 			if (dimx <= 1 || dimy <= 1 || dimz <= 1)
 				throw std::runtime_error("Invalid Size");
 			
 			size = dimx * dimy * dimz;
-			jump_y = dimx;
-			jump_z = dimx * dimy;
+			stride_y = dimx;
+			stride_z = dimx * dimy;
 		}
 		
 		template<typename T>
-		T get(const std::vector<T>& data, const real z, const real y, const real x) {
+		T get(const std::vector<T>& data, const real z, const real y, const real x) const {
 			if (data.size()!= size)
 				throw std::runtime_error("Invalid Data Size");
 			
 			if (x < 0 || x > dimx - 1 || y < 0 || y > dimy - 1|| z < 0 || z > dimz - 1)
 				throw Out_of_the_Domain{};
 			
-			size_t xb = floor(x);
-			size_t yb = floor(y);
-			size_t zb = floor(z);
+			size_t xb = std::floor(x);
+			size_t yb = std::floor(y);
+			size_t zb = std::floor(z);
 			real tx = x - xb;
 			real ty = y - yb;
 			real tz = z - zb;
-			T const* ptr = &data[xb + yb * jump_y + zb * jump_z];
+			T const* ptr = &data[xb + yb * stride_y + zb * stride_z];
 			
 			const T& c000 = ptr[0];
 			const T& c001 = ptr[1];
-			const T& c010 = ptr[jump_y];
-			const T& c011 = ptr[1 + jump_y];
-			const T& c100 = ptr[jump_z];
-			const T& c101 = ptr[jump_z + 1];
-			const T& c110 = ptr[jump_z + jump_y];
-			const T& c111 = ptr[jump_z + jump_y + 1];
+			const T& c010 = ptr[stride_y];
+			const T& c011 = ptr[1 + stride_y];
+			const T& c100 = ptr[stride_z];
+			const T& c101 = ptr[stride_z + 1];
+			const T& c110 = ptr[stride_z + stride_y];
+			const T& c111 = ptr[stride_z + stride_y + 1];
 			
 			return (1 - tx) * (1 - ty) * (1 - tz) * c000 +
 			tx * (1 - ty) * (1 - tz) * c001 +
@@ -572,7 +606,7 @@ namespace ffip {
 	class interpn : public interpn<N - 1> {
 	public:
 		using base_class = interpn<N - 1>;
-		size_t dimn{1}, jump{1};
+		size_t dimn{1}, stride{1};
 		
 		interpn() = default;
 		
@@ -582,7 +616,7 @@ namespace ffip {
 			if (dimn < 1)
 				throw std::runtime_error("Invalid Dimension");
 			
-			jump = base_class::get_size();
+			stride = base_class::get_size();
 		}
 		
 		size_t get_size() const {
@@ -595,17 +629,17 @@ namespace ffip {
 				return base_class::get_helper(data, args...);
 			
 			//force points to be inside of region
-			if (xq > dimn - 1) return base_class::get_helper(data + jump * (dimn - 1), args...);
+			if (xq > dimn - 1) return base_class::get_helper(data + stride * (dimn - 1), args...);
 			if (xq < 0) return base_class::get_helper(data, args...);
 			
 			size_t index = xq;
 			real tx = xq - index;
 			
 			if (tx < tol_interp)
-				return base_class::get_helper(data + jump * index, args...);
+				return base_class::get_helper(data + stride * index, args...);
 			else
-				return	tx * base_class::get_helper(data + jump * (index + 1), args...) +
-				(1 - tx) * base_class::get_helper(data + jump * index, args...);
+				return	tx * base_class::get_helper(data + stride * (index + 1), args...) +
+				(1 - tx) * base_class::get_helper(data + stride * index, args...);
 		}
 		
 		template<typename T, typename... Args>
@@ -622,17 +656,17 @@ namespace ffip {
 			}
 			
 			//force points to be inside of region
-			if (xq > dimn - 1) return base_class::put_helper(data + jump * (dimn - 1), val, args...);
+			if (xq > dimn - 1) return base_class::put_helper(data + stride * (dimn - 1), val, args...);
 			if (xq < 0) return base_class::put_helper(data, val, args...);
 			
 			size_t index = xq;
 			real tx = xq - index;
 			
 			if (tx < tol_interp)
-				base_class::put_helper(data + jump * index, val, args...);
+				base_class::put_helper(data + stride * index, val, args...);
 			else {
-				base_class::put_helper(data + jump * (index + 1), val * tx, args...);
-				base_class::put_helper(data + jump * index, val * (1 - tx), args...);
+				base_class::put_helper(data + stride * (index + 1), val * tx, args...);
+				base_class::put_helper(data + stride * index, val * (1 - tx), args...);
 			}
 		}
 		
@@ -646,7 +680,7 @@ namespace ffip {
 	template<>
 	class interpn<1> {
 	public:
-		size_t dimn{1}, jump{1};
+		size_t dimn{1}, stride{1};
 		
 		interpn() = default;
 		
@@ -654,7 +688,7 @@ namespace ffip {
 			if (dimn < 1)
 				throw std::runtime_error("Invalid Dimension");
 			
-			jump = 1;
+			stride = 1;
 		}
 		
 		size_t get_size() const {
@@ -720,15 +754,14 @@ namespace ffip {
     /* linear interpolation on fixed interval grids*/
     class GriddedInterp {
     private:
-		real_arr x, y, z, v;
+		real_arr v;
+		int dimx, dimy, dimz;
+		real x0, y0, z0;
 		real dx, dy, dz;
         std::string file_name;
-		interpn<3> interp{1, 1, 1};
-		
+		interp3 interp;
     public:
-        /* Semiregular members*/
         GriddedInterp(std::string file_name);
-		GriddedInterp(const iVec3& dim, const fVec3& w0, const fVec3& dw, const real_arr& _v);
 		
 		GriddedInterp(const GriddedInterp&) = default;				//copy
 		GriddedInterp& operator=(const GriddedInterp&) = default;
@@ -736,20 +769,10 @@ namespace ffip {
 		GriddedInterp& operator=(GriddedInterp&&) = default;
 
         /* Function Members */
-        real request_value(const fVec3& p) const;			//return value at a point, 0 dimension is ignored
-        real request_integral() const;						//return the integral over the entire volume
-		
-		void expand_dim(const real lo, const real hi, const Direction dir);	//expand zero dimension without changing the integral, this is for use in current source
-		void scale_xyz(const real sx, const real sy, const real sz);	//x *= sx, y *= sy, z *= sz, to scale all dimensions, caution: it changes the integral by sx * sy * sz
-		
-		void expand_dim_helper(std::vector<real>& w, const real lo, const real hi, const Direction dir);
+        real get(const fVec3& p) const;			//return value at a point, 0 dimension is ignored
         fVec3 get_p1() const;								//return the lower corner point
         fVec3 get_p2() const;								//return the upper corner point
-
-		//public functions for calculating generic line, face and volume integral
     };
-	
-	
 	
 	/* n dimensional linear integration, 1 dimension,
 	 xn does not need to have fixed interval*/
@@ -821,18 +844,17 @@ namespace ffip {
 	/* PML class for calculating k, b, c arrays used in updating perfectly matched layer using CPML*/
 	class PML {
 	private:
-		int d;
-		real sigma_max;
+		int d{ 0 };
+		real sigma_max{ 0 };
 		real k_max{1};
 		real a_max{0};
-		real m{3};
-		real m_a{1};
+		int m{3};
+		int m_a{1};
 
 	public:
 		/* constructors*/
 		PML() = default;
-		PML(int d, real sigma_max);
-		PML(int d, real sigma_max, real k_max, real a_max, real m, real m_a);
+		PML(int d, real sigma_max, real k_max = 1, real a_max = 0, int m = 3, int m_a = 1);
 
 		PML(const PML&) = default;				//copy
 		PML& operator=(const PML&) = default;
@@ -859,18 +881,15 @@ namespace ffip {
 		Dispersive_Field(const size_t num_poles);
 		size_t get_num_poles() const;
 	};
-	
-	/* field information for points inside PML layers*/
-	struct PML_Point {
-		int index, jump_pos, jump_neg;
-		real b_pos, b_neg, c_pos, c_neg;
-		real psi_pos{0}, psi_neg{0};
-		
-		PML_Point(const int _index, const int _jump_pos, const int _jump_neg, const real _b_pos, const real _b_neg, const real _c_pos, const real _c_neg);
+
+	/* compact struct making localization better to achieve */
+	template<int N>
+	struct Dispersive_Updates {
+
+
+		real eh2;
+		std::array<real, N> p1, p;
 	};
-	
-	template<typename P, int N, int M>
-	inline typename P::value_type get(const P& p);
 	
 	/* an iterator to iterate through a box region specified by two corner regions [p1, p2]
 	 it allows iteration of particular coord_type points: ex, ..., ez, hx, ..., hz
@@ -882,13 +901,14 @@ namespace ffip {
 		size_t size, index, end;
 		int x0, y0, z0, x1, y1, z1;
 		int x, y, z;
-		int jump;
+		int stride;
 		
 		/* non-parallel version constructor*/
 		my_iterator(const iVec3& p1, const iVec3& p2, const Coord_Type ctype);
 		my_iterator(const std::pair<iVec3, iVec3> corners, const Coord_Type ctype);
 		my_iterator(const fVec3& p1, const fVec3& p2, const Coord_Type ctype);
-		/* used for paralellization so that the itr only loops through rank/num of the total points*/
+
+		/* used for paralellization so that the itr only loops through rank/num of the total points */
 		my_iterator(const iVec3& p1, const iVec3& p2, const Coord_Type ctype, const size_t rank, const size_t num);
 		
 		void advance();					//increase index by 1
@@ -896,9 +916,8 @@ namespace ffip {
 		bool is_empty() const;			//is the region illegal?
 		iVec3 get_vec() const;			//return the current x, y, z in iVec3
 		iVec3 get_vec(size_t index) const;	//return x, y, z specified by index
-		size_t get_index(const int x, const int y, const int z) const;	//return the index specified by x, y, z
 		size_t get_size() const;			//return size of the region
-		Vec3<size_t> get_dim() const;		//return the dimension of the region
+		sVec3 get_dim() const;		//return the dimension of the region
 	};
 	
 	/* Barrier implementation with reset at the end*/
@@ -920,10 +939,44 @@ namespace ffip {
 		explicit Barrier(std::size_t count);
 		Barrier& operator=(Barrier&&) = delete;
 		Barrier& operator=(const Barrier&) = delete;
-		/// Blocks until all N threads reach here
 		void Sync();
 		size_t get_num_proc() const;
 	};
+
+	/*class Barrier
+	{
+	public:
+		Barrier(const Barrier&) = delete;
+		Barrier& operator=(const Barrier&) = delete;
+
+		explicit Barrier(unsigned int count) :
+			m_count(count), m_generation(0),
+			m_count_reset_value(count)
+		{}
+
+		unsigned int get_num_proc() const {
+			return m_count_reset_value;
+		}
+
+		void Sync()
+		{
+			unsigned int gen = m_generation.load();
+			if (--m_count == 0)
+			{
+				if (m_generation.compare_exchange_weak(gen, gen + 1))
+				{
+					m_count = m_count_reset_value;
+				}
+				return;
+			}
+			while ((gen == m_generation) && (m_count != 0))
+				std::this_thread::yield();
+		}
+	private:
+		std::atomic<unsigned int> m_count;
+		std::atomic<unsigned int> m_generation;
+		unsigned int m_count_reset_value;
+	};*/
 
 	/* Global Barrier for use in anywhere*/
 	extern Barrier* glob_barrier;
@@ -959,10 +1012,11 @@ namespace ffip {
 
 	// to pass around classes and stuff
 	struct Config {
-		real dt, dx;
-		iVec3 sim_p1, sim_p2;
-		iVec3 ch_p1, ch_p2;
-		iVec3 tf_p1, tf_p2;
-		iVec3 phys_p1, phys_p2;
+		real dt, dx;			//discretized length and time
+		iVec3 roi_p1, roi_p2;	//region of interest, 0->dim * 2
+		iVec3 sim_p1, sim_p2;	//region of simulation, everything included
+		iVec3 ch_p1, ch_p2;		//region of chunk, collection of chunks is a disjoint cover of region of simulation
+		iVec3 tf_p1, tf_p2;		//region of total field
+		iVec3 phys_p1, phys_p2;	//region of physical field, region of simulation minus PML layer
 	};
 }

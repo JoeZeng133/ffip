@@ -35,7 +35,6 @@ int read_basic_config(istream& fin, Simulation& sim) {
 	}
 	sim.add_sf_layer(sf_thickness);
 	sim.add_tf_layer(tf_padded_thickness);
-	sim.chunk_init();
 	
 	fin >> c;
 	if (c != '}')
@@ -143,6 +142,21 @@ void read_geometry(istream& fin, Simulation& sim, const vector<Medium*>& medium_
 		fin >> idx >> x >> y >> z >> radius >> height >> dir;
 		sim.add_solid(sim.make_solid(medium_gather[idx], sim.make_disk(fVec3{ x,y,z }, radius, height, (Direction)dir)));
 	}
+
+	if (type == "blob") {
+		int n, idx;
+		double x, y, z, amp;
+
+		string filename;
+		fin >> filename;
+
+		auto fb = fstream{ filename, ios::in };
+		fb >> n;
+		for (int i = 0; i < n; ++i) {
+			fb >> x >> y >> z >> idx >> amp;
+			sim.add_blob({ x, y, z }, amp, medium_gather[idx]);
+		}
+	}
 	
 	fin >> c;
 	if (c != '}')
@@ -170,7 +184,7 @@ void read_source(istream& fin, Simulation& sim) {
 		Plane_Wave projector(sim.get_dx(), sim.get_dt(), dim_neg, dim_pos);
 		
 		projector.set_medium(bg_medium->get_e_inf(), bg_medium->get_u_inf());
-		projector.set_PML(PML(6, 0.8 * 4 / (sim.get_dx() * z0), 1, 0, 3, 1));
+		projector.set_PML(PML(6, 0.8 * 4 / (sim.get_dx() * z0)));
 
 		if (c == 'r') {
 			projector.set_excitation(make_ricker_func(fp, d));
@@ -198,10 +212,10 @@ void read_source(istream& fin, Simulation& sim) {
 		for (int i = 0; i < n; ++i) {
 			dipole_file >> x >> y >> z >> amp >> c >> fp >> d >> ctype;
 			if (c == 'r')
-				sim.add_dipole(amp, {x, y, z}, (Coord_Type)ctype, make_ricker_func(fp, d));
+				sim.add_dipole(amp, {x, y, z}, (Coord_Type)ctype, ricker, fp, d);
 
 			if (c == 's') 
-				sim.add_dipole(amp, { x, y, z }, (Coord_Type)ctype, make_sin_func(fp, d));
+				sim.add_dipole(amp, { x, y, z }, (Coord_Type)ctype, sine, fp, d);
 		}
 	}
 	
@@ -323,8 +337,6 @@ int main(int argc, char const *argv[]) {
 
 		if (field == "basic") {
 			time_step = read_basic_config(fin, sim);
-			
-			//cout << field << " Complete \n";
 
 			continue;
 		}
@@ -338,7 +350,6 @@ int main(int argc, char const *argv[]) {
 				medium_gather.push_back(read_medium(fin, sim));
 
 			fin >> c;
-			//cout << field << " Complete \n";
 
 			continue;
 		}
@@ -353,8 +364,6 @@ int main(int argc, char const *argv[]) {
 			
 			fin >> c;
 
-			//cout << field << " Complete \n";
-
 			continue;
 		}
 		
@@ -367,8 +376,8 @@ int main(int argc, char const *argv[]) {
 				read_source(fin, sim);
 			
 			fin >> c;
-			
-			//cout << field << " Complete \n";
+
+			sim.init();
 
 			continue;
 		}
@@ -391,8 +400,6 @@ int main(int argc, char const *argv[]) {
 			fin >> filename;
 			nearfield_output_file = fstream{filename, ios::out};
 			read_nearfield_probe(nearfield_input_file, sim);
-			
-			//cout << field << " Complete \n";
 
 			continue;
 		}
@@ -415,8 +422,7 @@ int main(int argc, char const *argv[]) {
 			fin >> filename;
 			farfield_output_file = fstream{filename, ios::out};
 			n2f_box = read_farfield_probe(farfield_input_file, sim);
-			
-			//cout << field << " Complete \n";
+		
 			continue;
 		}
 		
@@ -427,8 +433,6 @@ int main(int argc, char const *argv[]) {
 			fin >> filename;
 			flux_output_file = fstream{filename, ios::out};
 			flux_box = read_flux(flux_input_file, sim);
-			
-			//cout << field << " Complete \n";
 
 			continue;
 		}
@@ -436,12 +440,9 @@ int main(int argc, char const *argv[]) {
 		if (field == "Stop_Step_Output") {
 			sim.output_step_number = false;
 			
-			//cout << field << "\n";
 			continue;
 		}
 	}
-	
-	sim.init();
 	
 	int skip = 10;
 	for(int i = 0; i < time_step; ++i) {
@@ -481,6 +482,5 @@ int main(int argc, char const *argv[]) {
 	auto end = std::chrono::system_clock::now();
 	std::chrono::duration<double> elapsed_seconds = end-start;
 	std::cout << "\nRunning Time: " << elapsed_seconds.count() << endl;
-	//cout << "Simulation Finished" << endl;
 	return 0;
 }

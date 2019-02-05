@@ -61,9 +61,9 @@ namespace ffip {
 		bool is_in_exterior(const fVec3& p) const override;
 		
 		/* other functions*/
-		fVec3 get_p1();
-		fVec3 get_p2();
-		fVec3 get_center();
+		fVec3 get_p1() const;
+		fVec3 get_p2() const;
+		fVec3 get_center() const;
 	};
 	
 	/* sphere geometry*/
@@ -126,23 +126,22 @@ namespace ffip {
 	class Solid {
 	public:
 		virtual ~Solid() {}
-		virtual bool update_weights(const fVec3& p, std::vector<real>& weights) const = 0;			//get weights (R^n) of each material at each point, used to calculate mixing materials, if it is outside, weights are 0^n, return 1 if it is inside
+		virtual bool update_weights(const fVec3& p, Medium_Voxel& weights) const = 0;			//get weights (R^n) of each material at each point, used to calculate mixing materials, if it is outside, weights are 0^n, return 1 if it is inside
 	};
 	
 	/* a box region with inhomogeneous material property specified by e = rho * e1 + (1 - rho) * e2*/
-	class Inhomogeneous_Box : public Solid, public Box {
+	class Inhomogeneous_Box : public Box, public Solid {
 	private:
 		Medium const* medium1;
 		Medium const* medium2;
 		
 		GriddedInterp interp;
-		
 	public:
 		Inhomogeneous_Box(Medium const* m1, Medium const*  m2,  const std::string& filename);	//given medium1, give medium2 and filename of the interpolation data of rho
 		
 		real get_density(const fVec3& p) const;			//return rho at a given point
 		/* override functions*/
-		bool update_weights(const fVec3& p, std::vector<real>& weights) const override;
+		bool update_weights(const fVec3& p, Medium_Voxel& weights) const override;
 	};
 	
 	class Homogeneous_Object : public Solid, public Geometry_Node {
@@ -151,7 +150,7 @@ namespace ffip {
 		
 	public:
 		Homogeneous_Object(Medium const*  m, const Geometry_Node& _base);
-		bool update_weights(const fVec3& p, std::vector<real>& weights) const override;
+		bool update_weights(const fVec3& p, Medium_Voxel& weights) const override;
 	};
 	
 }

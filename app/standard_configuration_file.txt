@@ -32,11 +32,11 @@ geometry[string] number_of_geometry[int] {
 	{box[string] medium_idx[int] x0[double] y0[double] z0[double] x1[double] y1[double] z1[double]}
 	{disk[string] medium_idx[int] x[double] y[double] z[double] radius[double] height[double] direction[int]}
 	{inhom[string] medium_idx1[int] medium_idx2[int] filename[string]}
+	{blob[string] input_file[string]}
 }
 
 source[string] number_of_sources[integer] {
-	{plane[string] dim_neg[int] dim_pos[int] r[char] fp[double] delay[double] ref_pos[double]} #ricker excitation
-	{plane[string] dim_neg[int] dim_pos[int] s[char] fp[double] delay[double] ref_pos[double]} #sin excitation
+	{plane[string] dim_neg[int] dim_pos[int] func_type[char] fp[double] delay[double] ref_pos[double]} #ricker excitation
 	{dipole[string] filename[string]}
 }
 
@@ -54,16 +54,15 @@ nearfield_time[string] input_file[string] output_file[string]
 x0[double] y0[double] z0[double]	#scattering box corner points coordinates (physical)
 x1[double] y1[double] z1[double]
 number_of_frequencies
-f[double]...
+freq[double]...
 
 *********************** dipole file
 number_of_dipoles
-x[double] y[double] z[double] amp[double] r[char] fp[double] delay[double] ctype[int] #ricker excitation
-x[double] y[double] z[double] amp[double] s[char] fp[double] delay[double] ctype[int] #sin excitation
+x[double] y[double] z[double] amp[double] func_type[char] freq[double] delay[double] ctype[int]
 
 *********************** near field probe file or nearfield_convergence probe file
 number_of_probes
-x[double] y[double] z[double] fp[double]
+x[double] y[double] z[double] freq[double]
 
 *********************** near field time file
 number_of_probes
@@ -73,6 +72,15 @@ x[double] y[double] z[double]
 x0[double] y0[double] z0[double]	#n2f box corner points coordinates (physical)
 x1[double] y1[double] z1[double]
 number_of_probes
-theta[double] phi[double] rho[double] fp[double]
+theta[double] phi[double] rho[double] freq[double]
 
+*********************** blob file
+number_of_blobs[int]
+x[double] y[double] z[double] medium_idx[int] amp[double]
 
+*********************** inhom file
+dimx[int] dimy[int] dimz[int]
+x0[double] dx[double]
+y0[double] dy[double]
+z0[double] dz[double]
+rho[double]

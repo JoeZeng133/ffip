@@ -7,6 +7,9 @@ namespace ffip {
 	struct Pole_Ref {
 		real a1, a2, b0, b1, b2;
 	};
+
+	/* configuration of medium */
+	using Medium_Voxel = typename std::valarray<real>;
 	
 	/* Poles for scripting*/
 	struct Pole_Base {

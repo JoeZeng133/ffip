@@ -17,7 +17,7 @@ dt = Sc * dx / c0;
 dim = [60, 60, 60];
 step = 10000;
 tf_layer = 2;
-sf_layer = 2;
+sf_layer = 3;
 projector_padding = ceil((tf_layer + 1) / 2);
 
 fs = c0 / 500e-9;
@@ -33,21 +33,15 @@ Ft = Ft(:);
 Th = Th(:);
 Phi = Phi(:);
 Rho = Rho(:);
-probes = [Th, Phi, Rho, Ft];
 
 % far field probes
-filename_probes = 'probes.in';
-fileID = fopen(filename_probes, 'w');
-fprintf(fileID, '%e %e %e\n', [-1.5, -1.5, -1.5] * dx);
-fprintf(fileID, '%e %e %e\n', (dim + 1.5) * dx);
-fprintf(fileID, '%d\n', size(probes, 1));
-fprintf(fileID, '%e %e %e %e\n', probes');
-fclose(fileID);
+ff_p1 = [-2, -2, -2] * dx;
+ff_p2 = (dim + 2) * dx;
 
 Omega = 2 * pi * Ft;
 K = Omega / c0;
 er_func = @Au;
-er = er_func(Omega);
+[~, er] = er_func(Omega);
 
 % sphere parameters
 m = sqrt(conj(er(:))); %exp(-jwt) dependence, use the conjugate
@@ -57,53 +51,42 @@ size_param = K * a;
 figure(1)
 
 ft_samples = ft;
-plot(c0 ./ ft_samples / 1e-9, real(er_func(ft_samples * 2 * pi)), 'r-'), hold on
-plot(c0 ./ ft_samples / 1e-9, -imag(er_func(ft_samples * 2 * pi)), 'b-')
+[~, er_samples] = er_func(ft_samples * 2 * pi);
+plot(c0 ./ ft_samples / 1e-9, real(er_samples), 'r-'), hold on
+plot(c0 ./ ft_samples / 1e-9, -imag(er_samples), 'b-')
 xlabel('Wavelength [nm]')
 legend({'$\textrm{Re}(\varepsilon_r)$', '$\textrm{Im}(\varepsilon_r)$'}, 'interpreter', 'latex','fontsize', 15)
 axis tight
 
-% basic configuration
-fileID = fopen('config.in', 'w');
-fprintf(fileID, 'basic {\n');
-fprintf(fileID, '%e %e\n', dt, dx);
-fprintf(fileID, '%d %d %d\n', dim);
-fprintf(fileID, '%d\n', sf_layer);
-fprintf(fileID, '%d\n', tf_layer);
-fprintf(fileID, '%d\n', PML_d);
-fprintf(fileID, '%d\n', step);
-fprintf(fileID, '%e %e\n', er_bg, ur_bg);
-fprintf(fileID, '}\n');
+%% writing configuration
+basic.er_bg = er_bg;
+basic.ur_bg = ur_bg;
+basic.PML_d = PML_d;
+basic.dx = dx;
+basic.dt = dt;
+basic.dim = dim;
+basic.step = step;
+basic.tf_layer = tf_layer;
+basic.sf_layer = sf_layer;
 
-% medium configuration
-fprintf(fileID, 'medium 2 {\n');
-% medium 0, background medium
-fprintf(fileID, '{ ');
-fprintf(fileID, '%e %e %e %e 0', er_bg, 0, ur_bg, 0);
-fprintf(fileID, ' }\n');
+medium{1} = Air();
+medium{2} = Au();
 
-% medium 1, scatterer medium
-Au_print(fileID);
-fprintf(fileID, '}\n');
+geometry{1} = struct('type', 'sphere', 'medium_idx', 1, 'radius', a, 'position', dim * dx / 2);
 
-% % geometry configuration
-fprintf(fileID, 'geometry 1 {\n');
-% geometry 0 gold sphere 10nm radius
-fprintf(fileID, '{ ');
-fprintf(fileID, 'sphere 1 %e %e %e %e', a, dim * dx / 2);
-fprintf(fileID, ' }\n');
-fprintf(fileID, '}\n');
+source{1} = struct('type', 'plane', 'dim_neg', projector_padding, 'dim_pos', ...
+    dim(3) + projector_padding, 'func_type', 'r', 'fp', fs, 'delay', delay, 'ref_pos', dim(3) / 2 * dx);
 
-% plane wave source
-fprintf(fileID, 'source 1 {\n');
-fprintf(fileID, '{ ');
-fprintf(fileID, 'plane %d %d %s %e %e 0', projector_padding, dim(3) + projector_padding, 'r', fs, delay);
-fprintf(fileID, ' }\n');
-fprintf(fileID, '}\n');
+ff.lower_position = ff_p1;
+ff.upper_position = ff_p2;
+ff.theta = Th;
+ff.phi = Phi;
+ff.rho = Rho;
+ff.freq = Ft;
+ff.input_file = 'ff.in';
+ff.output_file = 'output.out';
 
-% farfield probes
-fprintf(fileID, 'farfield %s %s\n', filename_probes, 'output.out');
-fclose(fileID);
+gen_config(basic, medium, geometry, source, 'farfield', ff);
 
 disp('config.in created');
 %% numerical fields
