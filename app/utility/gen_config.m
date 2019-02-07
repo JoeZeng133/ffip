@@ -122,6 +122,7 @@ addParameter(p, 'flux', 0);
 addParameter(p, 'nearfield_convergence', 0);
 addParameter(p, 'nearfield_time', 0);
 addParameter(p, 'config_filename', 'config.in');
+addParameter(p, 'step_output', 0);
 parse(p, varargin{:});
 res = p.Results;
 
@@ -154,6 +155,10 @@ if isstruct(res.flux)
     fprintf(fileID, '%d\n', numel(flux.freq));
     fprintf(fileID, '%e\n', flux.freq(:));
     fclose(fileID);
+end
+
+if res.step_output == 0
+    config_str = config_str + sprintf('Stop_Step_Output\n');
 end
 
 fileID = fopen(res.config_filename, 'w');

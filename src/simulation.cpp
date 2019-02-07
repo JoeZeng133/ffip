@@ -72,14 +72,35 @@ namespace ffip {
 			bg_medium = make_medium(1, 0, 1, 0);
 		
 		prepare_medium(dt);
-		const int N = 4;
-		real delta = dx / (2 * N);
+		
+		//spatial average method
 		std::vector<fVec3> sampled_points;
-		for(int i = 1; i < 2 * N; i += 2)
-			for(int j = 1; j < 2 * N; j += 2)
-				for(int k = 1; k < 2 * N; k += 2) {
-					sampled_points.push_back({i * delta, j * delta, k * delta});
-				}
+		{
+			const int N = 4;
+			real delta = dx / (2 * N);
+			for (int i = 1; i < 2 * N; i += 2)
+				for (int j = 1; j < 2 * N; j += 2)
+					for (int k = 1; k < 2 * N; k += 2) {
+						sampled_points.push_back({ i * delta, j * delta, k * delta });
+					}
+		}
+		
+
+		//R. Mittra Method (line average)
+		std::vector<fVec3> sampled_points_rm[8];
+		{
+			const int N = 20;
+			real delta = dx / (N - 1);
+			for (int i = 0; i < N; ++i) {
+				real x = -dx / 2 + delta * i;
+				sampled_points_rm[Ex].push_back({ x, 0, 0 });
+				sampled_points_rm[Ey].push_back({ 0, x, 0 });
+				sampled_points_rm[Ez].push_back({ 0, 0, x });
+				sampled_points_rm[Hx].push_back({ x, 0, 0 });
+				sampled_points_rm[Hy].push_back({ 0, x, 0 });
+				sampled_points_rm[Hz].push_back({ 0, 0, x });
+			}
+		}
 
 		std::vector<std::future<void>> task_list;
 		std::vector<Medium_Voxel> medium_voxels(my_iterator(ch_p1, ch_p2, All).get_size());
@@ -100,28 +121,45 @@ namespace ffip {
 					if (!is_M_Point(ctype) && !is_E_Point(ctype))			//exclude non-material points
 						continue;
 
-					/* spatial averaging to get materials
-					naive sampling integration over a cube
-					can be improved using adaptive quadrature
-					and ray tracing
-					*/
-					fVec3 box_p1{ (p.x - 1) * dx / 2, (p.y - 1) * dx / 2, (p.z - 1) * dx / 2 };
 					auto weights = get_zero_weights();
+					/* spatial averaging */
+					{
+						fVec3 box_p1{ (p.x - 1) * dx / 2, (p.y - 1) * dx / 2, (p.z - 1) * dx / 2 };
+						for (auto& item : sampled_points) {
+							auto sampled_point = box_p1 + item;
+							bool assigned = 0;
 
-					for (auto& item : sampled_points) {
-						auto sampled_point = box_p1 + item;
-						bool assigned = 0;
-
-						for (auto item : solids) {
-							if (item->update_weights(sampled_point, weights)) {	//it is true when it is inside the solid
-								assigned = 1;
-								break;
+							for (auto item : solids) {
+								if (item->update_weights(sampled_point, weights)) {	//it is true when it is inside the solid
+									assigned = 1;
+									break;
+								}
 							}
-						}
 
-						if (!assigned)			//assign background medium;
-							weights[bg_medium->index] += 1;
+							if (!assigned)			//assign background medium;
+								weights[bg_medium->index] += 1;
+						}
 					}
+
+					/* R. Mittra averaging (line averaging) */
+					//{
+					//	fVec3 fp = p * (dx / 2);
+					//	for (auto& item : sampled_points_rm[ctype]) {
+					//		auto sampled_point = fp + item;
+					//		bool assigned = 0;
+
+					//		for (auto item : solids) {
+					//			if (item->update_weights(sampled_point, weights)) {	//it is true when it is inside the solid
+					//				assigned = 1;
+					//				break;
+					//			}
+					//		}
+
+					//		if (!assigned)			//assign background medium;
+					//			weights[bg_medium->index] += 1;
+					//	}
+					//}
+					
 
 					medium_voxels[itr.index] = weights / weights.sum();
 				}
@@ -176,7 +214,7 @@ namespace ffip {
 			}
 		}
 		
-		// inhomogeneous region
+		// inhomogeneous region (force material distribution)
 		{
 			for (auto inhom : inhoms) {
 				auto p1 = inhom->get_p1() * (2 / dx);

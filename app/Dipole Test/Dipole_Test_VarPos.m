@@ -101,7 +101,7 @@ nf.freq = Ft;
 nf.input_file = 'nf.in';
 nf.output_file = 'output.out';
 
-gen_config(basic, medium, geometry, source, 'nearfield', nf);
+gen_config(basic, medium, geometry, source, 'nearfield', nf, 'step_output', 1);
 
 %% simulated fields
 data = load('output.out');
