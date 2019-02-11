@@ -41,7 +41,7 @@ fept.type = 'box';
 fept.medium_idx = 2;
 
 % disk antenna
-inhom.len = [80e-9, 80e-9, 12e-9];
+inhom.len = [80e-9, 80e-9, 10e-9];
 inhom.center = [center(1), center(2), 45e-9];
 inhom.radius = 30e-9;
 inhom.shape = make_disk([0 0], inhom.radius, 'num_elements', 40);
@@ -72,7 +72,7 @@ nf.freq = ft * ones(target.dim);
 nf.input_file = 'nf.in';
 nf.output_file = 'nf.out';
 
-%% write configuration
+%% wri
 basic.er_bg = er_bg;
 basic.ur_bg = ur_bg;
 basic.PML_d = PML_d;
@@ -90,7 +90,7 @@ plane_wave = struct('type', 'plane', 'dim_neg', projector_padding, 'dim_pos',...
 source = {plane_wave};
 gen_config(basic, medium, geometry, source, 'nearfield', nf, 'step_output', 1);
 %% simulated fields
-call_exe('std_config');
+% call_exe('std_config');
 
 %% load data
 ref_plane = load('reference.out');
@@ -107,7 +107,7 @@ H_target = [make_complex(data(:, 7), data(:, 8)), make_complex(data(:, 9), data(
 E_target = E_target / ref_plane_fft;
 H_target = H_target / ref_plane_fft;
 
-disp('objectiev fields calcualted');
+disp('objective fields saved');
 %% visualization
 figure
 plot(inhom.shape), hold on
@@ -197,8 +197,6 @@ while (itr < max_itr)
     H_forward_inhom = H_forward(1 : inhom.num, :);
     E_forward_target = E_forward(inhom.num + 1 : end, :);
     H_forward_target = H_forward(inhom.num + 1 : end, :);
-    
-    disp('forward calculation complete')
 
 %     target_func = 0.5 * sum(abs(E_forward_probes(:, 3) - E_target_probes(:, 3)).^2, 1); %only Ez
     obj_func(itr) = 0.5 * sum(sum(abs(E_forward_target - E_target).^2, 2), 1);
@@ -236,7 +234,7 @@ while (itr < max_itr)
     gen_config(basic, medium, geometry, source, 'nearfield', nf_forward, 'step_output', 0);
     
     % adjoint fields
-    call_exe('std_config');
+    call_exe('std_config')
     data = load(adjoint_output_file);
     E_adjoint = [make_complex(data(:, 1), data(:, 2)), make_complex(data(:, 3), data(:, 4)), make_complex(data(:, 5), data(:, 6))];
     H_adjoint = [make_complex(data(:, 7), data(:, 8)), make_complex(data(:, 9), data(:, 10)), make_complex(data(:, 11), data(:, 12))];
@@ -248,7 +246,7 @@ while (itr < max_itr)
     E_adjoint_target = E_adjoint(inhom.num + 1 : end, :);
     H_adjoint_target = H_adjoint(inhom.num + 1 : end, :);
 
-    disp('adjoint simulation completed');
+    disp('adjoint simulation results saved');
     % Sensitivity Calculation    
     [w_X, w_Y, w_Z] = ndgrid(...
         make_2segment(0.5, 1, inhom.dim(1)), ...

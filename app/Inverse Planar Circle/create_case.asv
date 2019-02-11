@@ -1,7 +1,6 @@
 clear
 clc
 close all
-fclose all;
 
 %% configuration input files
 % constants
@@ -41,18 +40,18 @@ fept.type = 'box';
 fept.medium_idx = 2;
 
 % disk antenna
-inhom.len = [70e-9, 70e-9, 10e-9];
-inhom.center = [center(1), center(2), 45e-9];
-inhom.radius = 30e-9;
-inhom.shape = make_disk([0 0], inhom.radius, 'num_elements', 40);
-[inhom.rho, inhom.x, inhom.y, inhom.z, inhom.p1, inhom.p2, inhom.dim, inhom.dx] = ...
-    make_inhom(inhom.shape, inhom.len(3), -inhom.len(1:2)/2, inhom.len(1:2)/2, 'dx', 4e-9, 'center', inhom.center, 'float', true);
-inhom.position = inhom.p1;
-inhom.type = 'inhom';
-inhom.filename = 'disk.in';
-inhom.medium_idx1 = 1;
-inhom.medium_idx2 = 0;
-inhom.num = numel(inhom.rho);
+disk.len = [70e-9, 70e-9, 10e-9];
+disk.center = [center(1), center(2), 45e-9];
+disk.radius = 30e-9;
+disk.shape = make_disk([0 0], disk.radius, 'num_elements', 40);
+[disk.rho, disk.x, disk.y, disk.z, disk.p1, disk.p2, disk.dim, disk.dx] = ...
+    make_inhom(disk.shape, disk.len(3), -disk.len(1:2)/2, disk.len(1:2)/2, 'dx', 4e-9, 'center', disk.center, 'float', true);
+disk.position = disk.p1;
+disk.type = 'inhom';
+disk.filename = 'disk.in';
+disk.medium_idx1 = 1;
+disk.medium_idx2 = 0;
+disk.num = numel(disk.rho);
 
 % target probes
 target.p1 = [0 0 60e-9];
@@ -61,11 +60,11 @@ target.p2 = [p2(1) p2(2) 60e-9];
 target.freq = ft * ones(target.dim);
 target.num = numel(target.x);
 
-% nearfield probes at target positions
-nf.x = [target.x(:)];
-nf.y = [target.y(:)];
-nf.z = [target.z(:)];
-nf.freq = ft * ones(target.dim);
+% nearfield probes (disk, target0
+nf.x = [disk.x(:) ; target.x(:)];
+nf.y = [disk.y(:) ; target.y(:)];
+nf.z = [disk.z(:) ; target.z(:)];
+nf.freq = ft * ones([disk.num + target.num, 1]);
 nf.input_file = 'nf.in';
 nf.output_file = 'nf.out';
 
@@ -81,53 +80,53 @@ basic.tf_layer = tf_layer;
 basic.sf_layer = sf_layer;
 
 medium = {Air(), Au(), sing_freq((2.9 - 1.5j)^2, ft)}; %Air, Au, FePt
-geometry = {inhom, fept};
+geometry = {disk, fept};
 plane_wave = struct('type', 'plane', 'dim_neg', projector_padding, 'dim_pos',...
     dim(3) + projector_padding, 'func_type', 'r', 'fp', fs, 'delay', delay, 'ref_pos', 0); 
 source = {plane_wave};
 gen_config(basic, medium, geometry, source, 'nearfield', nf, 'step_output', 1);
 %% simulated fields
-% call_exe('std_config');
+call_exe('std_config');
 
 %% load data
 ref_plane = load('reference.out');
 ref_plane = reshape(ref_plane, 1, []);
 t = (0:numel(ref_plane) - 1) * dt;
-ref_plane_fft = sum(ref_plane .* exp(-1j * 2 * pi * ft * t), 2);
+ref_plane_fft = sum(ref_plane .* exp(-1j * 2 * pi * ft(:) * t), 2);
 
-data = load(nf.output_file);
+data = load(file_probes_output_target);
 make_complex = @(x, y) x + 1j * y;
 
-E_target = [make_complex(data(:, 1), data(:, 2)), make_complex(data(:, 3), data(:, 4)), make_complex(data(:, 5), data(:, 6))];
-H_target = [make_complex(data(:, 7), data(:, 8)), make_complex(data(:, 9), data(:, 10)), make_complex(data(:, 11), data(:, 12))];
+E_target_probes = [make_complex(data(:, 1), data(:, 2)), make_complex(data(:, 3), data(:, 4)), make_complex(data(:, 5), data(:, 6))];
+H_target_probes = [make_complex(data(:, 7), data(:, 8)), make_complex(data(:, 9), data(:, 10)), make_complex(data(:, 11), data(:, 12))];
 
-E_target = E_target / ref_plane_fft;
-H_target = H_target / ref_plane_fft;
+E_target_probes = E_target_probes / ref_plane_fft;
+H_target_probes = H_target_probes / ref_plane_fft;
 
 save('case_configuration');
 disp('objective fields saved');
 
 %% visualization
 figure
-plot(inhom.shape), hold on
-plot(make_rect([0 0], inhom.len(1:2))), hold off
-xlabel('x')
-ylabel('y')
+v_rho_target = reshape(rho_target, inhom_dim + 1);
+v_rho_target = v_rho_target(:, :, 1);
+pcolor(v_rho_target)
+colorbar
+shading flat
+title('The original')
+xlabel('y')
+ylabel('x')
 
 figure
-H = sqrt(sum(abs(H_target).^2, 2));
-H = reshape(H, target.dim);
-surf(target.x, target.y, H)
+H = sqrt(sum(abs(H_target_probes).^2, 2));
+H = reshape(H, size(target_X));
+surf(target_x, target_y, H')
 shading flat
-xlabel('x')
-ylabel('y')
 title('|H|')
 
 figure
-E = sqrt(sum(abs(E_target).^2, 2));
-E = reshape(E, target.dim);
-surf(target.x, target.y, E)
+E = sqrt(sum(abs(E_target_probes).^2, 2));
+E = reshape(E, size(target_X));
+surf(target_x, target_y, E')
 shading flat
-xlabel('x')
-ylabel('y')
 title('|E|')

@@ -65,7 +65,8 @@ for i = 1 : numel(geometry)
     end
     
     if item.type == "inhom"
-        if norm(size(item.rho) - item.dim) ~= 0
+        tmp = size(item.rho);
+        if norm(tmp(:) - item.dim(:)) ~= 0
             error('Invalid dimension');
         end
         

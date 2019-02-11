@@ -35,22 +35,25 @@ ft = c0 / lambda;
 
 [~, er] = Au(2 * pi * ft);
 
-blob.p1 = center;
-blob.p2 = center;
-[blob.x, blob.y, blob.z, blob.dim] = make_interp_region(blob.p1, blob.p2, dx);
-blob.amp = 1 * ones(blob.dim);
-blob.medium_idx = 0 * ones(blob.dim);
-blob.input_file = 'blob.in';
-blob.type = 'blob';
-num_blob = numel(blob.x);
+inhom.p1 = [20e-9, 20e-9, 20e-9];
+inhom.p2 = [40e-9, 40e-9, 40e-9];
+[inhom.x, inhom.y, inhom.z, inhom.dim, inhom.dx] = make_interp_region(inhom.p1, inhom.p2, 2 * dx);
+inhom.rho = 1 * ones(inhom.dim);
+rho_copy = inhom.rho;
+inhom.position = inhom.p1;
+inhom.medium_idx1 = 1;
+inhom.medium_idx2 = 0;
+inhom.filename = 'inhom.in';
+inhom.type = 'inhom';
+num_inhom = numel(inhom.x);
 
 nf.p1 = [10e-9, 10e-9, 50e-9];
 nf.p2 = [50e-9, 50e-9, 50e-9];
 [nf.x, nf.y, nf.z, nf.dim] = make_interp_region(nf.p1, nf.p2, dx);
 num_ob = numel(nf.x);
-nf.x = [nf.x(:) ; blob.x(:)];
-nf.y = [nf.y(:) ; blob.y(:)];
-nf.z = [nf.z(:) ; blob.z(:)];
+nf.x = [nf.x(:) ; inhom.x(:)];
+nf.y = [nf.y(:) ; inhom.y(:)];
+nf.z = [nf.z(:) ; inhom.z(:)];
 nf.freq = ft * ones(size(nf.x));
 nf.input_file = 'nf.in';
 nf.output_file = 'output.out';
@@ -70,11 +73,11 @@ medium{2} = Au();
 
 sphere = struct('type' ,'sphere', 'radius', 15e-9, 'position', center, 'medium_idx', 1);
 blob_sphere = struct('type', 'sphere', 'radius', 2e-9, 'position', center, 'medium_idx', 0);
-box = struct('type', 'box', 'lower_position', [20e-9,20e-9,20e-9], 'upper_position', [40e-9,40e-9,40e-9], 'medium_idx', 1);
-layer = struct('type', 'box', 'lower_position', [p1(1) p1(2) blob.p1(3)], 'upper_position', [p2(1) p2(2) blob.p2(3)], 'medium_idx', 1);
-blob_region = struct('type', 'box', 'lower_position', blob.p1, 'upper_position', blob.p2, 'medium_idx', 1);
+box = struct('type', 'box', 'lower_position', inhom.p1, 'upper_position', inhom.p2, 'medium_idx', 1);
+layer = struct('type', 'box', 'lower_position', [p1(1) p1(2) inhom.p1(3)], 'upper_position', [p2(1) p2(2) inhom.p2(3)], 'medium_idx', 1);
+blob_region = struct('type', 'box', 'lower_position', inhom.p1, 'upper_position', inhom.p2, 'medium_idx', 1);
 
-geometry = {box};
+geometry = {inhom};
 plane_wave = struct('type', 'plane', 'dim_neg', projector_padding, 'dim_pos', ...
     dim(3) + projector_padding, 'func_type', 's', 'fp', fs, 'delay', delay, 'ref_pos', dim(3) / 2 * dx);
 
@@ -97,9 +100,13 @@ Ho = [make_complex(data(:, 7), data(:, 8)), make_complex(data(:, 9), data(:, 10)
 Eo = Eo ./ ref_plane_fft;
 Ho = Ho ./ ref_plane_fft;
 
-disp('Fields Extracted'); 
+disp('Original fields obtained'); 
 %% perturbed configuration
-geometry = {blob_sphere, box};
+[px, py, pz] = ndgrid(make_2segment(0, 1, inhom.dim(1)), make_2segment(0, 1, inhom.dim(2)), make_2segment(0, 1, inhom.dim(3)));
+weight = px .* py .* pz;
+pert = -0.1 * weight .* rand(inhom.dim);
+inhom.rho = rho_copy + pert;
+geometry = {inhom};
 source = {plane_wave};
 gen_config(basic, medium, geometry, source, 'nearfield', nf);
 disp('config.in created');
@@ -111,17 +118,20 @@ Ep = [make_complex(data(:, 1), data(:, 2)), make_complex(data(:, 3), data(:, 4))
 Hp = [make_complex(data(:, 7), data(:, 8)), make_complex(data(:, 9), data(:, 10)), make_complex(data(:, 11), data(:, 12))];
 Ep = Ep ./ ref_plane_fft;
 Hp = Hp ./ ref_plane_fft;
+disp('perturbed fields obtained')
 
 %% adjoint configuration
+inhom.rho = rho_copy;
+
 Ex = 1;
 Ey = 2;
 Ez = 4;
 
-dipole.data = 1j * (2 * pi * ft) * e0 * (1 - er) * 1 .* Eo(num_ob + 1 : end, :) * (4/3 * pi * 2e-9^3);
+dipole.data = 1j * (2 * pi * ft) * e0 * (er - 1) * pert(:) .* weight(:) .* Eo(num_ob + 1 : end, :) * prod(inhom.dx);
 dipole.template = ones(size(dipole.data));
-dipole.x = repmat(blob.x(:), 1, 3);
-dipole.y = repmat(blob.y(:), 1, 3);
-dipole.z = repmat(blob.z(:), 1, 3);
+dipole.x = repmat(inhom.x(:), 1, 3);
+dipole.y = repmat(inhom.y(:), 1, 3);
+dipole.z = repmat(inhom.z(:), 1, 3);
 dipole.func_type = 's' * dipole.template;
 dipole.delay = - angle(dipole.data) / (2 * pi * ft);
 dipole.amp = abs(dipole.data);
@@ -134,7 +144,7 @@ ricker = @(t, fp, d) (1 - 2 * (pi * fp * (t - d)).^2) .* exp(-(pi * fp * (t - d)
 ref_dipole = sin(2 * pi * fs * t);
 ref_dipole_fft = sum(ref_dipole.* exp(-1j * 2 * pi * ft * t), 2);
 
-geometry = {box};
+geometry = {inhom};
 source = {dipole};
 gen_config(basic, medium, geometry, source, 'nearfield', nf);
 disp('config.in created');
@@ -146,6 +156,7 @@ Ea = [make_complex(data(:, 1), data(:, 2)), make_complex(data(:, 3), data(:, 4))
 Ha = [make_complex(data(:, 7), data(:, 8)), make_complex(data(:, 9), data(:, 10)), make_complex(data(:, 11), data(:, 12))];
 Ea = Ea ./ ref_dipole_fft;
 Ha = Ha ./ ref_dipole_fft;
+disp('adjoint fields obtained')
 
 %%
 Ediff = Ep - Eo;

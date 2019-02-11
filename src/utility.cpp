@@ -93,17 +93,28 @@ namespace ffip {
 		fin >> z0 >> dz;
 		
 		//pad interpolation with zeros
-		v.resize(size_t(dimx + 2) * (dimy + 2) * (dimz + 2));
-		auto strides = dim2stride(iVec3(dimx + 2, dimy + 2, dimz + 2));
+		{
+			v.resize(size_t(dimx + 2) * (dimy + 2) * (dimz + 2));
+			auto strides = dim2stride(iVec3(dimx + 2, dimy + 2, dimz + 2));
 
-		for (auto itr = my_iterator(iVec3{1, 1, 1}, iVec3{dimx, dimy, dimz}, All); !itr.is_end(); itr.advance()) {
-			size_t index = inner_prod(itr.get_vec(), strides);
-			fin >> v[index];
+			for (auto itr = my_iterator(iVec3{ 1, 1, 1 }, iVec3{ dimx, dimy, dimz }, All); !itr.is_end(); itr.advance()) {
+				size_t index = inner_prod(itr.get_vec(), strides);
+				fin >> v[index];
+			}
+
+			dimx += 2;	x0 -= dx;
+			dimy += 2;	y0 -= dy;
+			dimz += 2;	z0 -= dz;
 		}
+		
+		//no padding
+		/*{
+			v.resize(size_t(dimx) * dimy * dimz);
+			for (auto itr = my_iterator(iVec3{ 0, 0, 0 }, iVec3{ dimx - 1, dimy - 1, dimz - 1 }, All); !itr.is_end(); itr.advance()) {
+				fin >> v[itr.index];
+			}
+		}*/
 
-		dimx += 2;	x0 -= dx;
-		dimy += 2;	y0 -= dy;
-		dimz += 2;	z0 -= dz;
 		interp = interp3(dimx, dimy, dimz);
 	}
 	

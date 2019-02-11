@@ -123,29 +123,10 @@ namespace ffip {
 
 					auto weights = get_zero_weights();
 					/* spatial averaging */
-					{
-						fVec3 box_p1{ (p.x - 1) * dx / 2, (p.y - 1) * dx / 2, (p.z - 1) * dx / 2 };
-						for (auto& item : sampled_points) {
-							auto sampled_point = box_p1 + item;
-							bool assigned = 0;
-
-							for (auto item : solids) {
-								if (item->update_weights(sampled_point, weights)) {	//it is true when it is inside the solid
-									assigned = 1;
-									break;
-								}
-							}
-
-							if (!assigned)			//assign background medium;
-								weights[bg_medium->index] += 1;
-						}
-					}
-
-					/* R. Mittra averaging (line averaging) */
 					//{
-					//	fVec3 fp = p * (dx / 2);
-					//	for (auto& item : sampled_points_rm[ctype]) {
-					//		auto sampled_point = fp + item;
+					//	fVec3 box_p1{ (p.x - 1) * dx / 2, (p.y - 1) * dx / 2, (p.z - 1) * dx / 2 };
+					//	for (auto& item : sampled_points) {
+					//		auto sampled_point = box_p1 + item;
 					//		bool assigned = 0;
 
 					//		for (auto item : solids) {
@@ -159,6 +140,25 @@ namespace ffip {
 					//			weights[bg_medium->index] += 1;
 					//	}
 					//}
+
+					/* R. Mittra averaging (line averaging) */
+					{
+						fVec3 fp = p * (dx / 2);
+						for (auto& item : sampled_points_rm[ctype]) {
+							auto sampled_point = fp + item;
+							bool assigned = 0;
+
+							for (auto item : solids) {
+								if (item->update_weights(sampled_point, weights)) {	//it is true when it is inside the solid
+									assigned = 1;
+									break;
+								}
+							}
+
+							if (!assigned)			//assign background medium;
+								weights[bg_medium->index] += 1;
+						}
+					}
 					
 
 					medium_voxels[itr.index] = weights / weights.sum();
@@ -219,7 +219,7 @@ namespace ffip {
 			for (auto inhom : inhoms) {
 				auto p1 = inhom->get_p1() * (2 / dx);
 				auto p2 = inhom->get_p2() * (2 / dx);
-				if (!Is_Inside_Box(roi_p1, roi_p2, p1) || !Is_Inside_Box(roi_p1, roi_p2, p2))
+				if (!Is_Inside_Box(roi_p1 - 1e-3, roi_p2 + 1e-3, p1) || !Is_Inside_Box(roi_p1 - 1e-3, roi_p2 + 1e-3, p2))
 					throw Out_of_the_Domain{};
 
 				for (auto itr = my_iterator(p1, p2, All); !itr.is_end(); itr.advance()) {

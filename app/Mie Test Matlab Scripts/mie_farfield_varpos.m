@@ -86,7 +86,7 @@ ff.freq = Ft;
 ff.input_file = 'ff.in';
 ff.output_file = 'output.out';
 
-gen_config(basic, medium, geometry, source, 'farfield', ff);
+gen_config(basic, medium, geometry, source, 'farfield', ff, 'step_output', 1);
 
 disp('config.in created');
 
