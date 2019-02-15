@@ -10,9 +10,9 @@ c0 = 3e8;
 eta0 = sqrt(u0 / e0);
 
 Sc = 0.5;
-dx = 1e-9;
+dx = 2e-9;
 dt = Sc * dx / c0;
-step = 15000;
+step = 10000;
 PML_d = 6;
 dim = [22, 22, 22];
 er_bg = 1;
@@ -22,7 +22,7 @@ sf_layer = 0;
 projector_padding = ceil((tf_layer + 1) / 2);
 center = dim * dx / 2;
 
-ft = c0 / (800e-9);
+ft = c0 / (500e-9);
 fs = c0 / (500e-9);
 delay = 1 / fs;
 G1 = 1 - 0.3j;
@@ -65,7 +65,7 @@ legend({['Re ', char(949), '_r'], ['Im ', char(949), '_r']}, 'FontSize', 15)
 xlabel('\lambda [nm]')
 
 [~, er] = er_func(Omega);
-e = e0 * er;
+e = e0 * (er * 0.1 + 0.9);
 
 u = u0;
 c = 1 ./ sqrt(e * u);
@@ -88,7 +88,7 @@ basic.step = step;
 basic.tf_layer = 1;
 basic.sf_layer = 0;
 
-medium{1} = Au();
+medium{1} = add(mult(Au(), 0.1), mult(Air(), 0.9));
 
 geometry{1} = struct('type', 'box', 'medium_idx', 0, 'lower_position', [-1 -1 -1], 'upper_position', [1 1 1]);
 
@@ -101,7 +101,7 @@ nf.freq = Ft;
 nf.input_file = 'nf.in';
 nf.output_file = 'output.out';
 
-gen_config(basic, medium, geometry, source, 'nearfield', nf, 'step_output', 1);
+gen_config(basic, medium, geometry, source, 'nearfield', nf, 'step_output', 1, 'num_proc', 2);
 
 %% simulated fields
 data = load('output.out');

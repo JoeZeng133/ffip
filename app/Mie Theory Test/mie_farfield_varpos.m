@@ -19,10 +19,12 @@ step = 10000;
 tf_layer = 2;
 sf_layer = 3;
 projector_padding = ceil((tf_layer + 1) / 2);
+center = dim * dx / 2;
+p2 = dim * dx;
 
 fs = c0 / 500e-9;
 delay = 1 / fs;
-ft = c0 / 500e-9;
+ft = c0 / 800e-9;
 
 rho = linspace(1000, 2000, 20);
 phi = linspace(0, 2 * pi, 20);
@@ -46,6 +48,19 @@ er_func = @Au;
 m = sqrt(conj(er(:))); %exp(-jwt) dependence, use the conjugate
 a = 30e-9;
 size_param = K * a;
+
+inhom.center = center;
+inhom.len = [60e-9, 60e-9, 60e-9];
+inhom.p1 = inhom.center - inhom.len / 2;
+inhom.p2 = inhom.center + inhom.len / 2;
+inhom.medium_idx1 = 1;
+inhom.medium_idx2 = 0;
+[inhom.x, inhom.y, inhom.z, inhom.dim, inhom.dx] = make_interp_region(inhom.p1, inhom.p2, 'dx', dx);
+inhom.rho = (inhom.x - center(1)).^2 + (inhom.y - center(2)).^2 + (inhom.z - center(3)).^2 <= a^2;
+inhom.rho = inhom.rho * 0.5;
+inhom.type = 'inhom';
+inhom.position = inhom.p1;
+inhom.filename = 'inhom.in';
 
 figure(1)
 
@@ -72,7 +87,8 @@ basic.sf_layer = sf_layer;
 medium{1} = Air();
 medium{2} = Au();
 
-geometry{1} = struct('type', 'sphere', 'medium_idx', 1, 'radius', a, 'position', dim * dx / 2);
+% geometry{1} = struct('type', 'sphere', 'medium_idx', 1, 'radius', a, 'position', dim * dx / 2);
+geometry{1} = inhom;
 
 source{1} = struct('type', 'plane', 'dim_neg', projector_padding, 'dim_pos', ...
     dim(3) + projector_padding, 'func_type', 'r', 'fp', fs, 'delay', delay, 'ref_pos', dim(3) / 2 * dx);

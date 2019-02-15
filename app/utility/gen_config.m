@@ -124,6 +124,8 @@ addParameter(p, 'nearfield_convergence', 0);
 addParameter(p, 'nearfield_time', 0);
 addParameter(p, 'config_filename', 'config.in');
 addParameter(p, 'step_output', 0);
+addParameter(p, 'num_proc', 0);
+
 parse(p, varargin{:});
 res = p.Results;
 
@@ -160,6 +162,10 @@ end
 
 if res.step_output == 0
     config_str = config_str + sprintf('Stop_Step_Output\n');
+end
+
+if res.num_proc ~= 0
+    config_str = config_str + sprintf('num_proc %d\n', res.num_proc);
 end
 
 fileID = fopen(res.config_filename, 'w');

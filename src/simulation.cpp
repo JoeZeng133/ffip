@@ -161,7 +161,7 @@ namespace ffip {
 					}
 					
 
-					medium_voxels[itr.index] = weights / weights.sum();
+					medium_voxels[itr.index] = weights / (weights.sum());
 				}
 			};
 
@@ -586,39 +586,41 @@ namespace ffip {
 		bool is_electric_point = is_E_Point(ctype);
 		constexpr real tol = 1e-3;
 		int nonzeros = 0;
-		real total = 0;
 		Medium_Ref* res = nullptr;
 		auto& medium_ref = is_electric_point? e_medium_ref : m_medium_ref;
 		
 		if(weights.size() != medium.size())
 			throw std::runtime_error("Mixing numbers have wrong length");
 		
-		/* rounding down parameters*/
-		for(auto x : weights) {
-			if(x > tol) {
-				nonzeros ++;
+		/* one material : valid for most points */
+		double val;
+		int id;
+		for (int i = 0; i < weights.size(); ++i) {
+			if (std::abs(weights[i]) > tol) {
+				nonzeros++;
+				val = weights[i];
+				id = i;
 			}
 		}
-		
-		if(nonzeros > 1) {								//for the case of mixing more than 1 material
+
+		if (nonzeros == 1 && std::abs(val - 1) < tol) {
+			res = medium_ref[id].get();
+		}
+		else {
 			res = new Medium_Ref();
-			for(int i = 0; i < weights.size(); ++i)
-				if (weights[i] > tol) *res += *medium_ref[i] * weights[i];
-			
+			for (int i = 0; i < weights.size(); ++i)
+				if (std::abs(weights[i]) > tol) *res += *medium_ref[i] * weights[i];
+
 			std::lock_guard<std::mutex> guard(medium_mutex);
 			syn_medium_ref.push_back(std::unique_ptr<Medium_Ref>(res));			//garbage collecting
 		}
-		else if (nonzeros == 1){						//for the case of only 1 material
-			for(int i = 0; i < weights.size(); ++i) {
-				if (weights[i] > tol) {
-					res = medium_ref[i].get();
-					break;
-				}
-			}
-		}
-		
+
 		if (res == nullptr)
 			throw std::runtime_error("Illegal weights");
+
+		/*if (!res->is_valid())
+			throw std::runtime_error("Numerical Instability");*/
+
 		return res;
 	}
 	

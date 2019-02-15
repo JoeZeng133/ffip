@@ -442,6 +442,14 @@ int main(int argc, char const *argv[]) {
 			
 			continue;
 		}
+
+		if (field == "num_proc") {
+			int d;
+			fin >> d;
+			sim.set_num_proc(d);
+
+			continue;
+		}
 	}
 	
 	int skip = 10;

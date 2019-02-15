@@ -7,7 +7,6 @@ addParameter(p, 'dx', [0 0 0]);
 addParameter(p, 'dim', [0 0 0]);
 parse(p, varargin{:});
 
-
 p1 = [bbox_p1(:); -height/2];
 p2 = [bbox_p2(:); +height/2];
 
@@ -17,8 +16,6 @@ p2 = [bbox_p2(:); +height/2];
 tfin = isinterior(shape, tx(:), ty(:));
 tfin = reshape(tfin, size(tx));
 tfin = repmat(tfin, 1, 1, dim(3));
-
-
 
 center = p.Results.center;
 x = x + center(1);

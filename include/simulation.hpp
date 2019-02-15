@@ -20,6 +20,7 @@ namespace ffip {
 		Medium const* medium;
 		fVec3 pos;
 		real amp;
+
 	};
 	
 	class Simulation {

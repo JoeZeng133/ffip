@@ -1,6 +1,14 @@
 #include <medium.hpp>
 
 namespace ffip {
+	bool Medium_Ref::is_valid() const {
+		return std::abs(d1) > (std::abs(d2) - 1e-3) && std::abs(d1) > std::abs(d3);
+	}
+
+	void Medium_Ref::set_valid() {
+		valid = true;
+	}
+
 	real Medium_Ref::get_d1() const {
 		return d1;
 	}
@@ -223,7 +231,8 @@ namespace ffip {
 	
 	Medium_Ref Medium::get_e_medium_ref() const {
 		Medium_Ref res;
-		
+		res.set_valid();
+
 		res.weights.resize(e_poles_ref.size(), 1);
 		res.d1 = e_inf + sigma_e * dt / (2 * e0);
 		res.d2 = -e_inf + sigma_e * dt / (2 * e0);
@@ -241,6 +250,7 @@ namespace ffip {
 	Medium_Ref Medium::get_m_medium_ref() const {
 		Medium_Ref res;
 		
+		res.set_valid();
 		res.weights.resize(m_poles_ref.size(), 1);
 		res.d1 = u_inf + sigma_u * dt / (2 * u0);
 		res.d2 = -u_inf + sigma_u * dt / (2 * u0);

@@ -70,6 +70,7 @@ namespace ffip {
 		std::vector<real> weights;
 		
 		real d1{0}, d2{0}, d3{0};
+		bool valid{ 0 };
 	public:
 		Medium_Ref() = default;
 		//copiable
@@ -83,6 +84,8 @@ namespace ffip {
 		Medium_Ref& operator+=(const Medium_Ref& other);
 		Medium_Ref& operator*=(const real f);
 		
+		bool is_valid() const;
+		void set_valid();
 		real get_d1() const;
 		real get_d2() const;
 		real get_d3() const;
