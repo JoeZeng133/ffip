@@ -213,7 +213,7 @@ namespace ffip {
 		/* function members */
 
 		//get Coord_Type for the given comp coordinates
-		template<typename = std::enable_if_t<std::is_integral<T>::value>>
+		template<typename Dummy = T, typename = std::enable_if_t<std::is_integral<Dummy>::value>>
 		Coord_Type get_type() const {
 			return static_cast<Coord_Type>((x & 1) | ((y & 1) << 1) | ((z & 1) << 2));
 		}

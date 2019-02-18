@@ -111,6 +111,10 @@ for i = 1 : numel(source)
         fclose(fileID);
     end
     
+    if item.type == "plane2"
+        s_str = sprintf('{ plane2 %s %e %e %e }\n', item.func_type, item.fp, item.delay, item.pos);
+    end
+    
     config_str = config_str + s_str;
 end
 config_str = config_str + sprintf('}\n');

@@ -166,7 +166,6 @@ void read_geometry(istream& fin, Simulation& sim, const vector<Medium*>& medium_
 void read_source(istream& fin, Simulation& sim) {
 	string type;
 	double fp, d;
-	int n;
 	char c;
 	
 	fin >> c;
@@ -174,6 +173,20 @@ void read_source(istream& fin, Simulation& sim) {
 		throw runtime_error("medium format is not right");
 	
 	fin >> type;
+	if (type == "plane2") {
+		char c;
+		double ref_pos;
+		fin >> c >> fp >> d >> ref_pos;
+		
+		if (c == 'r') {
+			sim.add_plane_wave(ricker, fp, d, 1, ref_pos);
+		} else {
+			sim.add_plane_wave(sine, fp, d, 1, ref_pos);
+		}
+		
+	}
+	
+	
 	if (type == "plane") {
 		int dim_neg, dim_pos;
 		char c;

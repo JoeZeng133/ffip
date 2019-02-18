@@ -1,9 +1,9 @@
 #include <simulation.hpp>
 #include <iostream>
 
-#include <cvmarkersobj.h>
+//#include <cvmarkersobj.h>
 
-using namespace Concurrency;
+//using namespace Concurrency;
 
 namespace ffip {
 	void Simulation::setup(const real _dx, const real _dt, const iVec3 _dim) {
@@ -27,12 +27,38 @@ namespace ffip {
 			PMLs[dir][0] = pml;
 	}
 	
+	void Simulation::add_plane_wave(const Func type, const real fp, const real delay, const real amp, const real pos) {
+		pw_type = type;
+		pw_fp = fp;
+		pw_delay = delay;
+		pw_amp = amp;
+		pw_pos = pos;
+		pw_enable = true;
+		
+		// enable symmetry in x, y direction
+		enable_symmetry_x = 1;
+		enable_symmetry_y = 1;
+	}
+	
 	void Simulation::add_inc_source(Inc_Source* source) {
 		if (source)
 			excitation = source;
 	}
 	
 	void Simulation::chunk_init() {
+		//symmetry configurations
+		if ((enable_symmetry = (enable_symmetry_y || enable_symmetry_x || enable_symmetry_z)))
+			tf_padded_depth = tf_padded_depth = 1;
+		
+		if (enable_symmetry_x)
+			PMLs[0][0] = PMLs[0][1] = PML{};
+		
+		if (enable_symmetry_y)
+			PMLs[1][0] = PMLs[1][1] = PML{};
+		
+		if (enable_symmetry_z)
+			PMLs[2][0] = PMLs[2][1] = PML{};
+		
 		//dimension is in computational units, so they are two times the original values
 		roi_p1 = { 0, 0, 0 };
 		roi_p2 = sim_dim * 2;
@@ -287,7 +313,7 @@ namespace ffip {
 				dipole.amp = -dipole.amp;
 
 			dipole.pos = dipole.pos * (2 / dx);
-			if (!Is_Inside_Box(config.roi_p1, config.roi_p2, dipole.pos))
+			if (!Is_Inside_Box(config.roi_p1 - 1e-3, config.roi_p2 + 1e-3, dipole.pos))
 				throw std::runtime_error("Dipole must be inside region of interests");
 
 			iVec3 base = get_nearest_point<side_low_tag>(dipole.pos, dipole.ctype);
@@ -296,6 +322,21 @@ namespace ffip {
 
 			for (auto itr = my_iterator(base, base + iVec3{ 2, 2, 2 }, dipole.ctype); !itr.is_end(); itr.advance()) {
 				chunk->add_dipole(dipole.type, itr.get_vec(), dipole.amp * weight[itr.index] / vol, dipole.delay, dipole.fp);
+			}
+		}
+		
+		if (pw_enable) {
+			auto p1 = config.roi_p1;
+			auto p2 = config.roi_p2;
+			
+			p1.z = round(pw_pos / dx) * 2;
+			p2.z = p1.z;
+			
+			if (p1.z < 0 || p1.z > config.roi_p2.z)
+				throw Out_of_the_Domain{};
+			
+			for(auto itr = my_iterator(p1, p2, Ex); !itr.is_end(); itr.advance()) {
+				chunk->add_dipole(pw_type, itr.get_vec(), pw_amp, pw_delay, pw_fp);
 			}
 		}
 	}
@@ -419,43 +460,69 @@ namespace ffip {
 		
 		real time = (step ++ ) * dt;
 
-		diagnostic::marker_series pp("Simulation");
+//		diagnostic::marker_series pp("Simulation");
 		
 		auto func = [&, this](const int rank, const int num_proc) {
 			{
-				diagnostic::span span(pp, "Md");
+//				diagnostic::span span(pp, "Md");
 				chunk->update_Md(time, rank, barrier);
 			}
 
 			barrier->Sync();
 			
 			{
-				diagnostic::span span(pp, "B2H");
+//				diagnostic::span span(pp, "B2H");
 				chunk->update_B2H_v2(time, rank, barrier);
 			}
 
 			barrier->Sync();
+			
+			if (enable_symmetry) {
+				if (enable_symmetry_x)
+					chunk->update_ghost_helper<dir_x_tag>(rank, barrier);
+				
+				if (enable_symmetry_y)
+					chunk->update_ghost_helper<dir_y_tag>(rank, barrier);
+				
+				if (enable_symmetry_z)
+					chunk->update_ghost_helper<dir_z_tag>(rank, barrier);
+				
+				barrier->Sync();
+			}
 
 			if (rank == 0 && excitation) {
 				excitation->advance();
 			}
 
 			{
-				diagnostic::span span(pp, "Jd");
+//				diagnostic::span span(pp, "Jd");
 				chunk->update_Jd(time + 0.5 * dt, rank, barrier);
 			}
 
 			barrier->Sync();
 			
 			{
-				diagnostic::span span(pp, "D2E");
+//				diagnostic::span span(pp, "D2E");
 				chunk->update_D2E_v2(time + 0.5 * dt, rank, barrier);
 			}
 
 			barrier->Sync();
+			
+			if (enable_symmetry) {
+				if (enable_symmetry_x)
+					chunk->update_ghost_helper<dir_x_tag>(rank, barrier);
+				
+				if (enable_symmetry_y)
+					chunk->update_ghost_helper<dir_y_tag>(rank, barrier);
+				
+				if (enable_symmetry_z)
+					chunk->update_ghost_helper<dir_z_tag>(rank, barrier);
+				
+				barrier->Sync();
+			}
 
 			{
-				diagnostic::span span(pp, "probes");
+//				diagnostic::span span(pp, "probes");
 				size_t idx1, idx2;
 				vector_divider(nearfield_probes, rank, num_proc, idx1, idx2);
 				for (auto itr = nearfield_probes.begin() + idx1; itr != nearfield_probes.begin() + idx2; ++itr)
@@ -463,13 +530,13 @@ namespace ffip {
 			}
 			
 			{
-				diagnostic::span span(pp, "n2f");
+//				diagnostic::span span(pp, "n2f");
 				for (auto& item : n2f_boxes)
 					item->update(step, rank, num_proc);
 			}
 			
 			{
-				diagnostic::span span(pp, "flux");
+//				diagnostic::span span(pp, "flux");
 				for (auto& item : flux_boxes)
 					item->update(step, rank, num_proc);
 			}
@@ -527,15 +594,15 @@ namespace ffip {
 	iVec3 tmp_p1, tmp_p2;
 	
 	void Simulation::udf_unit() {
-		/*os_tmp = std::fstream{"snapshot.out", std::ios::out};
-		tmp_p1 = sim_p1;
-		tmp_p2 = sim_p2;
-		tmp_p1.x = (sim_p1.x + sim_p2.x) / 2;
-		tmp_p2.x = (sim_p1.x + sim_p2.x) / 2 + 1;
-		
-		auto itr = my_iterator(tmp_p1, tmp_p2, Ex);
-		auto dim = itr.get_dim();
-		os_tmp << dim << "\n";*/
+//		os_tmp = std::fstream{"snapshot.out", std::ios::out};
+//		tmp_p1 = sim_p1;
+//		tmp_p2 = sim_p2;
+//		tmp_p1.x = (sim_p1.x + sim_p2.x) / 2;
+//		tmp_p2.x = (sim_p1.x + sim_p2.x) / 2 + 1;
+//
+//		auto itr = my_iterator(tmp_p1, tmp_p2, Ex);
+//		auto dim = itr.get_dim();
+//		os_tmp << dim << "\n";
 
 	/*	size_t num_probes = nearfield_probes.size();
 		if (num_probes < 100)
@@ -546,11 +613,11 @@ namespace ffip {
 	}
 	
 	void Simulation::udf_advance() {
-		/*if (step % 20 != 0) return;
-		os_tmp << std::scientific << std::setprecision(5);
-		for(auto itr = my_iterator(tmp_p1, tmp_p2, Ex); !itr.is_end(); itr.advance()) {
-			os_tmp << (*chunk)(itr.get_vec()) << "\n";
-		}*/
+//		if (step % 1 != 0) return;
+//		os_tmp << std::scientific << std::setprecision(5);
+//		for(auto itr = my_iterator(tmp_p1, tmp_p2, Ex); !itr.is_end(); itr.advance()) {
+//			os_tmp << (*chunk)(itr.get_vec()) << "\n";
+//		}
 
 		/*size_t num_probes = nearfield_probes.size();
 		if (num_probes < 100)

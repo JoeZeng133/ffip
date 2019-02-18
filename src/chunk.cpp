@@ -1,8 +1,9 @@
 #include <chunk.hpp>
+#include <source.hpp>
 
-#include <cvmarkersobj.h>
+//#include <cvmarkersobj.h>
 
-using namespace Concurrency;
+//using namespace Concurrency;
 
 namespace ffip {
 	CU_PML::CU_PML(std::vector<real>& jmd, std::vector<real>& eh, std::array<size_t, 3> strides) : jmd(jmd), eh(eh), strides(strides) {}
@@ -214,78 +215,78 @@ namespace ffip {
 		PML_init_helper<hz_tag>(k, b, c);
 	}
 	
-	diagnostic::marker_series marker_jmd("Current Updates");
+//	diagnostic::marker_series marker_jmd("Current Updates");
 	
 	void Chunk::update_Jd(const real time, const size_t rank, Barrier* barrier) {
 		if (rank >= barrier->get_num_proc())
 			throw std::runtime_error("Rank cannot be bigger than number of processes");
-		diagnostic::span* s;
+//		diagnostic::span* s;
 
-		s = new diagnostic::span(marker_jmd, "jx");
+//		s = new diagnostic::span(marker_jmd, "jx");
 		update_JMd_helper<ex_tag>(rank, barrier);
-		delete s;
+//		delete s;
 
-		s = new diagnostic::span(marker_jmd, "jy");
+//		s = new diagnostic::span(marker_jmd, "jy");
 		update_JMd_helper<ey_tag>(rank, barrier);
-		delete s;
+//		delete s;
 
-		s = new diagnostic::span(marker_jmd, "jz");
+//		s = new diagnostic::span(marker_jmd, "jz");
 		update_JMd_helper<ez_tag>(rank, barrier);
-		delete s;
+//		delete s;
 
-		s = new diagnostic::span(marker_jmd, "e_PML");
+//		s = new diagnostic::span(marker_jmd, "e_PML");
 		if (e_PML) e_PML->update_static(rank, barrier);
-		delete s;
+//		delete s;
 
 		barrier->Sync();
 
-		s = new diagnostic::span(marker_jmd, "e_cu");
+//		s = new diagnostic::span(marker_jmd, "e_cu");
 		if (e_source) e_source->update_static(rank, barrier);
-		delete s;
-
-		s = new diagnostic::span(marker_jmd, "e_dipole");
+//		delete s;
+		
+//		s = new diagnostic::span(marker_jmd, "e_dipole");
 		for (auto item : e_dipoles) {
 			item.second->update_static(rank, barrier);
 			barrier->Sync();
 		}
-		delete s;
+//		delete s;
 	}
 	
 	void Chunk::update_Md(const real time, const size_t rank, Barrier* barrier) {
 		if (rank >= barrier->get_num_proc())
 			throw std::runtime_error("Rank cannot be bigger than number of processes");
 		//marker_series mySeries;
-		diagnostic::span* s;
+//		diagnostic::span* s;
 		
-		s = new diagnostic::span(marker_jmd, "mx");
+//		s = new diagnostic::span(marker_jmd, "mx");
 		update_JMd_helper<hx_tag>(rank, barrier);
-		delete s;
+//		delete s;
 
-		s = new diagnostic::span(marker_jmd, "my");
+//		s = new diagnostic::span(marker_jmd, "my");
 		update_JMd_helper<hy_tag>(rank, barrier);
-		delete s;
+//		delete s;
 
-		s = new diagnostic::span(marker_jmd, "mz");
+//		s = new diagnostic::span(marker_jmd, "mz");
 		update_JMd_helper<hz_tag>(rank, barrier);
-		delete s;
+//		delete s;
 
-		s = new diagnostic::span(marker_jmd, "m_PML");
+//		s = new diagnostic::span(marker_jmd, "m_PML");
 		if (m_PML) m_PML->update_static(rank, barrier);
-		delete s;
+//		delete s;
 
 		barrier->Sync();
 
-		s = new diagnostic::span(marker_jmd, "m_cu");
+//		s = new diagnostic::span(marker_jmd, "m_cu");
 		if (m_source) m_source->update_static(rank, barrier);
-		delete s;
+//		delete s;
 
-		s = new diagnostic::span(marker_jmd, "m_dipole");
+//		s = new diagnostic::span(marker_jmd, "m_dipole");
 		for (auto item : m_dipoles) {
 			item.second->update_static(rank, barrier);
 			barrier->Sync();
 		}
 			
-		delete s;
+//		delete s;
 	}
 	
 	void Chunk::update_D2E_v2(const real time, const size_t rank, Barrier* barrier) {
@@ -322,9 +323,18 @@ namespace ffip {
 		}
 	}
 	
-	void Chunk::update_ghost_E(const real time) {}
+	void Chunk::update_ud(const real time, const size_t rank, Barrier *barrier) {
+	}
 	
-	void Chunk::update_ghost_H(const real time) {}
+	void Chunk::update_ghost_E(const real time, const size_t rank, Barrier *barrier) {
+		update_ghost_helper<dir_x_tag>(rank, barrier);
+		update_ghost_helper<dir_y_tag>(rank, barrier);
+	}
+	
+	void Chunk::update_ghost_H(const real time, const size_t rank, Barrier *barrier) {
+		update_ghost_helper<dir_x_tag>(rank, barrier);
+		update_ghost_helper<dir_y_tag>(rank, barrier);
+	}
 	
 	real Chunk::at(const fVec3& p, const Coord_Type ctype) const{
 		return operator()(p / (dx / 2), ctype);

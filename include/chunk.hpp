@@ -1,13 +1,14 @@
 #pragma once
 
 #include <medium.hpp>
-#include <source.hpp>
+//#include <source.hpp>
 #include <array>
 #include <map>
 
 namespace ffip {
 	class Chunk;
 	class Plane_Wave;
+	class Inc_Source;
 
 	class CU {
 	public:
@@ -250,9 +251,15 @@ namespace ffip {
 		void update_D2E_v2(const real time, const size_t rank, Barrier* barrier);
 		void update_B2H_v2(const real time, const size_t rank, Barrier* barrier);
 		
-		/* MPI updates of the boundary */
-		void update_ghost_H(const real time);
-		void update_ghost_E(const real time);
+		void update_ud(const real time, const size_t rank, Barrier* barrier);
+		
+		/* ghost points updates, periodic boundaries */
+		void update_ghost_H(const real time, const size_t rank, Barrier* barrier);
+		void update_ghost_E(const real time, const size_t rank, Barrier* barrier);
+		
+		//peridoic boundary conditions, assuming normal incident angle
+		template<typename Dir>
+		void update_ghost_helper(const size_t rank, Barrier* barrier);
 		
 		/* miscellaneous*/
 		real measure() const;
@@ -270,6 +277,30 @@ namespace ffip {
 		void set_projector(Plane_Wave& projector);
 		void add_projector_update(const iVec3& pos, const real amp, const iVec3& inc_pos);
 	};
+	
+	template<typename Dir>
+	void Chunk::update_ghost_helper(const size_t rank, Barrier *barrier) {
+		auto p1 = ch_p1 - 1;
+		auto p2 = ch_p2 + 1;
+		auto dp = ch_p2 - ch_p1;
+		iVec3 jump{0, 0, 0};
+		
+		choose<Dir>::get(jump) = choose<Dir>::get(dp);
+		
+		//low from high
+		choose<Dir>::get(p1) = choose<Dir>::get(p2) = choose<Dir>::get(ch_p1 - 1);
+		for(auto itr = my_iterator(p1, p2, All, rank, barrier->get_num_proc()); !itr.is_end(); itr.advance()) {
+			auto vec = itr.get_vec();
+			eh[get_index_ch(vec)] = eh[get_index_ch(vec + jump)];
+		}
+		
+		//high from low
+		choose<Dir>::get(p1) = choose<Dir>::get(p2) = choose<Dir>::get(ch_p2 + 1);
+		for(auto itr = my_iterator(p1, p2, All, rank, barrier->get_num_proc()); !itr.is_end(); itr.advance()) {
+			auto vec = itr.get_vec();
+			eh[get_index_ch(vec)] = eh[get_index_ch(vec - jump)];
+		}
+	}
 
 	template<typename F>
 	void Chunk::PML_init_helper(const std::array<real_arr, 3>& k, const std::array<real_arr, 3>& b, const std::array<real_arr, 3>& c) {

@@ -67,6 +67,11 @@ namespace ffip {
 
 		//CPML members
 		PML PMLs[3][2];
+		//symmetry takes precedence over PMLs
+		bool enable_symmetry_x{0};
+		bool enable_symmetry_y{0};
+		bool enable_symmetry_z{0};
+		bool enable_symmetry{0};
 		
 		//medium factory
 		std::vector<std::unique_ptr<Medium>> medium;
@@ -92,6 +97,13 @@ namespace ffip {
 		Simulation() = default;		//allow delayed initializations
 		
 		/* configuring simulation */
+		
+		/* current plane wave */
+		Func pw_type;
+		real pw_fp, pw_delay, pw_amp, pw_pos;
+		bool pw_enable{0};
+		
+		void add_plane_wave(const Func type, const real fp, const real delay = 0, const real amp = 1, const real pos = 0);
 		void add_inc_source(Inc_Source* source);
 		void add_sf_layer(const int d);
 		void add_tf_layer(const int d);
