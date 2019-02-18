@@ -115,6 +115,12 @@ void read_geometry(istream& fin, Simulation& sim, const vector<Medium*>& medium_
 	
 	fin >> type;
 	
+	if (type == "symmetry") {
+		int symx, symy, symz;
+		fin >> symx >> symy >> symz;
+		sim.set_symmetry(symx, symy, symz);
+	}
+	
 	if (type == "inhom") {
 		int idx1, idx2;
 		string filename;

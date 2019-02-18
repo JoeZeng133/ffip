@@ -27,6 +27,12 @@ namespace ffip {
 			PMLs[dir][0] = pml;
 	}
 	
+	void Simulation::set_symmetry(const bool symx, const bool symy, const bool symz) {
+		enable_symmetry_x = symx;
+		enable_symmetry_y = symy;
+		enable_symmetry_z = symz;
+	}
+	
 	void Simulation::add_plane_wave(const Func type, const real fp, const real delay, const real amp, const real pos) {
 		pw_type = type;
 		pw_fp = fp;
@@ -48,7 +54,7 @@ namespace ffip {
 	void Simulation::chunk_init() {
 		//symmetry configurations
 		if ((enable_symmetry = (enable_symmetry_y || enable_symmetry_x || enable_symmetry_z)))
-			tf_padded_depth = tf_padded_depth = 1;
+			tf_padded_depth = sf_depth = 0;
 		
 		if (enable_symmetry_x)
 			PMLs[0][0] = PMLs[0][1] = PML{};
@@ -594,15 +600,15 @@ namespace ffip {
 	iVec3 tmp_p1, tmp_p2;
 	
 	void Simulation::udf_unit() {
-//		os_tmp = std::fstream{"snapshot.out", std::ios::out};
-//		tmp_p1 = sim_p1;
-//		tmp_p2 = sim_p2;
-//		tmp_p1.x = (sim_p1.x + sim_p2.x) / 2;
-//		tmp_p2.x = (sim_p1.x + sim_p2.x) / 2 + 1;
-//
-//		auto itr = my_iterator(tmp_p1, tmp_p2, Ex);
-//		auto dim = itr.get_dim();
-//		os_tmp << dim << "\n";
+		os_tmp = std::fstream{"snapshot.out", std::ios::out};
+		tmp_p1 = sim_p1;
+		tmp_p2 = sim_p2;
+		tmp_p1.x = (sim_p1.x + sim_p2.x) / 2;
+		tmp_p2.x = (sim_p1.x + sim_p2.x) / 2 + 1;
+
+		auto itr = my_iterator(tmp_p1, tmp_p2, Ex);
+		auto dim = itr.get_dim();
+		os_tmp << dim << "\n";
 
 	/*	size_t num_probes = nearfield_probes.size();
 		if (num_probes < 100)
@@ -613,11 +619,11 @@ namespace ffip {
 	}
 	
 	void Simulation::udf_advance() {
-//		if (step % 1 != 0) return;
-//		os_tmp << std::scientific << std::setprecision(5);
-//		for(auto itr = my_iterator(tmp_p1, tmp_p2, Ex); !itr.is_end(); itr.advance()) {
-//			os_tmp << (*chunk)(itr.get_vec()) << "\n";
-//		}
+		if (step % 1 != 0) return;
+		os_tmp << std::scientific << std::setprecision(5);
+		for(auto itr = my_iterator(tmp_p1, tmp_p2, Ex); !itr.is_end(); itr.advance()) {
+			os_tmp << (*chunk)(itr.get_vec()) << "\n";
+		}
 
 		/*size_t num_probes = nearfield_probes.size();
 		if (num_probes < 100)

@@ -20,7 +20,12 @@ namespace ffip {
 		Medium const* medium;
 		fVec3 pos;
 		real amp;
-
+	};
+	
+	struct Boundary {
+		PML pml;
+		int tf_layer;
+		int sf_layer;
 	};
 	
 	class Simulation {
@@ -103,6 +108,8 @@ namespace ffip {
 		real pw_fp, pw_delay, pw_amp, pw_pos;
 		bool pw_enable{0};
 		
+		
+		void set_symmetry(const bool symx, const bool symy, const bool symz);
 		void add_plane_wave(const Func type, const real fp, const real delay = 0, const real amp = 1, const real pos = 0);
 		void add_inc_source(Inc_Source* source);
 		void add_sf_layer(const int d);

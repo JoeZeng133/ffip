@@ -43,7 +43,8 @@ medium = {fic1()};
 
 sphere = struct('type', 'sphere', 'medium_idx', 0, 'radius', a, 'position', [12 12 15] * dx);
 box = struct('type', 'box', 'lower_position', [-1 -1 5 * dx], 'upper_position', [1 1 10 * dx], 'medium_idx', 0);
-geometry = {sphere};
+sym = struct('type', 'symmetry', 'enable_x', 1, 'enable_y', 1, 'enable_z', 0);
+geometry = {box};
 
 source = {struct('type', 'plane2', 'func_type', 'r', 'fp', fs, 'delay', delay, 'pos', dx)};
 
@@ -69,12 +70,12 @@ fclose(file);
 
 data = reshape(data, dim(2), dim(3), []);
 norm = max(abs(data(:)));
-interval = 0.1;
+interval = 0.05;
 
 tic;
 
 s = toc;
-for i = 1 : size(data, 3)
+for i = 1 : 2 :  size(data, 3)
     surf(data(:, :, i) / norm);
     xlabel('z')
     ylabel('y')

@@ -52,6 +52,11 @@ config_str = config_str + sprintf('geometry %d {\n', numel(geometry));
 for i = 1 : numel(geometry)
     item = geometry{i};
     geo_str = "";
+    
+    if item.type == "symmetry"
+        geo_str = sprintf('{ symmetry %d %d %d}\n', item.enable_x, item.enable_y, item.enable_z);
+    end
+    
     if item.type == "sphere"
         geo_str = sprintf('{ sphere %d %e %e %e %e }\n', item.medium_idx, item.radius, item.position);
     end
