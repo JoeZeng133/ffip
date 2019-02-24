@@ -90,9 +90,9 @@ nf.output_file = 'output.out';
 gen_config(basic, medium, geometry, source, 'nearfield', nf);
 
 %% simulated fields
+call_exe('std_config')
 data = load(nf.output_file);
 make_complex = @(x, y) x + 1j * y;
-ricker = @(t, fp, d) (1 - 2 * (pi * fp * (t - d)).^2) .* exp(-(pi * fp * (t - d)).^2);
 
 t = (0:step) * dt;
 ref_signal = ricker(t, fs, delay);

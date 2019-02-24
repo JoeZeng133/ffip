@@ -22,12 +22,6 @@ namespace ffip {
 		real amp;
 	};
 	
-	struct Boundary {
-		PML pml;
-		int tf_layer;
-		int sf_layer;
-	};
-	
 	class Simulation {
 	private:
 		real dt, dx;
@@ -39,8 +33,6 @@ namespace ffip {
 		iVec3 ch_p1, ch_p2;		//chunk region corner points
 		iVec3 tf_p1, tf_p2;		//total field region corner points
 		iVec3 phys_p1, phys_p2; //physical region corner points
-		int sf_depth{0};		//Scattered field depth in computation unit
-		int tf_padded_depth{ 0 };//total field padded depth in computation unit
 		Config config;
 		
 		Barrier* barrier{new Barrier{1}};		//local barrier
@@ -69,9 +61,14 @@ namespace ffip {
 		std::vector<std::unique_ptr<Nearfield_Probe>> nearfield_probes;
 		std::vector<std::unique_ptr<N2F_Box>> n2f_boxes;
 		std::vector<std::unique_ptr<Flux_Box>> flux_boxes;
-
-		//CPML members
-		PML PMLs[3][2];
+		
+		//boundary conditions
+		struct Boundary {
+			PML pml;
+			int tf_layer{ 0 };
+			int sf_layer{ 0 };
+		};
+		Boundary bds[3][2];
 		//symmetry takes precedence over PMLs
 		bool enable_symmetry_x{0};
 		bool enable_symmetry_y{0};
@@ -89,29 +86,25 @@ namespace ffip {
 		std::vector<std::unique_ptr<Inhomogeneous_Box>> inhom_box_holder;
 		std::vector<std::unique_ptr<Homogeneous_Object>> hom_box_holder;
 		std::vector<std::unique_ptr<Primitive>> primitive_holder;
-		
-		//initialization
-		void medium_init();
-		void source_init();
-		void PML_init();
-		void PML_init_helper(const PML& neg, const PML& pos, real_arr& k, real_arr& b, real_arr& c, const int p1, const int p2);
-		
+
 	public:
 		bool output_step_number{1};
-		
 		Simulation() = default;		//allow delayed initializations
 		
-		/* configuring simulation */
+		/* plane wave in symmetric simulation */
+		struct PlaneWave_Config {
+			Func type;
+			real fp, delay, amp, pos;
+			Coord_Type polarization;
+		};
+		std::vector<PlaneWave_Config> pw_configs;
 		
-		/* current plane wave */
-		Func pw_type;
-		real pw_fp, pw_delay, pw_amp, pw_pos;
-		bool pw_enable{0};
-		
-		
+		//add sources and geometry (including boundary conditions)
 		void set_symmetry(const bool symx, const bool symy, const bool symz);
-		void add_plane_wave(const Func type, const real fp, const real delay = 0, const real amp = 1, const real pos = 0);
+		void add_plane_wave(const Func type, const real fp, const real delay = 0, const real amp = 1, const real pos = 0, const Coord_Type polarization = Ex);
 		void add_inc_source(Inc_Source* source);
+		void add_sf_layer(const int d, const Direction dir, const Side side);
+		void add_tf_layer(const int d, const Direction dir, const Side side);
 		void add_sf_layer(const int d);
 		void add_tf_layer(const int d);
 		void add_PML_layer(const PML& pml, const Direction dir, const Side side);
@@ -123,12 +116,17 @@ namespace ffip {
 		void set_num_proc(const int _num_proc);
 		
 		//initialization
+		void medium_init();
+		void source_init();
+		void PML_init();
+		void PML_init_helper(const PML& neg, const PML& pos, real_arr& k, real_arr& b, real_arr& c, const int p1, const int p2);
 		void init();
 		void chunk_init();
+
 		//advance
 		void advance(std::ostream& os);
 
-		//fields calculation
+		//fields calculation after intialization
 		Nearfield_Probe const* add_nearfield_probe(const real freq, fVec3 pos);
 		Flux_Box const* add_flux_box(fVec3 p1, fVec3 p2, const real_arr& freq);
 		N2F_Box const* add_n2f_box(fVec3 p1, fVec3 p2, const real_arr& freq);

@@ -117,9 +117,9 @@ namespace ffip {
 	private:
 		using func = std::function<real(const real, const real, const real)>;
 
-		std::vector<real>& jmd;
-		func f;
-		real time, dt;
+		std::vector<real>& jmd;	//reference to the current array
+		func f;					//function to updates
+		real time, dt;			//start time, and time step;
 		int step{ 0 };
 
 		struct Update_Point {
@@ -134,10 +134,16 @@ namespace ffip {
 		CU_Dipole() = delete;
 		CU_Dipole(std::vector<real>& jmd, const func& f, const real time, const real dt);
 
+		//increase possibility of locality
 		void organize() override;
+		//dynamic schedule updates
 		void update_dynamic(std::atomic<size_t>& sync_index, Barrier* barrier) override;
+		//static schedule updates
 		void update_static(const size_t rank, Barrier* barrier) override;
+		//add a dipole update point
 		void add_update_point(const size_t index, const real amp, const real delay, const real fp);
+		//output debug information
+		void output(std::ostream& os);
 	};
 	
 	class Chunk {
@@ -198,6 +204,8 @@ namespace ffip {
 	
 	public:
 		void init();
+		void udf_init();
+		void udf_update();
 		void categorize_points();
 		
 		/* called by Simulation */

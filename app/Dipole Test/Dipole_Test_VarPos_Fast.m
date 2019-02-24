@@ -104,6 +104,7 @@ nf.output_file = 'output.out';
 gen_config(basic, medium, geometry, source, 'nearfield', nf, 'num_proc', 2, 'step_output', 1);
 
 %% simulated fields
+call_exe('std_config')
 data = load('output.out');
 make_complex = @(x, y) x + 1j * y;
 ricker = @(t, fp, d) (1 - 2 * (pi * fp * (t - d)).^2) .* exp(-(pi * fp * (t - d)).^2);
@@ -125,7 +126,7 @@ Eth = sum(E .* proj_th, 2) ./ ref;
 Hphi = sum(H .* proj_phi, 2) ./ ref;
 
 %% correlation comparisons
-figure(3)
+figure
 subplot(1, 2, 1)
 plot(real(Er(:)), real(Er_p(:)), '.'), hold on
 plot(real(Er(:)), real(Er(:))), hold off
@@ -140,7 +141,7 @@ axis equal
 axis tight
 title('Im E_r')
 
-figure(4)
+figure
 subplot(1, 2, 1)
 plot(real(Eth(:)), real(Eth_p(:)), '.'), hold on
 plot(real(Eth(:)), real(Eth(:))), hold off
@@ -155,7 +156,7 @@ axis equal
 axis tight
 title('Im E_\theta')
 
-figure(5)
+figure
 subplot(1, 2, 1)
 plot(real(Hphi(:)), real(Hphi_p(:)), '.'), hold on
 plot(real(Hphi(:)), real(Hphi(:))), hold off

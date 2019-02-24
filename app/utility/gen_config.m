@@ -120,6 +120,10 @@ for i = 1 : numel(source)
         s_str = sprintf('{ plane2 %s %e %e %e }\n', item.func_type, item.fp, item.delay, item.pos);
     end
     
+    if item.type == "plane3"
+        s_str = sprintf('{ plane3 %s %e %e %e %d }\n', item.func_type, item.fp, item.delay, item.pos, item.polarization);
+    end
+    
     config_str = config_str + s_str;
 end
 config_str = config_str + sprintf('}\n');

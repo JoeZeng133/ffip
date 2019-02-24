@@ -79,6 +79,11 @@ namespace ffip {
 
 	}
 
+	void CU_Dipole::output(std::ostream& os) {
+		for (auto p : points)
+			os << p.c << " " << p.d << " " << p.fp << " " << p.index << "\n";
+	}
+
 	Chunk::Chunk(const Config& config) :Chunk(config.sim_p1, config.sim_p2, config.ch_p1, config.ch_p2, config.dx, config.dt) {
 		this->config = config;
 	}
@@ -397,6 +402,18 @@ namespace ffip {
 			item.second->organize();
 		for (auto& item : m_dipoles)
 			item.second->organize();
+		udf_init();
+	}
+
+	std::fstream tmp;
+	void Chunk::udf_init() {
+		tmp = std::fstream("debug.out", std::ios::out);
+		for (auto& item : e_dipoles)
+			item.second->output(tmp);
+	}
+
+	void Chunk::udf_update() {
+
 	}
 	
 	void Chunk::categorize_points() {

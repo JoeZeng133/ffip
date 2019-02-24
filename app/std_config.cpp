@@ -181,15 +181,27 @@ void read_source(istream& fin, Simulation& sim) {
 	fin >> type;
 	if (type == "plane2") {
 		char c;
-		double ref_pos;
-		fin >> c >> fp >> d >> ref_pos;
+		double pos;
+		fin >> c >> fp >> d >> pos;
 		
 		if (c == 'r') {
-			sim.add_plane_wave(ricker, fp, d, 1, ref_pos);
+			sim.add_plane_wave(ricker, fp, d, 1, pos);
 		} else {
-			sim.add_plane_wave(sine, fp, d, 1, ref_pos);
+			sim.add_plane_wave(sine, fp, d, 1, pos);
 		}
-		
+	}
+
+	if (type == "plane3") {
+		char c;
+		double pos;
+		int polarization;
+		fin >> c >> fp >> d >> pos >> polarization;
+		if (c == 'r') {
+			sim.add_plane_wave(ricker, fp, d, 1, pos, static_cast<Coord_Type>(polarization));
+		}
+		else {
+			sim.add_plane_wave(sine, fp, d, 1, pos, static_cast<Coord_Type>(polarization));
+		}
 	}
 	
 	

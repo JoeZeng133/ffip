@@ -11,20 +11,38 @@ namespace ffip {
 		dt = _dt;
 		sim_dim = _dim;
 	}
+
+	void Simulation::add_sf_layer(const int d, const Direction dir, const Side side) {
+		if (side > 0)
+			bds[dir][1].sf_layer = d;
+		else
+			bds[dir][0].sf_layer = d;
+	}
+
+	void Simulation::add_tf_layer(const int d, const Direction dir, const Side side) {
+		if (side > 0)
+			bds[dir][1].tf_layer = d;
+		else
+			bds[dir][0].tf_layer = d;
+	}
 	
 	void Simulation::add_sf_layer(const int d) {
-		sf_depth = d;
+		for (int i = 0; i < 3; ++i)
+			for (int j = 0; j < 2; ++j)
+				bds[i][j].sf_layer = d;
 	}
 
 	void Simulation::add_tf_layer(const int d) {
-		tf_padded_depth = d;
+		for (int i = 0; i < 3; ++i)
+			for (int j = 0; j < 2; ++j)
+				bds[i][j].tf_layer = d;
 	}
 	
 	void Simulation::add_PML_layer(const PML& pml, const Direction dir, const Side side) {
 		if (side > 0)
-			PMLs[dir][1] = pml;
+			bds[dir][1].pml = pml;
 		else
-			PMLs[dir][0] = pml;
+			bds[dir][0].pml = pml;
 	}
 	
 	void Simulation::set_symmetry(const bool symx, const bool symy, const bool symz) {
@@ -33,14 +51,9 @@ namespace ffip {
 		enable_symmetry_z = symz;
 	}
 	
-	void Simulation::add_plane_wave(const Func type, const real fp, const real delay, const real amp, const real pos) {
-		pw_type = type;
-		pw_fp = fp;
-		pw_delay = delay;
-		pw_amp = amp;
-		pw_pos = pos;
-		pw_enable = true;
-		
+	void Simulation::add_plane_wave(const Func type, const real fp, const real delay, const real amp, const real pos, const Coord_Type polarization) {
+		pw_configs.push_back({ type, fp, delay, amp, pos, polarization });
+
 		// enable symmetry in x, y direction
 		enable_symmetry_x = 1;
 		enable_symmetry_y = 1;
@@ -52,34 +65,32 @@ namespace ffip {
 	}
 	
 	void Simulation::chunk_init() {
-		//symmetry configurations
-		if ((enable_symmetry = (enable_symmetry_y || enable_symmetry_x || enable_symmetry_z)))
-			tf_padded_depth = sf_depth = 0;
-		
+		//symmetry configurations, disable other boundary conditions
+		enable_symmetry = enable_symmetry_x | enable_symmetry_y | enable_symmetry_z;
 		if (enable_symmetry_x)
-			PMLs[0][0] = PMLs[0][1] = PML{};
+			bds[0][0] = bds[0][1] = Boundary{};
 		
 		if (enable_symmetry_y)
-			PMLs[1][0] = PMLs[1][1] = PML{};
+			bds[1][0] = bds[1][1] = Boundary{};
 		
 		if (enable_symmetry_z)
-			PMLs[2][0] = PMLs[2][1] = PML{};
+			bds[2][0] = bds[2][1] = Boundary{};
 		
 		//dimension is in computational units, so they are two times the original values
 		roi_p1 = { 0, 0, 0 };
 		roi_p2 = sim_dim * 2;
 
 		//total field padded layer
-		tf_p1 = roi_p1 - iVec3{ tf_padded_depth, tf_padded_depth, tf_padded_depth };
-		tf_p2 = roi_p2 + iVec3{ tf_padded_depth, tf_padded_depth, tf_padded_depth };
+		tf_p1 = roi_p1 - iVec3{ bds[0][0].tf_layer, bds[1][0].tf_layer, bds[2][0].tf_layer };
+		tf_p2 = roi_p2 + iVec3{ bds[0][1].tf_layer, bds[1][1].tf_layer, bds[2][1].tf_layer };
 
 		//scattered field layer
-		phys_p1 = tf_p1 - iVec3{ sf_depth, sf_depth, sf_depth };
-		phys_p2 = tf_p2 + iVec3{ sf_depth, sf_depth, sf_depth };
+		phys_p1 = tf_p1 - iVec3{ bds[0][0].sf_layer, bds[1][0].sf_layer, bds[2][0].sf_layer };
+		phys_p2 = tf_p2 + iVec3{ bds[0][1].sf_layer, bds[1][1].sf_layer, bds[2][1].sf_layer };
 		
 		//add PML layers
-		sim_p1 = phys_p1 - 2 * iVec3{ PMLs[0][0].get_d() , PMLs[1][0].get_d(), PMLs[2][0].get_d() };
-		sim_p2 = phys_p2 + 2 * iVec3{ PMLs[0][1].get_d() , PMLs[1][1].get_d(), PMLs[2][1].get_d() };
+		sim_p1 = phys_p1 - 2 * iVec3{ bds[0][0].pml.get_d() , bds[1][0].pml.get_d(), bds[2][0].pml.get_d() };
+		sim_p2 = phys_p2 + 2 * iVec3{ bds[0][1].pml.get_d() , bds[1][1].pml.get_d(), bds[2][1].pml.get_d() };
 		
 		//chunk region, reserved for MPI implementation
 		ch_p1 = sim_p1;
@@ -208,7 +219,7 @@ namespace ffip {
 
 		// blobs material implementation 1 (source like interpolation) not recommended
 		/*{
-			real weight[8];
+			std::vector<real> weight(8);
 			interpn<3> interp(2, 2, 2);
 
 			for (auto& item : medium_blobs) {
@@ -217,7 +228,8 @@ namespace ffip {
 					iVec3 base = get_nearest_point<side_low_tag>(item.pos, ctype);
 					fVec3 dp = (item.pos - base) / 2;
 
-					interp.put_helper(weight, item.amp, dp.z, dp.y, dp.x);
+					std::fill(weight.begin(), weight.end(), 0);
+					interp.put(weight, item.amp, dp.z, dp.y, dp.x);
 					for (auto itr = my_iterator(base, base + iVec3{ 2, 2, 2 }, ctype); !itr.is_end(); itr.advance()) {
 						medium_voxels[get_index(itr.get_vec())][item.medium->index] += weight[itr.index];
 					}
@@ -251,10 +263,10 @@ namespace ffip {
 			for (auto inhom : inhoms) {
 				auto p1 = inhom->get_p1() * (2 / dx);
 				auto p2 = inhom->get_p2() * (2 / dx);
-				if (!Is_Inside_Box(roi_p1 - 1e-3, roi_p2 + 1e-3, p1) || !Is_Inside_Box(roi_p1 - 1e-3, roi_p2 + 1e-3, p2))
-					throw Out_of_the_Domain{};
+				auto region = get_component_interior(p1, p2, All);
+				auto inter = get_intersection(region.first, region.second, ch_p1, ch_p2);
 
-				for (auto itr = my_iterator(p1, p2, All); !itr.is_end(); itr.advance()) {
+				for (auto itr = my_iterator(inter.first, inter.second, All); !itr.is_end(); itr.advance()) {
 					auto p = itr.get_vec();
 					auto ctype = p.get_type();
 
@@ -309,7 +321,7 @@ namespace ffip {
 		}
 		
 		//dipole sources initialization
-		real weight[8];
+		std::vector<real> weight(8);
 		interpn<3> interp{ 2, 2, 2 };
 		real vol = dx * dx * dx;
 
@@ -324,25 +336,30 @@ namespace ffip {
 
 			iVec3 base = get_nearest_point<side_low_tag>(dipole.pos, dipole.ctype);
 			fVec3 dp = (dipole.pos - base) / 2;
-			interp.put_helper(weight, 1.0, dp.z, dp.y, dp.x);
+
+			interp.put(weight, 1.0, dp.z, dp.y, dp.x);
+			for (auto x : weight)
+				if (x < 0 || x > 1.0)
+					throw std::runtime_error("Interpolation place failed");
 
 			for (auto itr = my_iterator(base, base + iVec3{ 2, 2, 2 }, dipole.ctype); !itr.is_end(); itr.advance()) {
 				chunk->add_dipole(dipole.type, itr.get_vec(), dipole.amp * weight[itr.index] / vol, dipole.delay, dipole.fp);
 			}
 		}
-		
-		if (pw_enable) {
-			auto p1 = config.roi_p1;
-			auto p2 = config.roi_p2;
-			
-			p1.z = round(pw_pos / dx) * 2;
+
+		//symmetric plane wave initialization
+		for (auto pw : pw_configs) {
+			auto p1 = config.phys_p1;
+			auto p2 = config.phys_p2;
+
+			p1.z = (int)round(pw.pos / dx) * 2;
 			p2.z = p1.z;
-			
-			if (p1.z < 0 || p1.z > config.roi_p2.z)
+
+			if (!In_ClosedBounds(p1.z, config.phys_p1.z, config.phys_p2.z))
 				throw Out_of_the_Domain{};
-			
-			for(auto itr = my_iterator(p1, p2, Ex); !itr.is_end(); itr.advance()) {
-				chunk->add_dipole(pw_type, itr.get_vec(), pw_amp, pw_delay, pw_fp);
+
+			for (auto itr = my_iterator(p1, p2, pw.polarization); !itr.is_end(); itr.advance()) {
+				chunk->add_dipole(pw.type, itr.get_vec(), pw.amp, pw.delay, pw.fp);
 			}
 		}
 	}
@@ -350,9 +367,9 @@ namespace ffip {
 	void Simulation::PML_init() {
 		std::array<real_arr, 3> k, b, c;
 
-		PML_init_helper(PMLs[0][0], PMLs[0][1], k[0], b[0], c[0], sim_p1.x, sim_p2.x);
-		PML_init_helper(PMLs[1][0], PMLs[1][1], k[1], b[1], c[1], sim_p1.y, sim_p2.y);
-		PML_init_helper(PMLs[2][0], PMLs[2][1], k[2], b[2], c[2], sim_p1.z, sim_p2.z);
+		PML_init_helper(bds[0][0].pml, bds[0][1].pml, k[0], b[0], c[0], sim_p1.x, sim_p2.x);
+		PML_init_helper(bds[1][0].pml, bds[1][1].pml, k[1], b[1], c[1], sim_p1.y, sim_p2.y);
+		PML_init_helper(bds[2][0].pml, bds[2][1].pml, k[2], b[2], c[2], sim_p1.z, sim_p2.z);
 		
 		chunk->PML_init(k, b, c);
 	}
@@ -392,8 +409,8 @@ namespace ffip {
 		PML_init();
 		source_init();
 		medium_init();
-		udf_unit();
 		chunk->init();
+		udf_unit();
 		step = 0;
 		std::cout << "Initialization Complete\n";
 	}
@@ -455,9 +472,9 @@ namespace ffip {
 	}
 	
 	PML Simulation::make_pml(const int d) {
-		real a_max = 0.8 * 4 / (dx * bg_medium->get_z());
+		real sigma_max = 0.8 * 4 / (dx * bg_medium->get_z());
 
-		return PML(d, a_max, 1, 0.1, 3, 1);
+		return PML(d, sigma_max, 1, 0, 3, 1);
 	}
 	
 	void Simulation::advance(std::ostream& os) {
@@ -472,16 +489,14 @@ namespace ffip {
 			{
 //				diagnostic::span span(pp, "Md");
 				chunk->update_Md(time, rank, barrier);
+				barrier->Sync();
 			}
-
-			barrier->Sync();
 			
 			{
 //				diagnostic::span span(pp, "B2H");
 				chunk->update_B2H_v2(time, rank, barrier);
+				barrier->Sync();
 			}
-
-			barrier->Sync();
 			
 			if (enable_symmetry) {
 				if (enable_symmetry_x)
@@ -496,23 +511,23 @@ namespace ffip {
 				barrier->Sync();
 			}
 
-			if (rank == 0 && excitation) {
-				excitation->advance();
+			if (excitation) {
+				if (rank == 0)
+					excitation->advance();
+				barrier->Sync();
 			}
 
 			{
 //				diagnostic::span span(pp, "Jd");
 				chunk->update_Jd(time + 0.5 * dt, rank, barrier);
+				barrier->Sync();
 			}
-
-			barrier->Sync();
 			
 			{
 //				diagnostic::span span(pp, "D2E");
 				chunk->update_D2E_v2(time + 0.5 * dt, rank, barrier);
+				barrier->Sync();
 			}
-
-			barrier->Sync();
 			
 			if (enable_symmetry) {
 				if (enable_symmetry_x)
@@ -527,6 +542,7 @@ namespace ffip {
 				barrier->Sync();
 			}
 
+			// fields calculation, does not require synchronization
 			{
 //				diagnostic::span span(pp, "probes");
 				size_t idx1, idx2;
@@ -593,7 +609,7 @@ namespace ffip {
 	}
 	
 	Medium const* Simulation::get_bg_medium() const {
-		return bg_medium;
+		return bg_medium; 
 	}
 	
 	std::fstream os_tmp;
@@ -603,10 +619,12 @@ namespace ffip {
 		os_tmp = std::fstream{"snapshot.out", std::ios::out};
 		tmp_p1 = sim_p1;
 		tmp_p2 = sim_p2;
-		tmp_p1.x = (sim_p1.x + sim_p2.x) / 2;
-		tmp_p2.x = (sim_p1.x + sim_p2.x) / 2 + 1;
+		//tmp_p1.x = (sim_p1.x + sim_p2.x) / 2;
+		//tmp_p2.x = (sim_p1.x + sim_p2.x) / 2 + 1;
+		tmp_p1.x = 0;
+		tmp_p2.x = 1;
 
-		auto itr = my_iterator(tmp_p1, tmp_p2, Ex);
+		auto itr = my_iterator(tmp_p1, tmp_p2, Hy);
 		auto dim = itr.get_dim();
 		os_tmp << dim << "\n";
 
@@ -621,7 +639,7 @@ namespace ffip {
 	void Simulation::udf_advance() {
 		if (step % 1 != 0) return;
 		os_tmp << std::scientific << std::setprecision(5);
-		for(auto itr = my_iterator(tmp_p1, tmp_p2, Ex); !itr.is_end(); itr.advance()) {
+		for(auto itr = my_iterator(tmp_p1, tmp_p2, Hy); !itr.is_end(); itr.advance()) {
 			os_tmp << (*chunk)(itr.get_vec()) << "\n";
 		}
 

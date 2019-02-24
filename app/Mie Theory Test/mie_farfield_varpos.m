@@ -108,6 +108,7 @@ disp('config.in created');
 
 
 %% numerical fields
+call_exe('std_config')
 data = load(ff.output_file);
 make_complex = @(x, y) x + 1j * y;
 ref_signal = load('reference.out');

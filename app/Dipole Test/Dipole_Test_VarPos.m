@@ -104,6 +104,7 @@ nf.output_file = 'output.out';
 gen_config(basic, medium, geometry, source, 'nearfield', nf, 'step_output', 1, 'num_proc', 2);
 
 %% simulated fields
+call_exe('std_config')
 data = load('output.out');
 make_complex = @(x, y) x + 1j * y;
 ricker = @(t, fp, d) (1 - 2 * (pi * fp * (t - d)).^2) .* exp(-(pi * fp * (t - d)).^2);

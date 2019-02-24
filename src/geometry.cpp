@@ -219,7 +219,7 @@ namespace ffip {
 	}
 	
 	real Inhomogeneous_Box::get_density(const fVec3 &p) const {
-		return interp.get(p);
+		return std::clamp(interp.get(p), 0.0, 1.0);
 	}
 	
 	Homogeneous_Object::Homogeneous_Object(Medium const*  m, const Geometry_Node& _base): Geometry_Node(_base), medium(m) {}

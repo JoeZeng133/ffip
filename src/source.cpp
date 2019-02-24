@@ -144,11 +144,12 @@ namespace ffip {
 	}
 	
 	/* Dipole sources*/
-	Dipole::Dipole(const fVec3 pos, const real _amp, const std::function<real(const real)>& _profile, const Coord_Type _ctype, Chunk const* chunk):amp(_amp), profile(_profile), ctype(_ctype) {
+	/*Dipole::Dipole(const fVec3 pos, const real _amp, const std::function<real(const real)>& _profile, const Coord_Type _ctype, Chunk const* chunk):amp(_amp), profile(_profile), ctype(_ctype) {
 		
 		iVec3 base = get_nearest_point<side_low_tag>(pos, ctype);
 		fVec3 dp = (pos - base) / 2;
 		interpn<3> interp{2, 2, 2};
+		std::fill(weight, weight + 8, 0);
 		interp.put_helper(weight, 1.0, dp.z, dp.y, dp.x);
 		
 		for(auto itr = my_iterator(base, base + iVec3{2, 2, 2}, ctype); !itr.is_end(); itr.advance()) {
@@ -167,7 +168,7 @@ namespace ffip {
 	
 	Coord_Type Dipole::get_ctype() const {
 		return ctype;
-	}
+	}*/
 	
 	
 	/* TFSF_Surface definitions*/
@@ -209,16 +210,24 @@ namespace ffip {
 
 		auto tf1 = config.tf_p1;
 		auto tf2 = config.tf_p2;
+		auto sf_layer1 = tf1 - config.phys_p1;
+		auto sf_layer2 = config.phys_p2 - tf2;
 
 		/* generate TF surfaces*/
-		tfsf_list.push_back(TFSF_Surface{ get_face<dir_x_tag, side_high_tag>(tf1, tf2), Direction::X, Side::High, 1 });	//x+
-		tfsf_list.push_back(TFSF_Surface{ get_face<dir_x_tag, side_low_tag>(tf1, tf2), Direction::X, Side::Low, 1 }); //x-
-		tfsf_list.push_back(TFSF_Surface{ get_face<dir_y_tag, side_high_tag>(tf1, tf2), Direction::Y, Side::High, 1 }); //y+
-		tfsf_list.push_back(TFSF_Surface{ get_face<dir_y_tag, side_low_tag>(tf1, tf2), Direction::Y, Side::Low, 1 }); //y-
-		tfsf_list.push_back(TFSF_Surface{ get_face<dir_z_tag, side_high_tag>(tf1, tf2), Direction::Z, Side::High, 1 });	//z+
-		tfsf_list.push_back(TFSF_Surface{ get_face<dir_z_tag, side_low_tag>(tf1, tf2), Direction::Z, Side::Low, 1 });	//z-
+		if (sf_layer2.x)
+			tfsf_list.push_back(TFSF_Surface{ get_face<dir_x_tag, side_high_tag>(tf1, tf2), Direction::X, Side::High, 1 });	//x+
+		if (sf_layer1.x)
+			tfsf_list.push_back(TFSF_Surface{ get_face<dir_x_tag, side_low_tag>(tf1, tf2), Direction::X, Side::Low, 1 }); //x-
+		if (sf_layer2.y)
+			tfsf_list.push_back(TFSF_Surface{ get_face<dir_y_tag, side_high_tag>(tf1, tf2), Direction::Y, Side::High, 1 }); //y+
+		if (sf_layer1.y)
+			tfsf_list.push_back(TFSF_Surface{ get_face<dir_y_tag, side_low_tag>(tf1, tf2), Direction::Y, Side::Low, 1 }); //y-
+		if (sf_layer2.z)
+			tfsf_list.push_back(TFSF_Surface{ get_face<dir_z_tag, side_high_tag>(tf1, tf2), Direction::Z, Side::High, 1 });	//z+
+		if (sf_layer1.z)
+			tfsf_list.push_back(TFSF_Surface{ get_face<dir_z_tag, side_low_tag>(tf1, tf2), Direction::Z, Side::Low, 1 });	//z-
 
-		for (int i = 0; i < 6; ++i) {
+		for (int i = 0, len = tfsf_list.size(); i < len; ++i) {
 			auto tmp = tfsf_list[i];
 			tmp.TF2SF();
 			tfsf_list.push_back(tmp);

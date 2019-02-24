@@ -81,7 +81,7 @@ namespace ffip {
 //	};
 	
 	// lightweight dipole sources
-	class Dipole {
+	/*class Dipole {
 	private:
 		real amp;
 		const std::function<real(const real)> profile;
@@ -93,7 +93,7 @@ namespace ffip {
 		Dipole(const fVec3 pos, const real amp, const std::function<real(const real)>& phase, const Coord_Type ctype, Chunk const* chunk);
 		void update_jmd(std::vector<real>& jmd, real time) const;
 		Coord_Type get_ctype() const;
-	};
+	};*/
 	
 	/*allow homogeneous storage of sources
 	 source types include eigen source and current source

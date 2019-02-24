@@ -479,6 +479,12 @@ namespace ffip {
 		return {p1, p2};
 	}
 
+	/* check whether a value is in closed interval [low, high]*/
+	template <typename T>
+	bool In_ClosedBounds(const T& value, const T& low, const T& high) {
+		return !(value < low) && !(high < value);
+	}
+
     /* source functions */
 	enum Func { ricker, sine, gaussian };
 
@@ -655,7 +661,7 @@ namespace ffip {
 				return;
 			}
 			
-			//force points to be inside of region
+			//clamping coordinates
 			if (xq > dimn - 1) return base_class::put_helper(data + stride * (dimn - 1), val, args...);
 			if (xq < 0) return base_class::put_helper(data, val, args...);
 			
@@ -670,9 +676,11 @@ namespace ffip {
 			}
 		}
 		
+		// the put function might skip placing 0s in some elements of the array
 		template<typename T, typename... Args>
 		void put(std::vector<T>& vec, const T& val, Args&&... args) const {
 			static_assert(sizeof...(args) == N, "Invalid Request");
+			std::fill(vec.begin(), vec.end(), 0);
 			return put_helper(vec.data(), val, args...);
 		}
 	};
@@ -719,6 +727,7 @@ namespace ffip {
 		
 		template<typename T>
 		void put(std::vector<T>& vec, const T& val, real xq) const{
+			std::fill(vec.begin(), vec.end(), 0);
 			return put_helper(vec.data(), val, xq);
 		}
 		
@@ -728,7 +737,7 @@ namespace ffip {
 				data[0] = val;
 				return;
 			}
-			//force points to be inside of region
+			//clamping coordinates
 			if (xq > dimn - 1) {
 				data[dimn - 1] = val;
 				return;

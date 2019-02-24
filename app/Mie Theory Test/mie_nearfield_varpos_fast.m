@@ -86,8 +86,8 @@ basic.sf_layer = sf_layer;
 medium{1} = fic1();
 medium{2} = Air();
 
-geometry{1} = struct('type', 'sphere', 'medium_idx', 0, 'radius', a, 'position', dim * dx / 2);
-% geometry{1} = inhom;
+% geometry{1} = struct('type', 'sphere', 'medium_idx', 0, 'radius', a, 'position', dim * dx / 2);
+geometry{1} = inhom;
 % geometry{1} = blob;
 
 source{1} = struct('type', 'plane', 'dim_neg', projector_padding, 'dim_pos', ...
@@ -110,6 +110,7 @@ disp('config.in created');
 [E, H] = calcmie_nf( a, ns, nm, lambda, Xc(:), Yc(:), Zc(:), 'TotalField', true );
 
 %% numerical fields
+call_exe('std_config')
 data = load('output.out');
 make_complex = @(x, y) x + 1j * y;
 ref_signal = load('reference.out');
