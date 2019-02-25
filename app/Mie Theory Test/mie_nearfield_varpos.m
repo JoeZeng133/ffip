@@ -16,18 +16,35 @@ Sc = 0.5;
 dx = 2e-9;
 dt = Sc * dx / c0;
 dim = [60, 60, 60];
-step = 10000;
+time_step = 10000;
 tf_layer = 2;
 sf_layer = 1;
-projector_padding = ceil((tf_layer + 1) / 2);
 center = dim * dx / 2;
 p2 = dim * dx;
+
+basic.er_bg = er_bg;
+basic.ur_bg = ur_bg;
+basic.PML_d = PML_d;
+basic.dx = dx;
+basic.dt = dt;
+basic.dim = dim;
+basic.step = time_step;
+basic.tf_layer = tf_layer;
+basic.sf_layer = sf_layer;
+
+projector_padding = ceil((tf_layer + 1) / 2);
+projector_center_delay = (projector_padding + dim(3) / 2) * dx / c0;
+
 fs = c0 / 500e-9;
 delay = 1 / fs;
 
 lambda = 800e-9;
 ft = c0 / lambda;
 a = 40e-9;
+
+t = (0:time_step - 1) * dt;
+ref = ricker(t, fs, delay + projector_center_delay);
+ref_fft = sum(ref .* exp(-1j * 2 * pi * ft * t), 2);
 
 inhom.center = center;
 inhom.len = [100e-9, 100e-9, 100e-9];
@@ -42,7 +59,6 @@ inhom.type = 'inhom';
 inhom.position = inhom.p1;
 inhom.filename = 'inhom.in';
 
-center = dim * dx / 2;
 rho = a + linspace(10e-9, 20e-9, 10);
 phi = linspace(0, 2 * pi, 10);
 th = linspace(0,  pi, 10);
@@ -63,16 +79,6 @@ rho = (roi{1} - center(1)).^2 + (roi{2} - center(2)).^2 + (roi{3} - center(3)).^
 num_rho = sum(rho(:));
 output_blobs = [roi{1}(rho), roi{2}(rho), roi{3}(rho), ones([num_rho, 1]), ones([num_rho, 1])];
 %% generate configuration
-basic.er_bg = er_bg;
-basic.ur_bg = ur_bg;
-basic.PML_d = PML_d;
-basic.dx = dx;
-basic.dt = dt;
-basic.dim = dim;
-basic.step = step;
-basic.tf_layer = tf_layer;
-basic.sf_layer = sf_layer;
-
 medium{1} = Air();
 medium{2} = Au();
 
@@ -80,7 +86,7 @@ medium{2} = Au();
 geometry{1} = inhom;
 
 source{1} = struct('type', 'plane', 'dim_neg', projector_padding, 'dim_pos', ...
-    dim(3) + projector_padding, 'func_type', 'r', 'fp', fs, 'delay', delay, 'ref_pos', dim(3) / 2 * dx);
+    dim(3) + projector_padding, 'func_type', 'r', 'fp', fs, 'delay', delay);
 
 nf.x = Xc + center(1);
 nf.y = Yc + center(2);
@@ -97,19 +103,8 @@ disp('config.in created');
 [E, H] = calcmie_nf( a, ns, nm, lambda, Xc(:), Yc(:), Zc(:), 'TotalField', true );
 
 %% numerical fields
-call_exe('std_config')
-data = load(nf.output_file);
-make_complex = @(x, y) x + 1j * y;
-ref_signal = load('reference.out');
-ref_signal = reshape(ref_signal, 1, []);
-t = (0:numel(ref_signal) - 1) * dt;
-ref = sum(ref_signal .* exp(-1j * 2 * pi * Ft(:) * t), 2);
-
-En = [make_complex(data(:, 1), data(:, 2)), make_complex(data(:, 3), data(:, 4)), make_complex(data(:, 5), data(:, 6))];
-Hn = [make_complex(data(:, 7), data(:, 8)), make_complex(data(:, 9), data(:, 10)), make_complex(data(:, 11), data(:, 12))];
-En = En ./ ref;
-Hn = Hn ./ ref;
-
+% call_exe('std_config')
+[En, Hn] = read_fields(nf.output_file, 'norm', ref_fft);
 disp('Numerical Fields Extracted');
 
 

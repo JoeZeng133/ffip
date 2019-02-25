@@ -8,7 +8,7 @@
 namespace ffip {
 	class Chunk;
 	class Plane_Wave;
-	class Inc_Source;
+	class Projector_Source;
 
 	class CU {
 	public:
@@ -19,10 +19,10 @@ namespace ffip {
 
 	/* for sources acting on TF/SF surface */
 	template<typename F>
-	class CU_Source : public CU{
+	class CU_TFSF : public CU{
 	private:
 		std::vector<real>& jmd;
-		F& projector;
+		std::vector<F const*> projectors;
 	
 		struct Update_Point {
 			size_t index;
@@ -33,44 +33,51 @@ namespace ffip {
 		std::vector<size_t> index_unique;	//duplicate indexes can appear, used in update_dynamic
 
 	public:
-		CU_Source() = delete;
-		CU_Source(std::vector<real>& jmd, F& projector) : jmd(jmd), projector(projector) {}
+		CU_TFSF() = delete;
+		CU_TFSF(std::vector<real>& jmd) : jmd(jmd) {}
 
 		void update_static(const size_t rank, Barrier* barrier) override;
 		void update_dynamic(std::atomic<size_t>& sync_index, Barrier* barrier) override;
 		void organize() override;
+		void add_projector(F const* projector);
 		void add_update_point(const size_t index, const real c1, const iVec3 c2);
 	};
 
 	template<typename F>
-	void CU_Source<F>::update_dynamic(std::atomic<size_t>& sync_index, Barrier* barrier) {
-		
+	void CU_TFSF<F>::add_projector(F const* projector) {
+		projectors.push_back(projector);
 	}
 
 	template<typename F>
-	void CU_Source<F>::organize() {
+	void CU_TFSF<F>::update_dynamic(std::atomic<size_t>& sync_index, Barrier* barrier) {}
+
+	template<typename F>
+	void CU_TFSF<F>::organize() {
 		std::sort(points.begin(), points.end(), [](const Update_Point& a, const Update_Point& b) {
 			return a.index < b.index;
 		});
 	}
 
 	template<typename F>
-	void CU_Source<F>::add_update_point(const size_t index, const real c1, const iVec3 c2) {
-		points.push_back(Update_Point{ index, c1, c2 });
+	void CU_TFSF<F>::add_update_point(const size_t index, const real c1, const iVec3 c2) {
+		points.push_back({ index, c1, c2 });
 	}
 
 	template<typename F>
-	void CU_Source<F>::update_static(const size_t rank, Barrier* barrier) {
+	void CU_TFSF<F>::update_static(const size_t rank, Barrier* barrier) {
 		size_t idx1, idx2;
 		vector_divider(points, rank, barrier->get_num_proc(), idx1, idx2);
 		//adjust to prevent slicing the updates of a single index
 		while (idx1 > 0 && idx1 < points.size() && points[idx1].index == points[idx1 - 1].index) --idx1;
 		while (idx2 > 0 && idx2 < points.size() && points[idx2].index == points[idx2 - 1].index) --idx2;
 
-		for (; idx1 < idx2; ++idx1) {
-			auto& point = points[idx1];
-			jmd[point.index] += point.c1 * projector(point.c2);
+		for (auto pr : projectors) {
+			for (int i = idx1; i < idx2; ++i) {
+				auto& point = points[i];
+				jmd[point.index] += point.c1 * (*pr)(point.c2);
+			}
 		}
+		
 	}
 
 	/* for sources on PML points*/
@@ -108,7 +115,7 @@ namespace ffip {
 			using x2 = typename x3::x2;
 
 			indexes[x3::val].push_back(index);
-			points[x3::val].push_back(Update_Point{0, b1, c1, k1, 0, b2, c2, k2});
+			points[x3::val].push_back({0, b1, c1, k1, 0, b2, c2, k2});
 		}
 	};
 
@@ -251,13 +258,13 @@ namespace ffip {
 		  D(n + 1) - D(n) = Jd(n + 0.5) = curl(H(n + 0.5)) - Ji(n + 0.5)
 		  B(n + 1) - B(n) = Md(n + 0.5) = -(curl(E(n + 0.5)) + Mi(n + 0.5))
 		*/
-		void update_Jd(const real time, const size_t rank, Barrier* barrier);		//curl H
-		void update_Md(const real time, const size_t rank, Barrier* barrier);		//curl E
+		void update_Jd(const real time, const size_t rank, Barrier* barrier);		//curl H - Ji
+		void update_Md(const real time, const size_t rank, Barrier* barrier);		//curl E + Mi
 		template<typename T>
-		void update_JMd_helper(const size_t rank, Barrier* barrier);	//helper function for calculating curl
+		void update_curl(const size_t rank, Barrier* barrier);	//helper function for calculating curl
 		/* Material updates */
-		void update_D2E_v2(const real time, const size_t rank, Barrier* barrier);
-		void update_B2H_v2(const real time, const size_t rank, Barrier* barrier);
+		void update_jwD2E(const real time, const size_t rank, Barrier* barrier);
+		void update_jwB2H(const real time, const size_t rank, Barrier* barrier);
 		
 		void update_ud(const real time, const size_t rank, Barrier* barrier);
 		
@@ -267,7 +274,7 @@ namespace ffip {
 		
 		//peridoic boundary conditions, assuming normal incident angle
 		template<typename Dir>
-		void update_ghost_helper(const size_t rank, Barrier* barrier);
+		void update_periodic_bd(const size_t rank, Barrier* barrier);
 		
 		/* miscellaneous*/
 		real measure() const;
@@ -275,19 +282,20 @@ namespace ffip {
 		/* Generic Currents Updates */
 	private:
 		CU_PML * e_PML{ nullptr }, *m_PML{ nullptr };			//PML updates
-		CU_Source<Plane_Wave> * e_source{ nullptr }, *m_source{ nullptr };	//plane_wave projector
-		std::map<Func, CU_Dipole*> e_dipoles;						//electric dipole currents
-		std::map<Func, CU_Dipole*> m_dipoles;						//magnetic dipole currents
+		CU_TFSF<Plane_Wave>* e_tfsf{ nullptr }, *m_tfsf{ nullptr };									//tfsf updates
+		std::map<Func, CU_Dipole*> e_dipoles, m_dipoles;						//electric dipole currents
 
 	public:
 		//add dipole sources, currently support only ricker, sin (taks 3 arguments)
 		void add_dipole(const Func type, const iVec3& pos, const real amp, const real delay, const real fp);
-		void set_projector(Plane_Wave& projector);
-		void add_projector_update(const iVec3& pos, const real amp, const iVec3& inc_pos);
+		//add projecter acting on tfsf surfaces
+		void add_projector(Plane_Wave const* projector);
+		//add each update points on tfsf surfaces
+		void add_projector_update(const iVec3& jmd_pos, const real c1, const iVec3& pr_pos);
 	};
 	
 	template<typename Dir>
-	void Chunk::update_ghost_helper(const size_t rank, Barrier *barrier) {
+	void Chunk::update_periodic_bd(const size_t rank, Barrier *barrier) {
 		auto p1 = ch_p1 - 1;
 		auto p2 = ch_p2 + 1;
 		auto dp = ch_p2 - ch_p1;
@@ -318,8 +326,6 @@ namespace ffip {
 
 		CU_PML * w_PML = (is_E_Point(F::ctype)) ? e_PML : m_PML;
 
-		//std::cout << "PML: " << F::ctype << " " << x1::val << " " << x2::val << "\n";
-
 		for (auto itr = my_iterator(ch_p1, ch_p2, F::ctype); !itr.is_end(); itr.advance()) {
 			iVec3 pos = itr.get_vec();
 			if (Is_Inside_Box(config.phys_p1, config.phys_p2, pos))
@@ -346,7 +352,7 @@ namespace ffip {
 	}
 	
 	template<typename F>
-	void Chunk::update_JMd_helper(const size_t rank, Barrier* barrier) {
+	void Chunk::update_curl(const size_t rank, Barrier* barrier) {
 		/* Curl updates without PML */
 		using x3 = typename F::dir_base;
 		using x1 = typename x3::x1;

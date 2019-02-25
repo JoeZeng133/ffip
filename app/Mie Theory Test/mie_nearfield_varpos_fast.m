@@ -15,19 +15,23 @@ Sc = 0.5;
 dt = 7.2e-17;
 dx = c0 * dt / Sc;
 dim = [40, 40, 40];
-step = 1000;
-tf_layer = 2;
+time_step = 1000;
+tf_layer = 0;
 sf_layer = 1;
 projector_padding = ceil((tf_layer + 1) / 2);
+projector_center_delay = (projector_padding + dim(3) / 2) * dx / c0;
+center = dim * dx / 2;
 
 fs = c0 / (30 * dx);
 delay = 1 / fs;
-
 lambda = 30 * dx;
 ft = c0 / (30 * dx);
 a = 10 * dx;
 
-center = dim * dx / 2;
+t = (0:time_step - 1) * dt;
+ref = ricker(t, fs, delay + projector_center_delay);
+ref_fft = sum(ref .* exp(-1j * 2 * pi * ft * t), 2);
+
 rho = a + linspace(2 * dx, 10 * dx, 10);
 phi = linspace(0, 2 * pi, 10);
 th = linspace(0, pi, 10);
@@ -79,7 +83,7 @@ basic.PML_d = PML_d;
 basic.dx = dx;
 basic.dt = dt;
 basic.dim = dim;
-basic.step = step;
+basic.step = time_step;
 basic.tf_layer = tf_layer;
 basic.sf_layer = sf_layer;
 
@@ -90,8 +94,9 @@ medium{2} = Air();
 geometry{1} = inhom;
 % geometry{1} = blob;
 
-source{1} = struct('type', 'plane', 'dim_neg', projector_padding, 'dim_pos', ...
-    dim(3) + projector_padding, 'func_type', 'r', 'fp', fs, 'delay', delay, 'ref_pos', dim(3) / 2 * dx);
+pw1 = struct('type', 'plane', 'dim_neg', projector_padding, 'dim_pos', ...
+    dim(3) + projector_padding, 'func_type', 'r', 'fp', fs, 'delay', delay);
+source = {pw1};
 
 
 nf.x = Xc + center(1);
@@ -110,19 +115,9 @@ disp('config.in created');
 [E, H] = calcmie_nf( a, ns, nm, lambda, Xc(:), Yc(:), Zc(:), 'TotalField', true );
 
 %% numerical fields
-call_exe('std_config')
-data = load('output.out');
-make_complex = @(x, y) x + 1j * y;
-ref_signal = load('reference.out');
-ref_signal = reshape(ref_signal, 1, []);
-t = (0:numel(ref_signal) - 1) * dt;
-ref = sum(ref_signal .* exp(-1j * 2 * pi * Ft(:) * t), 2);
+% call_exe('std_config')
+[En, Hn] = read_fields('output.out', 'norm', ref_fft);
 
-En = [make_complex(data(:, 1), data(:, 2)), make_complex(data(:, 3), data(:, 4)), make_complex(data(:, 5), data(:, 6))];
-Hn = [make_complex(data(:, 7), data(:, 8)), make_complex(data(:, 9), data(:, 10)), make_complex(data(:, 11), data(:, 12))];
-En = En ./ ref;
-Hn = Hn ./ ref;
- 
 disp('Numerical Fields Extracted');
 
 

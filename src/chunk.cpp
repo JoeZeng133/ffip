@@ -8,21 +8,9 @@
 namespace ffip {
 	CU_PML::CU_PML(std::vector<real>& jmd, std::vector<real>& eh, std::array<size_t, 3> strides) : jmd(jmd), eh(eh), strides(strides) {}
 
-	void CU_PML::update_dynamic(std::atomic<size_t>& sync_index, Barrier* barrier) {
+	void CU_PML::update_dynamic(std::atomic<size_t>& sync_index, Barrier* barrier) {}
 
-	}
-
-	void CU_PML::organize() {
-	/*	auto comp = [](const Update_Point& a, const Update_Point& b) {
-			return a.index < b.index;
-		};
-
-		for (int i = 0; i < 3; ++i)
-			std::sort(points[i].begin(), points[i].end(), comp);*/
-
-	/*	Update_Point a;
-		Update_Point b = a;*/
-	}
+	void CU_PML::organize() {}
 
 	void CU_PML::update_static(const size_t rank, Barrier* barrier) {
 
@@ -61,8 +49,8 @@ namespace ffip {
 		while (idx2 > 0 && idx2 < points.size() && points[idx2].index == points[idx2 - 1].index) --idx2;
 		real cur_time = time + step * dt;
 
-		for (; idx1 < idx2; ++idx1) {
-			auto& point = points[idx1];
+		for (int i = idx1; i < idx2; ++i) {
+			auto& point = points[i];
 			jmd[point.index] += point.c * f(cur_time, point.d, point.fp);
 		}
 
@@ -72,12 +60,10 @@ namespace ffip {
 	}
 
 	void CU_Dipole::add_update_point(const size_t index, const real amp, const real delay, const real fp) {
-		points.push_back(Update_Point{ index, amp, delay, fp });
+		points.push_back({ index, amp, delay, fp });
 	}
 
-	void CU_Dipole::update_dynamic(std::atomic<size_t>& sync_index, Barrier* barrier) {
-
-	}
+	void CU_Dipole::update_dynamic(std::atomic<size_t>& sync_index, Barrier* barrier) {}
 
 	void CU_Dipole::output(std::ostream& os) {
 		for (auto p : points)
@@ -91,8 +77,8 @@ namespace ffip {
 
 	Chunk::Chunk(const iVec3& sim_p1, const iVec3& sim_p2, const iVec3& ch_p1, const iVec3& ch_p2, real dx, real dt):  ch_p1(ch_p1), ch_p2(ch_p2), sim_p1(sim_p1), sim_p2(sim_p2), dx(dx), dt(dt) {
 		
-		ch_origin = ch_p1 - iVec3{1, 1, 1};
-		ch_dim = ch_p2 - ch_p1 + iVec3{3, 3, 3};
+		ch_origin = ch_p1 - 1;
+		ch_dim = ch_p2 - ch_p1 + 3;
 
 		ch_stride_x = 1;
 		ch_stride_y = ch_dim.x;
@@ -160,36 +146,6 @@ namespace ffip {
 		}
 	}
 	
-	//template<>
-	//const size_t Chunk::get_ch_stride<dir_x_tag>() const {
-	//	return ch_stride_x;
-	//}
-	//
-	//template<>
-	//const size_t Chunk::get_ch_stride<dir_y_tag>() const {
-	//	return ch_stride_y;
-	//}
-	//
-	//template<>
-	//const size_t Chunk::get_ch_stride<dir_z_tag>() const {
-	//	return ch_stride_z;
-	//}
-	
-	//template<>
-	//const real Chunk::get_k<dir_x_tag>(const int pos) const {
-	//	return kx[pos];
-	//}
-	//
-	//template<>
-	//const real Chunk::get_k<dir_y_tag>(const int pos) const {
-	//	return ky[pos];
-	//}
-	//
-	//template<>
-	//const real Chunk::get_k<dir_z_tag>(const int pos) const {
-	//	return kz[pos];
-	//}
-	
 	void Chunk::PML_init(const std::array<real_arr, 3>& k, const std::array<real_arr, 3>& b, const std::array<real_arr, 3>& c) {
 		auto p1_ch = ch_p1 - ch_origin;
 		auto p2_ch = ch_p2 - ch_origin;
@@ -225,18 +181,18 @@ namespace ffip {
 	void Chunk::update_Jd(const real time, const size_t rank, Barrier* barrier) {
 		if (rank >= barrier->get_num_proc())
 			throw std::runtime_error("Rank cannot be bigger than number of processes");
-//		diagnostic::span* s;
 
+//		diagnostic::span* s;
 //		s = new diagnostic::span(marker_jmd, "jx");
-		update_JMd_helper<ex_tag>(rank, barrier);
+		update_curl<ex_tag>(rank, barrier);
 //		delete s;
 
 //		s = new diagnostic::span(marker_jmd, "jy");
-		update_JMd_helper<ey_tag>(rank, barrier);
+		update_curl<ey_tag>(rank, barrier);
 //		delete s;
 
 //		s = new diagnostic::span(marker_jmd, "jz");
-		update_JMd_helper<ez_tag>(rank, barrier);
+		update_curl<ez_tag>(rank, barrier);
 //		delete s;
 
 //		s = new diagnostic::span(marker_jmd, "e_PML");
@@ -246,7 +202,7 @@ namespace ffip {
 		barrier->Sync();
 
 //		s = new diagnostic::span(marker_jmd, "e_cu");
-		if (e_source) e_source->update_static(rank, barrier);
+		if (e_tfsf) e_tfsf->update_static(rank, barrier);
 //		delete s;
 		
 //		s = new diagnostic::span(marker_jmd, "e_dipole");
@@ -264,15 +220,15 @@ namespace ffip {
 //		diagnostic::span* s;
 		
 //		s = new diagnostic::span(marker_jmd, "mx");
-		update_JMd_helper<hx_tag>(rank, barrier);
+		update_curl<hx_tag>(rank, barrier);
 //		delete s;
 
 //		s = new diagnostic::span(marker_jmd, "my");
-		update_JMd_helper<hy_tag>(rank, barrier);
+		update_curl<hy_tag>(rank, barrier);
 //		delete s;
 
 //		s = new diagnostic::span(marker_jmd, "mz");
-		update_JMd_helper<hz_tag>(rank, barrier);
+		update_curl<hz_tag>(rank, barrier);
 //		delete s;
 
 //		s = new diagnostic::span(marker_jmd, "m_PML");
@@ -282,7 +238,7 @@ namespace ffip {
 		barrier->Sync();
 
 //		s = new diagnostic::span(marker_jmd, "m_cu");
-		if (m_source) m_source->update_static(rank, barrier);
+		if (m_tfsf) m_tfsf->update_static(rank, barrier);
 //		delete s;
 
 //		s = new diagnostic::span(marker_jmd, "m_dipole");
@@ -294,7 +250,7 @@ namespace ffip {
 //		delete s;
 	}
 	
-	void Chunk::update_D2E_v2(const real time, const size_t rank, Barrier* barrier) {
+	void Chunk::update_jwD2E(const real time, const size_t rank, Barrier* barrier) {
 		real modifier = 1 / e0 * dt;
 		size_t num_proc = barrier->get_num_proc();
 
@@ -311,7 +267,7 @@ namespace ffip {
 		}
 	}
 	
-	void Chunk::update_B2H_v2(const real time, const size_t rank, Barrier* barrier) {
+	void Chunk::update_jwB2H(const real time, const size_t rank, Barrier* barrier) {
 		real modifier = -1 / u0 * dt;
 		size_t num_proc = barrier->get_num_proc();
 
@@ -331,15 +287,9 @@ namespace ffip {
 	void Chunk::update_ud(const real time, const size_t rank, Barrier *barrier) {
 	}
 	
-	void Chunk::update_ghost_E(const real time, const size_t rank, Barrier *barrier) {
-		update_ghost_helper<dir_x_tag>(rank, barrier);
-		update_ghost_helper<dir_y_tag>(rank, barrier);
-	}
+	void Chunk::update_ghost_E(const real time, const size_t rank, Barrier *barrier) {}
 	
-	void Chunk::update_ghost_H(const real time, const size_t rank, Barrier *barrier) {
-		update_ghost_helper<dir_x_tag>(rank, barrier);
-		update_ghost_helper<dir_y_tag>(rank, barrier);
-	}
+	void Chunk::update_ghost_H(const real time, const size_t rank, Barrier *barrier) {}
 	
 	real Chunk::at(const fVec3& p, const Coord_Type ctype) const{
 		return operator()(p / (dx / 2), ctype);
@@ -393,15 +343,20 @@ namespace ffip {
 	}
 
 	void Chunk::init() {
+		//material updates
 		categorize_points();
+		//PML updates
 		if (e_PML) e_PML->organize();
 		if (m_PML) m_PML->organize();
-		if (e_source) e_source->organize();
-		if (m_source) m_source->organize();
+		//TFSF updates
+		if (e_tfsf) e_tfsf->organize();
+		if (m_tfsf) m_tfsf->organize();
+		//Dipole updates
 		for (auto& item : e_dipoles)
 			item.second->organize();
 		for (auto& item : m_dipoles)
 			item.second->organize();
+
 		udf_init();
 	}
 
@@ -480,15 +435,23 @@ namespace ffip {
 		}
 	}
 
-	void Chunk::set_projector(Plane_Wave& projector) {
-		e_source = new CU_Source<Plane_Wave>(jmd, projector);
-		m_source = new CU_Source<Plane_Wave>(jmd, projector);
+	void Chunk::add_projector(Plane_Wave const* projector) {
+		if (e_tfsf == nullptr) {
+			e_tfsf = new CU_TFSF<Plane_Wave>(jmd);
+			m_tfsf = new CU_TFSF<Plane_Wave>(jmd);
+		}
+
+		e_tfsf->add_projector(projector);
+		m_tfsf->add_projector(projector);
 	}
 
-	void Chunk::add_projector_update(const iVec3& pos, const real amp, const iVec3& inc_pos) {
-		bool is_E = is_E_Point(pos.get_type());
-		auto source = is_E ? e_source : m_source;
+	void Chunk::add_projector_update(const iVec3& jmd_pos, const real c1, const iVec3& pr_pos) {
+		bool is_E = is_E_Point(jmd_pos.get_type());
+		auto tfsf = is_E ? e_tfsf : m_tfsf;
 
-		source->add_update_point(get_index_ch(pos), amp, inc_pos);
+		if (tfsf) 
+			tfsf->add_update_point(get_index_ch(jmd_pos), c1, pr_pos);
+		else
+			throw std::runtime_error("No projector has been added");
 	}
 }

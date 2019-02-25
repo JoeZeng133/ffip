@@ -104,7 +104,11 @@ for i = 1 : numel(source)
     item = source{i};
     s_str = "";
     if item.type == "plane"
-        s_str = sprintf('{ plane %d %d %s %e %e %e }\n', item.dim_neg, item.dim_pos, item.func_type, item.fp, item.delay, item.ref_pos);
+        s_str = sprintf('{ plane %d %d %s %e %e }\n', item.dim_neg, item.dim_pos, item.func_type, item.fp, item.delay);
+    end
+    
+    if item.type == "plane4"
+        s_str = sprintf('{ plane4 %d %d %s %e %e %d }\n', item.dim_neg, item.dim_pos, item.func_type, item.fp, item.delay, item.polarization);
     end
     
     if item.type == "dipole"

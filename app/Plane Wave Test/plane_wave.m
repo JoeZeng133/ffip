@@ -18,17 +18,6 @@ dim = [30, 30, 30];
 step = 600;
 tf_layer = 0;
 sf_layer = 1;
-projector_padding = ceil((tf_layer + 1) / 2);
-center = dim * dx / 2;
-p2 = dim * dx;
-
-fs = c0 / (30 * dx);
-delay = 2 / fs;
-
-lambda = 30 * dx;
-ft = c0 / (30 * dx);
-a = 10 * dx;
-%% generate configuration
 basic.er_bg = er_bg;
 basic.ur_bg = ur_bg;
 basic.PML_d = PML_d;
@@ -39,6 +28,21 @@ basic.step = step;
 basic.tf_layer = tf_layer;
 basic.sf_layer = sf_layer;
 
+projector_padding = ceil((tf_layer + 1) / 2);
+dim_neg = projector_padding;
+dim_pos = dim(3) + projector_padding;
+center = dim * dx / 2;
+p2 = dim * dx;
+
+fs = c0 / (30 * dx);
+delay = 2 / fs;
+
+lambda = 30 * dx;
+ft = c0 / (30 * dx);
+a = 10 * dx;
+%% generate configuration
+
+
 medium = {fic1()};
 
 sphere = struct('type', 'sphere', 'medium_idx', 0, 'radius', a, 'position', [12 12 15] * dx);
@@ -46,15 +50,15 @@ box = struct('type', 'box', 'lower_position', [-1 -1 5 * dx], 'upper_position', 
 sym = struct('type', 'symmetry', 'enable_x', 1, 'enable_y', 1, 'enable_z', 0);
 geometry = {sym};
 
-Ex = 1; Ey = 2;
-pw1 = struct('type', 'plane', 'dim_neg', projector_padding, 'dim_pos',...
-    dim(3) + projector_padding, 'func_type', 'r', 'fp', fs, 'delay', delay, 'ref_pos', 0); 
 
-pw = struct('type', 'plane2', 'func_type', 'r', 'fp', fs, 'delay', delay, 'pos', 0);
-pw_x = struct('type', 'plane3', 'func_type', 'r', 'fp', fs, 'delay', delay, 'pos', 0, 'polarization', Ex);
-pw_y = struct('type', 'plane3', 'func_type', 'r', 'fp', fs, 'delay', delay, 'pos', 0, 'polarization', Ey);
+pw1 = struct('type', 'plane', 'dim_neg', dim_neg, 'dim_pos',  dim_pos, 'func_type', 'r', 'fp', fs, 'delay', delay); 
+pw2 = struct('type', 'plane2', 'func_type', 'r', 'fp', fs, 'delay', delay, 'pos', 0);
+pw3_x = struct('type', 'plane3', 'func_type', 'r', 'fp', fs, 'delay', delay, 'pos', 0, 'polarization', 0);
+pw3_y = struct('type', 'plane3', 'func_type', 'r', 'fp', fs, 'delay', delay, 'pos', 0, 'polarization', 1);
+pw4_x = struct('type', 'plane4', 'dim_neg', dim_neg, 'dim_pos',dim_pos, 'func_type', 'r', 'fp', fs, 'delay', delay, 'polarization', 0);
+pw4_y = struct('type', 'plane4', 'dim_neg', dim_neg, 'dim_pos',dim_pos, 'func_type', 'r', 'fp', fs, 'delay', delay, 'polarization', 1);
 
-source = {pw_x, pw_y};
+source = {pw4_x, pw4_y};
 
 nf.p1 = [center(1) 0 0];
 nf.p2 = [center(1) p2(2) p2(3)];

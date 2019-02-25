@@ -51,7 +51,7 @@ namespace ffip {
 		enable_symmetry_z = symz;
 	}
 	
-	void Simulation::add_plane_wave(const Func type, const real fp, const real delay, const real amp, const real pos, const Coord_Type polarization) {
+	void Simulation::add_plane_wave(const Func type, const real fp, const real delay, const real amp, const real pos, const Direction polarization) {
 		pw_configs.push_back({ type, fp, delay, amp, pos, polarization });
 
 		// enable symmetry in x, y direction
@@ -59,9 +59,11 @@ namespace ffip {
 		enable_symmetry_y = 1;
 	}
 	
-	void Simulation::add_inc_source(Inc_Source* source) {
-		if (source)
-			excitation = source;
+	void Simulation::add_projector(const Plane_Wave& projector) {
+		if (pr_source == nullptr)
+			pr_source = new Projector_Source();
+
+		pr_source->add_projector(projector);
 	}
 	
 	void Simulation::chunk_init() {
@@ -102,7 +104,7 @@ namespace ffip {
 	}
 	
 	void Simulation::add_dipole(real amp, fVec3 pos, const Coord_Type ctype, const Func func_type, const real fp, const real delay) {
-		dipole_configs.push_back(Dipole_Config{ amp, pos, ctype, func_type, fp, delay });
+		dipole_configs.push_back({ amp, pos, ctype, func_type, fp, delay });
 	}
 	
 	void Simulation::set_background_medium(Medium const*  m) {
@@ -315,9 +317,9 @@ namespace ffip {
 	
 	void Simulation::source_init() {
 		//projector initialization
-		if (excitation) {
-			excitation->init(config);
-			excitation->push(chunk);
+		if (pr_source) {
+			pr_source->init(config);
+			pr_source->push(chunk);
 		}
 		
 		//dipole sources initialization
@@ -331,7 +333,7 @@ namespace ffip {
 				dipole.amp = -dipole.amp;
 
 			dipole.pos = dipole.pos * (2 / dx);
-			if (!Is_Inside_Box(config.roi_p1 - 1e-3, config.roi_p2 + 1e-3, dipole.pos))
+			if (!Is_Inside_Box(config.roi_p1, config.roi_p2, dipole.pos))
 				throw std::runtime_error("Dipole must be inside region of interests");
 
 			iVec3 base = get_nearest_point<side_low_tag>(dipole.pos, dipole.ctype);
@@ -342,23 +344,32 @@ namespace ffip {
 				if (x < 0 || x > 1.0)
 					throw std::runtime_error("Interpolation place failed");
 
-			for (auto itr = my_iterator(base, base + iVec3{ 2, 2, 2 }, dipole.ctype); !itr.is_end(); itr.advance()) {
+			for (auto itr = my_iterator(base, base + 2, dipole.ctype); !itr.is_end(); itr.advance()) {
 				chunk->add_dipole(dipole.type, itr.get_vec(), dipole.amp * weight[itr.index] / vol, dipole.delay, dipole.fp);
 			}
 		}
 
 		//symmetric plane wave initialization
 		for (auto pw : pw_configs) {
-			auto p1 = config.phys_p1;
-			auto p2 = config.phys_p2;
+			auto p1 = config.roi_p1;
+			auto p2 = config.roi_p2;
 
 			p1.z = (int)round(pw.pos / dx) * 2;
 			p2.z = p1.z;
+			Coord_Type ctype;
+			switch (pw.polarization) {
+			case X:
+				ctype = Ex; break;
+			case Y:
+				ctype = Ey; break;
+			case Z:
+				ctype = Ez; break;
+			}
 
-			if (!In_ClosedBounds(p1.z, config.phys_p1.z, config.phys_p2.z))
+			if (!In_ClosedBounds(p1.z, config.roi_p1.z, config.roi_p2.z))
 				throw Out_of_the_Domain{};
 
-			for (auto itr = my_iterator(p1, p2, pw.polarization); !itr.is_end(); itr.advance()) {
+			for (auto itr = my_iterator(p1, p2, ctype); !itr.is_end(); itr.advance()) {
 				chunk->add_dipole(pw.type, itr.get_vec(), pw.amp, pw.delay, pw.fp);
 			}
 		}
@@ -494,26 +505,26 @@ namespace ffip {
 			
 			{
 //				diagnostic::span span(pp, "B2H");
-				chunk->update_B2H_v2(time, rank, barrier);
+				chunk->update_jwB2H(time, rank, barrier);
 				barrier->Sync();
 			}
 			
 			if (enable_symmetry) {
 				if (enable_symmetry_x)
-					chunk->update_ghost_helper<dir_x_tag>(rank, barrier);
+					chunk->update_periodic_bd<dir_x_tag>(rank, barrier);
 				
 				if (enable_symmetry_y)
-					chunk->update_ghost_helper<dir_y_tag>(rank, barrier);
+					chunk->update_periodic_bd<dir_y_tag>(rank, barrier);
 				
 				if (enable_symmetry_z)
-					chunk->update_ghost_helper<dir_z_tag>(rank, barrier);
+					chunk->update_periodic_bd<dir_z_tag>(rank, barrier);
 				
 				barrier->Sync();
 			}
 
-			if (excitation) {
+			if (pr_source) {
 				if (rank == 0)
-					excitation->advance();
+					pr_source->advance();
 				barrier->Sync();
 			}
 
@@ -525,19 +536,19 @@ namespace ffip {
 			
 			{
 //				diagnostic::span span(pp, "D2E");
-				chunk->update_D2E_v2(time + 0.5 * dt, rank, barrier);
+				chunk->update_jwD2E(time + 0.5 * dt, rank, barrier);
 				barrier->Sync();
 			}
 			
 			if (enable_symmetry) {
 				if (enable_symmetry_x)
-					chunk->update_ghost_helper<dir_x_tag>(rank, barrier);
+					chunk->update_periodic_bd<dir_x_tag>(rank, barrier);
 				
 				if (enable_symmetry_y)
-					chunk->update_ghost_helper<dir_y_tag>(rank, barrier);
+					chunk->update_periodic_bd<dir_y_tag>(rank, barrier);
 				
 				if (enable_symmetry_z)
-					chunk->update_ghost_helper<dir_z_tag>(rank, barrier);
+					chunk->update_periodic_bd<dir_z_tag>(rank, barrier);
 				
 				barrier->Sync();
 			}
@@ -616,17 +627,17 @@ namespace ffip {
 	iVec3 tmp_p1, tmp_p2;
 	
 	void Simulation::udf_unit() {
-		os_tmp = std::fstream{"snapshot.out", std::ios::out};
-		tmp_p1 = sim_p1;
-		tmp_p2 = sim_p2;
-		//tmp_p1.x = (sim_p1.x + sim_p2.x) / 2;
-		//tmp_p2.x = (sim_p1.x + sim_p2.x) / 2 + 1;
-		tmp_p1.x = 0;
-		tmp_p2.x = 1;
+		//os_tmp = std::fstream{"snapshot.out", std::ios::out};
+		//tmp_p1 = sim_p1;
+		//tmp_p2 = sim_p2;
+		////tmp_p1.x = (sim_p1.x + sim_p2.x) / 2;
+		////tmp_p2.x = (sim_p1.x + sim_p2.x) / 2 + 1;
+		//tmp_p1.x = 0;
+		//tmp_p2.x = 1;
 
-		auto itr = my_iterator(tmp_p1, tmp_p2, Hy);
-		auto dim = itr.get_dim();
-		os_tmp << dim << "\n";
+		//auto itr = my_iterator(tmp_p1, tmp_p2, Ey);
+		//auto dim = itr.get_dim();
+		//os_tmp << dim << "\n";
 
 	/*	size_t num_probes = nearfield_probes.size();
 		if (num_probes < 100)
@@ -637,11 +648,11 @@ namespace ffip {
 	}
 	
 	void Simulation::udf_advance() {
-		if (step % 1 != 0) return;
+		/*if (step % 1 != 0) return;
 		os_tmp << std::scientific << std::setprecision(5);
-		for(auto itr = my_iterator(tmp_p1, tmp_p2, Hy); !itr.is_end(); itr.advance()) {
+		for(auto itr = my_iterator(tmp_p1, tmp_p2, Ey); !itr.is_end(); itr.advance()) {
 			os_tmp << (*chunk)(itr.get_vec()) << "\n";
-		}
+		}*/
 
 		/*size_t num_probes = nearfield_probes.size();
 		if (num_probes < 100)

@@ -44,7 +44,7 @@ namespace ffip {
 		std::vector<const Solid*> solids;
 		std::vector<const Inhomogeneous_Box*> inhoms;
 		std::vector<Medium_Blob> medium_blobs;
-		Inc_Source* excitation{ nullptr };
+		Projector_Source* pr_source{ nullptr };
 
 		//dipoles
 		struct Dipole_Config {
@@ -95,14 +95,14 @@ namespace ffip {
 		struct PlaneWave_Config {
 			Func type;
 			real fp, delay, amp, pos;
-			Coord_Type polarization;
+			Direction polarization;
 		};
 		std::vector<PlaneWave_Config> pw_configs;
 		
 		//add sources and geometry (including boundary conditions)
 		void set_symmetry(const bool symx, const bool symy, const bool symz);
-		void add_plane_wave(const Func type, const real fp, const real delay = 0, const real amp = 1, const real pos = 0, const Coord_Type polarization = Ex);
-		void add_inc_source(Inc_Source* source);
+		void add_plane_wave(const Func type, const real fp, const real delay = 0, const real amp = 1, const real pos = 0, const Direction polarization = X);
+		void add_projector(const Plane_Wave& projector);
 		void add_sf_layer(const int d, const Direction dir, const Side side);
 		void add_tf_layer(const int d, const Direction dir, const Side side);
 		void add_sf_layer(const int d);

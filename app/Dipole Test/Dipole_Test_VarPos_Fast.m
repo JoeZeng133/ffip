@@ -50,13 +50,9 @@ dipoles.filename = 'dipoles.in';
 
 %% theoretical fields
 Omega = 2 * pi * Ft;
-lorentz = @(w, rel_e, fp, delta) rel_e ./ (1 + 1j * (w / (2 * pi * fp)) * (delta / fp) - (w / (2 * pi * fp)).^2);
-drude = @(w, fp, gamma) (2 * pi * fp)^2 ./ (1j * w * (2 * pi * gamma) - w.^2);
-deybe = @(w, rel_e, tau) rel_e ./ (1 + 1j * w * tau);
-
 er_func = @fic1;
 
-figure(1)
+figure(1) 
 ft_samples = c0 ./ linspace(100e-9, 2000e-9, 100);
 [~, er_samples] = er_func(2 * pi * ft_samples);
 plot(3e8 ./ ft_samples / 1e-9, real(er_samples)), hold on
@@ -104,7 +100,7 @@ nf.output_file = 'output.out';
 gen_config(basic, medium, geometry, source, 'nearfield', nf, 'num_proc', 2, 'step_output', 1);
 
 %% simulated fields
-call_exe('std_config')
+% call_exe('std_config')
 data = load('output.out');
 make_complex = @(x, y) x + 1j * y;
 ricker = @(t, fp, d) (1 - 2 * (pi * fp * (t - d)).^2) .* exp(-(pi * fp * (t - d)).^2);

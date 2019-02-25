@@ -177,8 +177,31 @@ void read_source(istream& fin, Simulation& sim) {
 	fin >> c;
 	if (c != '{')
 		throw runtime_error("medium format is not right");
-	
 	fin >> type;
+
+	// x polarized light, tf/sf implementation
+	if (type == "plane") {
+		int dim_neg, dim_pos;
+		char c;
+		fin >> dim_neg >> dim_pos >> c >> fp >> d;
+
+		Medium const* bg_medium = sim.get_bg_medium();
+		Plane_Wave projector(sim.get_dx(), sim.get_dt(), dim_neg, dim_pos);
+
+		projector.set_medium(bg_medium->get_e_inf(), bg_medium->get_u_inf());
+		projector.set_PML(PML(6, 0.8 * 4 / (sim.get_dx() * z0)));
+
+		if (c == 'r') {
+			projector.set_excitation(make_ricker_func(fp, d));
+		}
+
+		if (c == 's') {
+			projector.set_excitation(make_sin_func(fp, d));
+		}
+		sim.add_projector(projector);
+	}
+
+	//x polarized light, current implementation
 	if (type == "plane2") {
 		char c;
 		double pos;
@@ -191,25 +214,25 @@ void read_source(istream& fin, Simulation& sim) {
 		}
 	}
 
+	//user defined polarization, current implementation
 	if (type == "plane3") {
 		char c;
 		double pos;
 		int polarization;
 		fin >> c >> fp >> d >> pos >> polarization;
 		if (c == 'r') {
-			sim.add_plane_wave(ricker, fp, d, 1, pos, static_cast<Coord_Type>(polarization));
+			sim.add_plane_wave(ricker, fp, d, 1, pos, static_cast<Direction>(polarization));
 		}
 		else {
-			sim.add_plane_wave(sine, fp, d, 1, pos, static_cast<Coord_Type>(polarization));
+			sim.add_plane_wave(sine, fp, d, 1, pos, static_cast<Direction>(polarization));
 		}
 	}
-	
-	
-	if (type == "plane") {
-		int dim_neg, dim_pos;
+
+	//user defined polarization, tf/sf implementation
+	if (type == "plane4") {
+		int dim_neg, dim_pos, polarization;
 		char c;
-		double ref_pos;
-		fin >> dim_neg >> dim_pos >> c >> fp >> d >> ref_pos;
+		fin >> dim_neg >> dim_pos >> c >> fp >> d >>polarization;
 		
 		Medium const* bg_medium = sim.get_bg_medium();
 		Plane_Wave projector(sim.get_dx(), sim.get_dt(), dim_neg, dim_pos);
@@ -218,16 +241,13 @@ void read_source(istream& fin, Simulation& sim) {
 		projector.set_PML(PML(6, 0.8 * 4 / (sim.get_dx() * z0)));
 
 		if (c == 'r') {
-			projector.set_excitation(make_ricker_func(fp, d));
+			projector.set_excitation(make_ricker_func(fp, d), 1, static_cast<Direction>(polarization));
 		}
 
 		if (c == 's') {
-			projector.set_excitation(make_sin_func(fp, d));
+			projector.set_excitation(make_sin_func(fp, d), 1, static_cast<Direction>(polarization));
 		}
-		
-		projector.set_ref_output("reference.out", ref_pos);
-		
-		sim.add_inc_source(new Inc_Source(projector));
+		sim.add_projector(projector);
 	}
 	
 	if (type == "dipole") {
