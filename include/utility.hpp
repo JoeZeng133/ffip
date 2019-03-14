@@ -11,14 +11,12 @@
 #include <thread>
 #include <complex>
 #include <iomanip>
-#include <atomic>
-#include <condition_variable>
-#include <mutex>
 #include <numeric>
 #include <future>
 #include <valarray>
 #include <type_traits>
-
+#include <mpi.h>
+#include <medium.hpp>
 
 namespace ffip {
 	/* Exception*/
@@ -29,22 +27,36 @@ namespace ffip {
 	struct Out_of_the_Domain{};
 	
 	/* type aliases */
-    using real = double;
-	using real_arr = std::vector<real>;
-	using complex_pair = std::pair<std::complex<real>, std::complex<real>>;
-	using complex_num = std::complex<real>;
+	using double_arr = std::vector<double>;
+	using complex_pair = std::pair<std::complex<double>, std::complex<double>>;
+	using complex_num = std::complex<double>;
 	using complex_arr = std::vector<complex_num>;
 
-    /* constants */
-	extern const real e0, u0, z0, c0;
-	extern const real pi;
+	extern const double pi;
 
 	/* enums with implied bit pattern for calculations*/
 	enum Direction {X = 0, Y = 1, Z = 2};
 	enum Side {Low = -1, High = 1};
 	enum Coord_Type {Ex = 0b001, Ey = 0b010, Ez = 0b100, Hx = 0b110, Hy = 0b101, Hz = 0b011, 
-		Corner = 0b000, Center = 0b111, All = 0b1111, None = 0b1000};
-	
+		Dx = 0b1001, Dy = 0b1010, Dz = 0b1100, Bx = 0b1110, By = 0b1101, Bz = 0b1011,
+		Corner = 0b000, Center = 0b111, All = 0b1000, None = 0b1001};
+
+	//count the number of 1s in the first 4 bits
+	constexpr unsigned int count_hex_bits(int x) {
+		return (x & 1) + ((x & 2) >> 1) + ((x & 4) >> 2) + ((x & 8) >> 3);
+	}
+
+	//get direction integer from coord_type
+	constexpr int get_dir_from_ctype(Coord_Type ctype) {
+		ctype = Coord_Type(ctype & 0b111);
+		if (ctype == Ex || ctype == Hx) return 0;
+		if (ctype == Ey || ctype == Hy) return 1;
+		if (ctype == Ez || ctype == Hz) return 2;
+
+		return -1;
+	}
+
+
 	constexpr bool is_E_Point(const Coord_Type ctype) {
 		return (ctype == Ex || ctype == Ey || ctype == Ez);
 	}
@@ -52,165 +64,115 @@ namespace ffip {
 	constexpr bool is_M_Point(const Coord_Type ctype) {
 		return (ctype == Hx || ctype == Hy || ctype == Hz);
 	}
-	/* forward declrations */
-	template<typename T> struct Vec3;
-
-    /* tags */
-	struct side_low_tag;
-	struct side_high_tag;
 	
-	struct dir_x_tag;
-	struct dir_y_tag;
-	struct dir_z_tag;
-	
-	struct e_tag;
-	struct h_tag;
-	
-	struct hx_tag;
-	struct hy_tag;
-	struct hz_tag;
-	struct ex_tag;
-	struct ey_tag;
-	struct ez_tag;
-	
-	/* lower than something */
-    struct side_low_tag{
-		using opposite_side = side_high_tag;
-		static const int val;
-		static int get_next_int(int x);
-		static int round(real x);
-		
-		template<typename T>
-		static T& choose_between(T& a, T& b) {
-			return a;
-		}
-	};
-
-	/* higher than sth */
-    struct side_high_tag {
-		using opposite_side = side_low_tag;
-		static const int val;
-		static int get_next_int(int x);
-		static int round(real x);
-		
-		template<typename T>
-		static T& choose_between(T& a, T& b) {
-			return b;
-		}
-	};
-
-	/* odd number, val = 1 */
-    struct odd_tag{
-		static const int val;
-	};
-	
-	/* even number, val = 0 */
-    struct even_tag{
-		static const int val;
-	};
-	
-	/* x direction, x1(y), x2(z), x3(x) */
-	struct dir_x_tag{
-		using x1 = dir_y_tag;
-		using x2 = dir_z_tag;
-		
-		using x1_a = dir_y_tag;
-		using x2_a = dir_z_tag;
-		
-		using z = dir_y_tag;
-		
-		static const int val;
-		static const Coord_Type E;
-		static const Coord_Type H;
-		
-	};
-	
-	/* y direction, x1(z), x2(x), x3(y)*/
-	struct dir_y_tag{
-		using x1 = dir_z_tag;
-		using x2 = dir_x_tag;
-		
-		using x1_a = dir_x_tag;
-		using x2_a = dir_z_tag;
-		
-		using z = dir_x_tag;
-		
-		static const int val;
-		static const Coord_Type E;
-		static const Coord_Type H;
-	};
-	
-	/* z direction, x1(x), x2(y), x3(z)*/
-	struct dir_z_tag{
-		using x1 = dir_x_tag;
-		using x2 = dir_y_tag;
-		
-		using x1_a = dir_x_tag;
-		using x2_a = dir_y_tag;
-		
-		using z = dir_z_tag;
-		
-		static const int val;
-		static const Coord_Type E;
-		static const Coord_Type H;
-	};
-	
-	struct e_tag {};
-	struct h_tag {};
-	
-	struct hx_tag : public dir_x_tag, public h_tag {
-		using dir_base = dir_x_tag;
-		using f_base = h_tag;
-		static const Coord_Type ctype;
-	};
-	
-	struct hy_tag : public dir_y_tag, public h_tag {
-		using dir_base = dir_y_tag;
-		using f_base = h_tag;
-		static const Coord_Type ctype;
-	};
-	
-	struct hz_tag : public dir_z_tag, public h_tag {
-		using dir_base = dir_z_tag;
-		using f_base = h_tag;
-		static const Coord_Type ctype;
-	};
-	
-	struct ex_tag : public dir_x_tag, public e_tag{
-		using dir_base = dir_x_tag;
-		using f_base = e_tag;
-		static const Coord_Type ctype;
-	};
-	
-	struct ey_tag : public dir_y_tag, public e_tag {
-		using dir_base = dir_y_tag;
-		using f_base = e_tag;
-		static const Coord_Type ctype;
-	};
-	
-	struct ez_tag : public dir_z_tag, public e_tag {
-		using dir_base = dir_z_tag;
-		using f_base = e_tag;
-		static const Coord_Type ctype;
-	};
-	
-	template<typename T = real>
+	// light weight 3 element vector
+	template<typename T = double>
 	struct Vec3{
 		using value_type = T;
-		/* data members */
+
 		T x{}, y{}, z{};
 
-		/* Semiregular members*/
 		Vec3() = default;
 		Vec3(T _x, T _y, T _z): x(_x), y(_y), z(_z) {}
 		
+		// copy construction
 		template<typename T2>
-		explicit Vec3(const Vec3<T2>&);			//copy construction
+		explicit Vec3(const Vec3<T2>& other): x(other.x), y(other.y), z(other.z) {}
 		
+		// copy assignment
 		template<typename T2>
-		Vec3& operator=(const Vec3<T2>&) ;		//copy assignment
+		Vec3& operator=(const Vec3<T2>& other) {
+			return Vec3{other};
+		};
 
-		/* function members */
+		/* arithmetic operations */
+		template<typename T2>
+		std::comon_type_t<T, T2> dot(const Vec3<T2>& other) const {
+			return x * other.x + y * other.y + z * other.z;
+		}
+
+		template<typename T2>
+		Vec3<std::common_type_t<T, T2>> operator*(const T2 mult) const {
+			return {x * mult, y * mult, z * mult};
+		}
+
+		template<typename T2>
+		Vec3<std::common_type_t<T, T2>> operator*(const Vec3<T2>& other) const {
+			return {x * other.x, y * other.y, z * other.z};
+		}
+
+		template<typename T2>
+		Vec3<std::common_type_t<T, T2>> operator+(const T2 add) const {
+			return {x + add, y + add, z + add};
+		}
+
+		template<typename T2>
+		Vec3<std::common_type_t<T, T2>> operator+(const Vec3<T2>& other) const {
+			return {x + other.x, y + other.y, z + other.z};
+		}
+
+		template<typename T2>
+		Vec3<std::common_type_t<T, T2>> operator-(const T2 minus) const {
+			return {x - minus, y - minus, z - minus};
+		}
+
+		template<typename T2>
+		Vec3<std::common_type_t<T, T2>> operator-(const Vec3<T2>& other) const {
+			return {x - other.x, y - other.y, z - other.z};
+		}
+		
+		Vec3 ceil() const {
+			return { std::ceil(x), std::ceil(y), std::ceil(z) };
+		}
+
+		Vec3 floor() const {
+			return { std::floor(x), std::floor(y), std::floor(z) };
+		}
+
+		Vec3 abs() const {
+			return { std::abs(x),  std::abs(y), std::abs(z) };
+		}
+
+		T prod() const {
+			return x * y * z;	
+		}
+
+		/* generic opeartions */
+		template<int N>
+		T& get() {
+			if constexpr(N == 0)
+				return x;
+			else if constexpr(N == 1)
+				return y;
+			else if constexpr(N == 2)
+				return z;
+		}
+
+		template<int N>
+		const T& get() const {
+			if constexpr(N == 0)
+				return x;
+			else if constexpr(N == 1)
+				return y;
+			else if constexpr(N == 2)
+				return z;
+		}
+
+		T& operator[](const size_t n) {
+			if (n == 0)
+				return x;
+			else if (n == 1)
+				return y;
+			return z;
+		}
+
+		const T& operator[](const size_t n) {
+			if (n == 0)
+				return x;
+			else if (n == 1)
+				return y;
+			return z;
+		}
 
 		//get Coord_Type for the given comp coordinates
 		template<typename Dummy = T, typename = std::enable_if_t<std::is_integral<Dummy>::value>>
@@ -218,225 +180,85 @@ namespace ffip {
 			return static_cast<Coord_Type>((x & 1) | ((y & 1) << 1) | ((z & 1) << 2));
 		}
 	};
-	
-	using iVec3 = Vec3<int>;			//the most frequent 
-	using fVec3 = Vec3<real>;			//the 
+
+	template<typename T1, typename T2>
+	bool le_vec3(const Vec3<T1>& a, const Vec3<T2>& b) {
+		return a.x < b.x && a.y < b.y && a.z < b.z;
+	}
+
+	template<typename T1, typename T2>
+	bool leq_vec3(const Vec3<T1>& a, const Vec3<T2>& b) {
+		return a.x <= b.x && a.y <= b.y && a.z <= b.z;
+	}
+
+	using iVec3 = Vec3<int>;			
+	using fVec3 = Vec3<double>;	
 	using cVec3 = Vec3<complex_num>;
 	using sVec3 = Vec3<size_t>;
-	
-	template<typename T>
-		template<typename T2>
-	Vec3<T>::Vec3(const Vec3<T2>& other): x(other.x), y(other.y), z(other.z) {}
-	
-	template<typename T>
-	Vec3<T> ceil(const Vec3<T>& p) {
-		return { std::ceil(p.x), std::ceil(p.y), std::ceil(p.z) };
-	}
-
-	template<typename T>
-	Vec3<T> floor(const Vec3<T>& p) {
-		return { std::floor(p.x), std::floor(p.y), std::floor(p.z) };
-	}
-
-	template<typename T>
-	Vec3<T> abs(const Vec3<T>& p) {
-		return { std::abs(p.x),  std::abs(p.y), std::abs(p.z) };
-	}
-
-	template<typename T>
-	T prod(const Vec3<T>& p) {
-		return p.x * p.y * p.z;
-	}
-
-	template<typename T>
-		template<typename T2>
-	Vec3<T>& Vec3<T>::operator=(const Vec3<T2>& other) {
-		return Vec3<T>{other};
-	}
 
 	template<typename T, typename = std::enable_if_t<std::is_integral_v<T>>>
 	constexpr Vec3<T> dim2stride(const Vec3<T>& dim) {
 		return { 1, dim.x, dim.x * dim.y }; 
 	}
-	
-	/* point wise less */
-	template<typename T1, typename T2>
-	constexpr bool ElementWise_Less(const Vec3<T1>& a, const Vec3<T2>& b) {
-		return a.x < b.x && a.y < b.y && a.z < b.z;
-	}
-	
-	/* point wise less than*/
-	template<typename T1, typename T2>
-	constexpr bool ElementWise_Less_Eq(const Vec3<T1>& a, const Vec3<T2>& b) {
-		return a.x <= b.x && a.y <= b.y && a.z <= b.z;
-	}
-	
+
 	/* testing whether a point is inside of a box*/
 	template<typename T1, typename T2>
 	constexpr bool Is_Inside_Box(const Vec3<T1>& p1, const Vec3<T1>& p2, const Vec3<T2>& tp) {
-		return (ElementWise_Less_Eq(p1, tp) && ElementWise_Less_Eq(tp, p2));
+		return (leq_vec3(p1, tp) && leq_vec3(tp, p2));
 	}
 	
-	/* inner product*/
-	template<typename T1, typename T2>
-	constexpr decltype(T1{} * T2{}) inner_prod(const Vec3<T1>& a, const Vec3<T2>& b) {
-		return a.x * b.x + a.y * b.y +a.z * b.z;
-	}
-
-	/* dot product */
-	template<typename T1, typename T2>
-	constexpr Vec3<decltype(T1{} *T2{})> operator*(const Vec3<T1>& a, const Vec3<T2>& b) {
-		return { a.x * b.x, a.y * b.y, a.z * b.z };
-	}
-	
-	/* right scalar product */
-	template<typename T1, typename T2>
-	constexpr Vec3<decltype(T1{} * T2{})> operator*(const Vec3<T1>& a, const T2 b) {
-		return {a.x * b, a.y * b, a.z * b};
-	}
-	/* left scalar product*/
-	template<typename T1, typename T2>
-	constexpr Vec3<decltype(T1{} * T2{})> operator*(const T1 b, const Vec3<T2>& a) {
-		return {a.x * b, a.y * b, a.z * b};
-	}
-
-	/* right scalar addition */
-	template<typename T1, typename T2>
-	constexpr Vec3<decltype(T1{} + T2{})> operator+(const Vec3<T1>& a, const T2 b) {
-		return { a.x + b, a.y + b, a.z + b };
-	}
-	/* left scalar addition*/
-	template<typename T1, typename T2>
-	constexpr Vec3<decltype(T1{} + T2{})> operator+(const T1 b, const Vec3<T2>& a) {
-		return { a.x + b, a.y + b, a.z + b };
-	}
-	
-	/* point wise addtion */
-	template<typename T1, typename T2>
-	constexpr Vec3<decltype(T1{} + T2{})> operator+(const Vec3<T1>& a, const Vec3<T2>& b) {
-		return {a.x + b.x, a.y + b.y, a.z + b.z};
-	}
-	
-	/* point wise substraction */
-	template<typename T1, typename T2>
-	constexpr Vec3<decltype(T1{} - T2{})> operator-(const Vec3<T1>& a, const Vec3<T2>& b) {
-		return {a.x - b.x, a.y - b.y, a.z - b.z};
-	}
-
-	/* point wise substraction */
-	template<typename T1, typename T2>
-	constexpr Vec3<decltype(T1{} -T2{})> operator-(const T1 a, const Vec3<T2>& b) {
-		return { a - b.x, a - b.y, a - b.z };
-	}
-
-	/* point wise substraction */
-	template<typename T1, typename T2>
-	constexpr Vec3<decltype(T1{} -T2{})> operator-(const Vec3<T1>& a, const T2 b) {
-		return { a.x - b, a.y - b, a.z - b };
-	}
-	
-	/* right scaler division*/
-	template<typename T1, typename T2>
-	constexpr Vec3<decltype(T1{} / T2{})> operator/(const Vec3<T1>& a, const T2 b) {
-		return {a.x / b, a.y / b, a.z / b};
-	}
-	
-	/* make dir_x_tag the x3 axis */
-	template<typename T>
-	constexpr Vec3<T> rotate_frame(const Vec3<T>& p, dir_x_tag) {
-		return {p.y, p.z, p.x};
-	}
-	
-	/* make dir_y_tag the x3 axis */
-	template<typename T>
-	constexpr Vec3<T> rotate_frame(const Vec3<T>& p, dir_y_tag) {
-		return {p.z, p.x, p.y};
-	}
-	
-	/* make dir_z_tag the x3 axis */
-	template<typename T>
-	constexpr Vec3<T> rotate_frame(const Vec3<T>& p, dir_z_tag) {
-		return p;
+	/* make xN the x3 axis */
+	template<int N, typename T>
+	constexpr Vec3<T> rotate_frame(const Vec3<T>& p) {
+		if constexpr(N == 0)
+			return {p.y, p.z, p.x};
+		else if constexpr(N == 1)
+			return {p.z, p.x, p.y};
+		else if constexpr(N == 2)
+			return p;
 	}
 	
 	/* return the nearest integer (self included) that is even or odd*/
-	template<typename S, typename T>
+	template<int S, unsigned int T>
 	constexpr int get_nearest_int(const int x) {
-		return ((x & 1) ^ T::val)? S::get_next_int(x) : x;
-	}
-	
-	template<typename S, typename T>
-	constexpr int get_nearest_int(const real x) {
-		return get_nearest_int<S, T>(S::round(x));
-	}
-	
-	/* helper empty struct for accessing x,y,z elements of sth generically*/
-	template<typename D>
-	struct choose {
+		static_assert(T < 2, "T should be 0(even) or 1(odd)");
+		static_assert(S == 1 || S == -1, "S should be -1 or 1");
 		
-		template<typename T>
-		static typename T::value_type& get(T& v);
-
-		template<typename T>
-		static typename T::value_type const& get(const T& v);
-	};
-
-	template<>
-	template<typename T>
-	typename T::value_type& choose<dir_x_tag>::get(T& v) {
-		return v.x;
-	}
-
-	template<>
-	template<typename T>
-	typename T::value_type& choose<dir_y_tag>::get(T& v) {
-		return v.y;
-	}
-
-	template<>
-	template<typename T>
-	typename T::value_type& choose<dir_z_tag>::get(T& v) {
-		return v.z;
-	}
-
-	template<>
-	template<typename T>
-	typename T::value_type const& choose<dir_x_tag>::get(const T& v) {
-		return v.x;
-	}
-
-	template<>
-	template<typename T>
-	typename T::value_type const& choose<dir_y_tag>::get(const T& v) {
-		return v.y;
-	}
-
-	template<>
-	template<typename T>
-	typename T::value_type const& choose<dir_z_tag>::get(const T& v) {
-		return v.z;
+		return (x & 1) ^ T? x + S : x;
 	}
 	
+	template<int S, unsigned int T>
+	constexpr int get_nearest_int(const double x) {
+		static_assert(T < 2, "T should be 0(even) or 1(odd)");
+		static_assert(S == 1 || S == -1, "S should be -1 or 1");
+		
+		if constexpr(S == -1)
+			return get_nearest_int<S, T>(std::floor(x));
+		else
+			return get_nearest_int<S, T>(std::ceil(x));
+	}
+
 	/* get the nearest point of coord_type to a global computation point on side S (low or high)*/
-	template<typename S, typename T>
-	constexpr iVec3 get_nearest_point(const Vec3<T>& p, const Coord_Type type) {
+	template<int S, typename T>
+	constexpr iVec3 get_nearest_point(const Vec3<T>& p, const Coord_Type ctype) {
 		iVec3 res;
-		if (type & 1) {
-			res.x = get_nearest_int<S, odd_tag>(p.x);
+
+		if (ctype & 1) {
+			res.x = get_nearest_int<S, 1>(p.x);
 		} else {
-			res.x = get_nearest_int<S, even_tag>(p.x);
+			res.x = get_nearest_int<S, 0>(p.x);
 		}
 
-		if (type & 2) {
-			res.y = get_nearest_int<S, odd_tag>(p.y);
+		if (ctype & 2) {
+			res.y = get_nearest_int<S, 1>(p.y);
 		} else {
-			res.y = get_nearest_int<S, even_tag>(p.y);
+			res.y = get_nearest_int<S, 0>(p.y);
 		}
 
-		if (type & 4) {
-			res.z = get_nearest_int<S, odd_tag>(p.z);
+		if (ctype & 4) {
+			res.z = get_nearest_int<S, 1>(p.z);
 		} else {
-			res.z = get_nearest_int<S, even_tag>(p.z);
+			res.z = get_nearest_int<S, 0>(p.z);
 		}
 
 		return res;
@@ -447,35 +269,46 @@ namespace ffip {
 	 if coord_type is null, return fields of all types
 	 */
 	template<typename T1, typename T2>
-	inline std::pair<iVec3, iVec3> get_component_interior(const Vec3<T1>& p1, const Vec3<T2>& p2, const Coord_Type type) {
-		if (type == Coord_Type::All)
-			return {iVec3(std::ceil(p1.x), std::ceil(p1.y), std::ceil(p1.z)), iVec3(std::floor(p2.x), std::floor(p2.y), std::floor(p2.z))};
+    constexpr std::pair<iVec3, iVec3> 
+		get_component_interior(const Vec3<T1>& p1, const Vec3<T2>& p2, const Coord_Type type) {
 
-		return std::make_pair(	get_nearest_point<side_high_tag>(p1, type),
-								get_nearest_point<side_low_tag>(p2, type));
+		if (type == Coord_Type::All)
+			return {iVec3(p1.ceil()), iVec3(p2.floor())};
+
+		return std::make_pair(	get_nearest_point<1>(p1, type), get_nearest_point<-1>(p2, type));
 	}
 
 	/* return the smallest box*/
 	template<typename T1, typename T2>
-	inline std::pair<iVec3, iVec3> get_component_closure(const Vec3<T1>& p1, const Vec3<T2>& p2, const Coord_Type type) {
-		if (type == Coord_Type::All)
-			return {iVec3(std::floor(p1.x), floor(p1.y), std::floor(p1.z)), iVec3(std::ceil(p2.x), std::ceil(p2.y), std::ceil(p2.z))};
+	constexpr std::pair<iVec3, iVec3> 
+	get_component_closure(const Vec3<T1>& p1, const Vec3<T2>& p2, const Coord_Type type) {
 
-		return std::make_pair(	get_nearest_point<side_low_tag>(p1, type),
-								get_nearest_point<side_high_tag>(p2, type));
+		if (type == Coord_Type::All)
+			return {iVec3(p1.floor()), iVec3(p2.ceil())};
+
+		return std::make_pair(	get_nearest_point<-1>(p1, type), get_nearest_point<1>(p2, type));
 	}
 
 	/* return the intersection of two boxes specified by (p1, p2) and (q1, q2)*/
 	template<typename T>
-	std::pair<Vec3<T>, Vec3<T>> get_intersection(const Vec3<T>& p1, const Vec3<T>& p2, const Vec3<T>& q1, const Vec3<T>& q2) {
-		return std::make_pair<Vec3<T>, Vec3<T>>({std::max(p1.x, q1.x), std::max(p1.y, q1.y), std::max(p1.z, q1.z)},
-									{std::min(p2.x, q2.x),std::min(p2.y, q2.y), std::min(p2.z, q2.z)});
+	constexpr std::pair<Vec3<T>, Vec3<T>> get_intersection(const Vec3<T>& p1, const Vec3<T>& p2, const Vec3<T>& q1, const Vec3<T>& q2) {
+		return	{{std::max(p1.x, q1.x), std::max(p1.y, q1.y), std::max(p1.z, q1.z)},
+				{std::min(p2.x, q2.x),std::min(p2.y, q2.y), std::min(p2.z, q2.z)}};
 	}
 	
 	/* return a particular face of a box region specified by (p1, p2)*/
-	template<typename D, typename S, typename T>
-	std::pair<Vec3<T>, Vec3<T>> get_face(Vec3<T> p1, Vec3<T> p2) {
-		choose<D>::get(S::choose_between(p2, p1)) = choose<D>::get(S::choose_between(p1, p2));
+	template<unsigned int D, int S, typename T>
+	constexpr std::pair<Vec3<T>, Vec3<T>> 
+		get_face(Vec3<T> p1, Vec3<T> p2) {
+		
+		static_assert(S == -1 || S == 1, "S must be -1 or 1");
+		if constexpr(S == 1) {
+			p1.get<D>() = p2.get<D>();
+		}
+		else {
+			p2.get<D>() = p1.get<D>();
+		}
+		
 		return {p1, p2};
 	}
 
@@ -485,127 +318,6 @@ namespace ffip {
 		return !(value < low) && !(high < value);
 	}
 
-    /* source functions */
-	enum Func { ricker, sine, gaussian };
-
-	auto make_gaussian_func(real sigma_t, real d = 0) -> std::function<real(const real)>;
-	auto make_sin_func(real freq, real d = 0) -> std::function<real(const real)>;
-	auto make_ricker_func(real fp, real d = 0) -> std::function<real(const real)>;
-	
-	/* fast 1 dimensional linear interpolation */
-	class interp1 {
-	public:
-		size_t dimx;
-		interp1(const size_t _dimx): dimx(_dimx) {
-			if (dimx <= 1)
-				throw std::runtime_error("Invalid Side");
-		}
-		
-		template<typename T>
-		T get(const std::vector<T>& data, const real x) {
-			if (data.size()!= dimx)
-				throw std::runtime_error("Invalid Data Size");
-			
-			if (x < 0 || x >= dimx - 1)
-				throw Out_of_the_Domain{};
-			
-			size_t x_b = std::floor(x);
-			return data[x_b] * (x_b + 1 - x) + data[x_b + 1] * (x - x_b);
-		}
-	};
-	
-	
-	/* fast 2 dimensional linear interpolation */
-	class interp2 {
-	public:
-		size_t dimx, dimy;
-		size_t size, stride_y;
-		
-		interp2(const size_t _dimx, const size_t _dimy): dimx(_dimx), dimy(_dimy) {
-			if (dimx <= 1 || dimy <= 1)
-				throw std::runtime_error("Invalid Size");
-			
-			size = dimx * dimy;
-			stride_y = dimx;
-		}
-		
-		template<typename T>
-		T get(const std::vector<T>& data, const real y, const real x) {
-			if (data.size()!= size)
-				throw  std::runtime_error("Invalid Data Size");
-			
-			if (x < 0 || x > dimx - 1 || y < 0 || y > dimy - 1)
-				throw Out_of_the_Domain{};
-			
-			size_t xb = std::floor(x);
-			size_t yb = std::floor(y);
-			real tx = x - xb;
-			real ty = y - yb;
-			T const* ptr = &data[xb + yb * stride_y];
-			
-			return (1 - tx) * (1 - ty) * ptr[0] +
-			tx * (1 - ty) * ptr[1] +
-			(1 - tx) * ty * ptr[stride_y] +
-			tx * ty * ptr[1 + stride_y];
-		}
-	};
-	
-	/* fast 3 dimensional linear interpolation
-	 */
-	class interp3 {
-	public:
-		size_t dimx, dimy, dimz;
-		size_t size, stride_y, stride_z;
-		
-		interp3() = default;
-		interp3(const size_t _dimx, const size_t _dimy, const size_t _dimz): dimx(_dimx), dimy(_dimy), dimz(_dimz) {
-			if (dimx <= 1 || dimy <= 1 || dimz <= 1)
-				throw std::runtime_error("Invalid Size");
-			
-			size = dimx * dimy * dimz;
-			stride_y = dimx;
-			stride_z = dimx * dimy;
-		}
-		
-		template<typename T>
-		T get(const std::vector<T>& data, const real z, const real y, const real x) const {
-			if (data.size()!= size)
-				throw std::runtime_error("Invalid Data Size");
-			
-			if (x < 0 || x > dimx - 1 || y < 0 || y > dimy - 1|| z < 0 || z > dimz - 1)
-				throw Out_of_the_Domain{};
-			
-			size_t xb = std::floor(x);
-			size_t yb = std::floor(y);
-			size_t zb = std::floor(z);
-			real tx = x - xb;
-			real ty = y - yb;
-			real tz = z - zb;
-			T const* ptr = &data[xb + yb * stride_y + zb * stride_z];
-			
-			const T& c000 = ptr[0];
-			const T& c001 = ptr[1];
-			const T& c010 = ptr[stride_y];
-			const T& c011 = ptr[1 + stride_y];
-			const T& c100 = ptr[stride_z];
-			const T& c101 = ptr[stride_z + 1];
-			const T& c110 = ptr[stride_z + stride_y];
-			const T& c111 = ptr[stride_z + stride_y + 1];
-			
-			return (1 - tx) * (1 - ty) * (1 - tz) * c000 +
-			tx * (1 - ty) * (1 - tz) * c001 +
-			(1 - tx) * ty * (1 - tz) * c010 +
-			tx * ty * (1 - tz) * c011 +
-			(1 - tx) * (1 - ty) * tz * c100 +
-			tx * (1 - ty) * tz * c101 +
-			(1 - tx) * ty * tz * c110 +
-			tx * ty * tz * c111;
-		}
-	};
-	
-	/* Generic Interpolation class
-	 	two times slower than the fast one
-	 */
 #define tol_interp 1e-5
 	
 	template<int N>
@@ -630,7 +342,7 @@ namespace ffip {
 		}
 		
 		template<typename T, typename... Args>
-		T get_helper(T const* data, real xq, Args&&... args) const{
+		T get_helper(T const* data, double xq, Args&&... args) const{
 			if ( dimn == 1)		//ignore this dimension if it is 1
 				return base_class::get_helper(data, args...);
 			
@@ -639,7 +351,7 @@ namespace ffip {
 			if (xq < 0) return base_class::get_helper(data, args...);
 			
 			size_t index = xq;
-			real tx = xq - index;
+			double tx = xq - index;
 			
 			if (tx < tol_interp)
 				return base_class::get_helper(data + stride * index, args...);
@@ -655,7 +367,7 @@ namespace ffip {
 		}
 		
 		template<typename T, typename... Args>
-		void put_helper(T* data, const T& val, real xq, Args&&... args) const{
+		void put_helper(T* data, const T& val, double xq, Args&&... args) const{
 			if ( dimn == 1) {	//ignore 1 dimension
 				base_class::get_helper(data, args...);
 				return;
@@ -666,7 +378,7 @@ namespace ffip {
 			if (xq < 0) return base_class::put_helper(data, val, args...);
 			
 			size_t index = xq;
-			real tx = xq - index;
+			double tx = xq - index;
 			
 			if (tx < tol_interp)
 				base_class::put_helper(data + stride * index, val, args...);
@@ -680,7 +392,6 @@ namespace ffip {
 		template<typename T, typename... Args>
 		void put(std::vector<T>& vec, const T& val, Args&&... args) const {
 			static_assert(sizeof...(args) == N, "Invalid Request");
-			std::fill(vec.begin(), vec.end(), 0);
 			return put_helper(vec.data(), val, args...);
 		}
 	};
@@ -704,12 +415,12 @@ namespace ffip {
 		}
 		
 		template<typename T>
-		T get(const std::vector<T>& vec, real xq) const{
+		T get(const std::vector<T>& vec, double xq) const{
 			return get_helper(vec.data(), xq);
 		}
 		
 		template<typename T>
-		T get_helper(T const* data, real xq) const{
+		T get_helper(T const* data, double xq) const{
 			if (dimn == 1)		//ignore this dimension if it is 1
 				return data[0];
 			
@@ -717,7 +428,7 @@ namespace ffip {
 			if (xq < 0) return data[0];
 			
 			size_t index = xq;
-			real tx = xq - index;
+			double tx = xq - index;
 			
 			if (tx < tol_interp)
 				return data[index];
@@ -726,13 +437,12 @@ namespace ffip {
 		}
 		
 		template<typename T>
-		void put(std::vector<T>& vec, const T& val, real xq) const{
-			std::fill(vec.begin(), vec.end(), 0);
+		void put(std::vector<T>& vec, const T& val, double xq) const{
 			return put_helper(vec.data(), val, xq);
 		}
 		
 		template<typename T>
-		void put_helper(T* data, const T& val, real xq) const{
+		void put_helper(T* data, const T& val, double xq) const{
 			if ( dimn == 1) {		//ignore this dimension if it is 1
 				data[0] = val;
 				return;
@@ -749,7 +459,7 @@ namespace ffip {
 			}
 			
 			size_t index = xq;
-			real tx = xq - index;
+			double tx = xq - index;
 			
 			if (tx < tol_interp)
 				data[index] = val;
@@ -760,150 +470,6 @@ namespace ffip {
 		}
 	};
 
-    /* linear interpolation on fixed interval grids*/
-    class GriddedInterp {
-    private:
-		real_arr v;
-		int dimx, dimy, dimz;
-		real x0, y0, z0;
-		real dx, dy, dz;
-        std::string file_name;
-		interp3 interp;
-    public:
-        GriddedInterp(std::string file_name);
-		
-		GriddedInterp(const GriddedInterp&) = default;				//copy
-		GriddedInterp& operator=(const GriddedInterp&) = default;
-		GriddedInterp(GriddedInterp&&) = default;					//move
-		GriddedInterp& operator=(GriddedInterp&&) = default;
-
-        /* Function Members */
-        real get(const fVec3& p) const;			//return value at a point, 0 dimension is ignored
-        fVec3 get_p1() const;								//return the lower corner point
-        fVec3 get_p2() const;								//return the upper corner point
-    };
-	
-	/* n dimensional linear integration, 1 dimension,
-	 xn does not need to have fixed interval*/
-	template<typename T>
-	T integral_ndim(const T* data, const std::vector<real> &xn) {
-		if(xn.size() == 0)
-			throw std::runtime_error("Invalid array size");
-		
-		// ignore zero dimension
-		if(xn.size() == 1)
-			return data[0];
-		
-		int size = xn.size();
-		T res = 0.5 * (xn[1] - xn[0]) * data[0] + 0.5 * (xn[size - 1] - xn[size - 2]) * data[size-1];
-		
-		for(int i = 1; i < size - 1; ++i) {
-			res += 0.5 * data[i] * (xn[i + 1] - xn[i - 1]);
-		}
-		
-		return res;
-	}
-	
-	/* empty struct to get size of an object*/
-	template<typename T>
-	struct size_trait {
-		static size_t size(const T&) {return 1;};
-	};
-	
-	/* return size if it is a vector */
-	template<typename T>
-	struct size_trait<std::vector<T>> {
-		static size_t size(const std::vector<T>& v) {return v.size();}
-	};
-	
-	/* get size of series of vectors, one vector */
-	template<typename T>
-	inline size_t get_vec_size(const T& vn) {
-		return size_trait<T>::size(vn);
-	}
-	
-	/* get size of series of vectors, template */
-	template<typename T, typename... Args>
-	inline size_t get_vec_size(const T& vn, Args... args) {
-		return size_trait<T>::size(vn) * get_vec_size(args...);
-	}
-	
-	/* n dimensional linear integration, template,
-	 xn does not need to have fixed interval*/
-	template<typename T, typename... Args>
-	T integral_ndim(const T* data, const std::vector<real> &xn, Args&&... args) {
-		if (xn.size() == 0)
-			throw std::runtime_error("Invalid array size");
-		
-		// ignore zero dimension
-		if (xn.size() == 1)
-			return integral_ndim(data, args...);
-		
-		
-		std::vector<T> tmp(xn.size());
-		size_t shift = get_vec_size(args...);
-		
-		for(int i = 0; i < xn.size(); ++i) {
-			tmp[i] = integral_ndim(data + shift * i, args...);
-		}
-		
-		return integral_ndim(tmp.data(), xn);
-	}
-	
-	/* PML class for calculating k, b, c arrays used in updating perfectly matched layer using CPML*/
-	class PML {
-	private:
-		int d{ 0 };
-		real sigma_max{ 0 };
-		real k_max{1};
-		real a_max{0};
-		int m{3};
-		int m_a{1};
-
-	public:
-		/* constructors*/
-		PML() = default;
-		PML(int d, real sigma_max, real k_max = 1, real a_max = 0, int m = 3, int m_a = 1);
-
-		PML(const PML&) = default;				//copy
-		PML& operator=(const PML&) = default;
-		PML(PML&&) = default;						//move
-		PML& operator=(PML&&) = default;
-
-		int get_d() const;
-		real get_sigma(const real x) const;
-		real get_a(const real x) const;
-		
-		real get_k(const real x) const;
-		real get_b(const real x, const real dt) const;
-		real get_c(const real x, const real dt) const;
-
-		static real optimal_sigma_max(real m_k, real dx, real er = 1, real ur = 1);
-	};
-	
-	/* extra field information for use in dispersive field updates
-	stores e(n-2) and polarization p(n) p(n - 1)
-	 */
-	struct Dispersive_Field {
-		union {real ex2, ey2, ez2, e2, hx2, hy2, hz2, h2, eh2;};
-		std::vector<real> p1, p;
-		Dispersive_Field(const size_t num_poles);
-		size_t get_num_poles() const;
-	};
-
-	/* compact struct making localization better to achieve */
-	template<int N>
-	struct Dispersive_Updates {
-
-
-		real eh2;
-		std::array<real, N> p1, p;
-	};
-	
-	/* an iterator to iterate through a box region specified by two corner regions [p1, p2]
-	 it allows iteration of particular coord_type points: ex, ..., ez, hx, ..., hz
-	 for null, it will loop through all points
-	 */
 	struct my_iterator {
 		using value_type = int;
 		
@@ -928,90 +494,121 @@ namespace ffip {
 		size_t get_size() const;			//return size of the region
 		sVec3 get_dim() const;		//return the dimension of the region
 	};
-	
-	/* Barrier implementation with reset at the end*/
-	class Barrier
-	{
-	private:
-		std::mutex m_mutex;
-		std::condition_variable m_cv;
 
-		size_t m_count;
-		const size_t m_initial;
+	/*
+		3D Yee-Cells data
+		for dipole source creation and fields interpolation
+	*/
+    struct Yee3 {
+		//physical coordinates
+        fVec3 phys_p1, phys_p2;
+		//grid coordinates
+        iVec3 grid_p1, grid_p2;
+		//grid distance times 2
+        double dx;
+		//dimensions of the array
+		iVec3 dim;
+		//strides of the array
+		sVec3 stride;
 
-		enum State : unsigned char {
-			Up, Down
-		};
-		State m_state;
-		   
-	public:
-		explicit Barrier(std::size_t count);
-		Barrier& operator=(Barrier&&) = delete;
-		Barrier& operator=(const Barrier&) = delete;
-		void Sync();
-		size_t get_num_proc() const;
-	};
+		Yee3(iVec3 grid_p1, iVec3 grid_p2, fVec3 phys_p1, double dx);
 
-	/*class Barrier
-	{
-	public:
-		Barrier(const Barrier&) = delete;
-		Barrier& operator=(const Barrier&) = delete;
+		//get grid corner points
+		iVec3 get_grid_p1() const;
+		iVec3 get_grid_p2() const;
 
-		explicit Barrier(unsigned int count) :
-			m_count(count), m_generation(0),
-			m_count_reset_value(count)
-		{}
+		//get coordinate from a index, throws error if outside
+		iVec3 get_coord_from_index(size_t n) const;
 
-		unsigned int get_num_proc() const {
-			return m_count_reset_value;
+		//get index for a given point, undefined if pos is outside
+		size_t get_index_from_coord(const iVec3& pos) const;
+		size_t get_index_from_coord(int i, int j, int k) const;
+
+		//get index offset at (i, j, k) relative to lower corner points
+		size_t get_index_offset(const iVec3& pos) const;
+		size_t get_index_offset(int i, int j, int k) const;
+
+		//get corresponding dimension
+		template<int N>
+		size_t get_dim() const {
+			return dim.get<N>();
 		}
 
-		void Sync()
-		{
-			unsigned int gen = m_generation.load();
-			if (--m_count == 0)
-			{
-				if (m_generation.compare_exchange_weak(gen, gen + 1))
-				{
-					m_count = m_count_reset_value;
-				}
-				return;
-			}
-			while ((gen == m_generation) && (m_count != 0))
-				std::this_thread::yield();
-		}
-	private:
-		std::atomic<unsigned int> m_count;
-		std::atomic<unsigned int> m_generation;
-		unsigned int m_count_reset_value;
-	};*/
+		//return interpolation details
+		std::vector<std::pair<size_t, double>> get_interp_info(bool is_grid_coordinate, fVec3 pos, Coord_Type ctype);
 
-	/* Global Barrier for use in anywhere*/
-	extern Barrier* glob_barrier;
-	void set_num_proc(const size_t num_proc);
+		//access the raw value from a grid coordinate, undefined if not insdie the grid
+		template<typename T>
+		T get_raw_val(const std::vector<T>& data, const iVec3& pos) const {
+			return data[(pos - grid_p1).dot(stride)];
+		}
 
-	// divide a list evenly
-	template<typename T>
-	inline void vector_divider(const std::vector<T>& list, const size_t rank, const size_t num_proc, size_t& idx1, size_t& idx2) {
-		if (num_proc > list.size()) {
-			if (rank >= list.size()) {
-				idx1 = idx2 = 0;
-			}
-			else {
-				idx1 = rank;
-				idx2 = rank + 1;
-			}
+		//determine whether a point is inside a grid
+		bool is_in_grid(bool is_grid_coordinate, const fVec3& pos) const;
+		
+		//convert a physical coordinate to a grid coordinate
+		fVec3 phys_coord2grid_coord(const fVec3& pos) const;
+
+		//transpose value into a 3d gridded data, return whether successful
+        template<typename T>
+        bool transpose_interp
+		(std::vector<T>& data, bool is_grid_coordinate, fVec3 pos, T amp, Coord_Type ctype) const {
+
+			if (!is_grid_coordinate)
+				pos = (pos - phys_p1) * (2 / dx);
+
+			if(!Is_Inside_Box(grid_p1, grid_p2, pos))
+				return false;
+
+			iVec3 base = get_nearest_point<-1>(pos, ctype);
+
+			double sx = (pos.x - base.x) / 2;
+			double sy = (pos.y - base.y) / 2;
+			double sz = (pos.z - base.z) / 2;
+			T* base_ptr = (base - grid_p1).dot(stride) + data.data();
+
+			base_ptr[get_index_offset(0, 0, 0)] += (1 - sx) * (1 - sy) * (1 - sz)	* amp;
+			base_ptr[get_index_offset(2, 0, 0)] += sx * (1 - sy) * (1 - sz)			* amp;
+			base_ptr[get_index_offset(0, 2, 0)] += (1 - sx) * sy * (1 - sz)			* amp;
+			base_ptr[get_index_offset(2, 2, 0)] += sx * sy * (1 - sz)				* amp;
+			base_ptr[get_index_offset(0, 0, 2)] += (1 - sx) * (1 - sy) * sz			* amp;
+			base_ptr[get_index_offset(2, 0, 2)] += sx * (1 - sy) * sz				* amp;
+			base_ptr[get_index_offset(0, 2, 2)] += (1 - sx) * sy * sz 				* amp;
+			base_ptr[get_index_offset(2, 2, 2)] += sx * sy * sz						* amp;
+
+			return true;
 		}
-		else {
-			idx1 = rank * list.size() / num_proc;
-			idx2 = (rank + 1) * list.size() / num_proc;
+
+		//trilinear interpolate a value from a 3d gridded data, undefined if not inside the grid
+		template<typename T>
+		T interp
+		(const std::vector<T>& data, bool is_grid_coordinate, const fVec3& pos, const Coord_Type ctype) const {
+			if (!is_grid_coordinate)
+				pos = (pos - phys_p1) * (2 / dx);
+
+			if(!Is_Inside_Box(grid_p1, grid_p2, pos))
+				return T{};
+
+			iVec3 base = get_nearest_point<-1>(pos, ctype);
+
+			double sx = (pos.x - base.x) / 2;
+			double sy = (pos.y - base.y) / 2;
+			double sz = (pos.z - base.z) / 2;
+			T* base_ptr = (base - grid_p1).dot(stride) + data.data();
+
+			return (1 - sx) * (1 - sy) * (1 - sz) * base_ptr[get_index_offset(0, 0, 0)] + 
+					sx * (1 - sy) * (1 - sz) * 		base_ptr[get_index_offset(2, 0, 0)] +
+					(1 - sx) * sy * (1 - sz) * 		base_ptr[get_index_offset(0, 2, 0)] +
+					sx * sy * (1 - sz) * 			base_ptr[get_index_offset(2, 2, 0)] +
+					(1 - sx) * (1 - sy) * sz * 		base_ptr[get_index_offset(0, 0, 2)] +
+					sx * (1 - sy) * sz * 			base_ptr[get_index_offset(2, 0, 2)] +
+					(1 - sx) * sy * sz * 			base_ptr[get_index_offset(2, 2, 2)] +
+					sx * sy * sz * 					base_ptr[get_index_offset(2, 2, 2)];
 		}
-	}
-	extern iVec3 vec3_base[3];
-	
+    };
+
 	//output overloading
-	std::ostream& operator<<(std::ostream& os, const complex_num& c);
+	std::ostream& operator<<(std::ostream& os, const std::complex<double>& c);
 	
 	template<typename T>
 	std::ostream& operator<<(std::ostream& os, const Vec3<T>& c) {
@@ -1021,11 +618,24 @@ namespace ffip {
 
 	// to pass around classes and stuff
 	struct Config {
-		real dt, dx;			//discretized length and time
+		double dt, dx;			//discretized length and time
 		iVec3 roi_p1, roi_p2;	//region of interest, 0->dim * 2
 		iVec3 sim_p1, sim_p2;	//region of simulation, everything included
 		iVec3 ch_p1, ch_p2;		//region of chunk, collection of chunks is a disjoint cover of region of simulation
 		iVec3 tf_p1, tf_p2;		//region of total field
 		iVec3 phys_p1, phys_p2;	//region of physical field, region of simulation minus PML layer
 	};
+
+	//scalar functions depending on positions
+	template<typename T>
+	using Scalar_Function = std::function<T(const fVec3&)>;
+
+	//Material functions for use in user-defined geometry
+	using Material_Function = Scalar_Function<Medium>;
+
+	//Gaussian first derivative
+	double Gaussian1(double t, double width);
+
+	//Gaussian second derivative
+	double Gaussian2(double t, double width);
 }

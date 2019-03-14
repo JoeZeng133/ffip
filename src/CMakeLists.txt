@@ -1,15 +1,15 @@
 project(ffip)
-set (CMAKE_CXX_STANDARD 17)
 
 set(SOURCE_FILES
 simulation.cpp
 utility.cpp
 medium.cpp
-chunk.cpp
+fields.cpp
 geometry.cpp
-analysis.cpp
-source.cpp
+dft.cpp
+structure.cpp
 )
 
 add_library(ffip STATIC ${SOURCE_FILES} ${HEADER_FILES})
-# target_link_libraries(ffip ${Boost_LIBRARIES})
+set_property(TARGET ffip PROPERTY CXX_STANDARD 17)
+
