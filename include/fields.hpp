@@ -89,26 +89,7 @@ namespace ffip {
         
         //PML layer initialization helper functions
         template<unsigned int F3>
-        void PML_init_helper(const std::array<double_arr, 3>& k, const std::array<double_arr, 3>& b, const std::array<double_arr, 3>& c) {
-            constexpr Coord_Type ctype = F3;
-            constexpr int x3 = get_dir_from_ctype(ctype);
-            constexpr int x1 = (x3 + 1) % 3;
-            constexpr int x2 = (x3 + 2) % 3;
-
-            for (auto itr = my_iterator(cell.get_grid_p1(), cell.get_grid_p2(), ctype); !itr.is_end(); itr.advance()) {
-                iVec3 pos = itr.get_vec();
-                if (Is_Inside_Box(config.phys_p1, config.phys_p2, pos))
-                    continue;
-
-                size_t index = get_index_ch(pos);
-                int x1_index = pos.get<x1>() - choose<x1>::get(ch_p1);
-                int x2_index = choose<x2>::get(pos) - choose<x2>::get(ch_p1);
-                
-                w_PML->add_update_point<x3>(index, 
-                    b[x1][x1_index], c[x1][x1_index] / dx, 1 / dx / k[x1][x1_index],
-                    b[x2][x2_index], c[x2][x2_index] / dx, 1 / dx / k[x2][x2_index]);
-            }
-        }
+        void PML_init_helper(const std::array<double_arr, 3>& k, const std::array<double_arr, 3>& b, const std::array<double_arr, 3>& c);
 
         //getters inside chunk, return 0 if outside chunk
         double get_ex(const fVec3& pos);
@@ -123,10 +104,14 @@ namespace ffip {
         double get_bx(const fVec3& pos);
         double get_by(const fVec3& pos);
         double get_bz(const fVec3& pos);
-        double get_field(const iVec3& pos); //raw getter
+
         //getter helper functions
         double get_eh_helper(const fVec3& pos, Coord_Type ctype);
         double get_db_helper(const fVec3& pos, Coord_Type ctype);
+
+        //raw getter functions
+        double get_eh_raw(const iVec3& pos);
+        double get_db_raw(const iVec3& pos);
 
         //update jwD = curlE - J
         void update_diffd(double time);
@@ -137,26 +122,28 @@ namespace ffip {
     };
 
 
-    template<int D>
-	void Fields::PML_init_helper(const std::array<double_arr, 3>& k, const std::array<double_arr, 3>& b, const std::array<double_arr, 3>& c) {
-		using x3 = typename F::dir_base;
-		using x1 = typename F::dir_base::x1;
-		using x2 = typename F::dir_base::x2;
+    template<unsigned int F3>
+    void Fields::PML_init_helper(const std::array<double_arr, 3>& k, const std::array<double_arr, 3>& b, const std::array<double_arr, 3>& c) {
+        
+        constexpr Coord_Type ctype = F3;
+        constexpr int x3 = get_dir_from_ctype(ctype);
+        constexpr int x1 = (x3 + 1) % 3;
+        constexpr int x2 = (x3 + 2) % 3;
 
-		CU_PML * w_PML = (is_E_Point(F::ctype)) ? e_PML : m_PML;
+        iVec3 p1 = cell.get_grid_p1() + 1;
+        iVec3 p2 = cell.get_grid_p2() - 1;
+        PML_Stepping& pml = (is_e_point(ctype)? e_pml : m_pml);
 
-		for (auto itr = my_iterator(ch_p1, ch_p2, F::ctype); !itr.is_end(); itr.advance()) {
-			iVec3 pos = itr.get_vec();
-			if (Is_Inside_Box(config.phys_p1, config.phys_p2, pos))
-				continue;
+        for (auto itr = Yee_Iterator(p1, p2, ctype); !itr.is_end(); itr.next()) {
+            iVec3 pos = itr.get_coord();
 
-			size_t index = get_index_ch(pos);
-			int x1_index = choose<x1>::get(pos) - choose<x1>::get(ch_p1);
-			int x2_index = choose<x2>::get(pos) - choose<x2>::get(ch_p1);
-			
-			w_PML->add_update_point<x3>(index, 
-				b[x1::val][x1_index], c[x1::val][x1_index] / dx, 1 / dx / k[x1::val][x1_index],
-				b[x2::val][x2_index], c[x2::val][x2_index] / dx, 1 / dx / k[x2::val][x2_index]);
-		}
-	}
+            size_t index = cell.get_index_from_coord(pos);
+            int x1_index = pos.get<x1>() - p1.get<x1>();
+            int x2_index = pos.get<x2>() - p1.get<x2>();
+            
+            pml.add_stepping_Point(x3, index, 
+                b[x1][x1_index], c[x1][x1_index] / dx, 1 / dx / k[x1][x1_index],
+                b[x2][x2_index], c[x2][x2_index] / dx, 1 / dx / k[x2][x2_index]);
+        }
+    }
 }

@@ -39,15 +39,17 @@ namespace ffip {
 	enum Side {Low = -1, High = 1};
 	enum Coord_Type {Ex = 0b001, Ey = 0b010, Ez = 0b100, Hx = 0b110, Hy = 0b101, Hz = 0b011, 
 		Dx = 0b1001, Dy = 0b1010, Dz = 0b1100, Bx = 0b1110, By = 0b1101, Bz = 0b1011,
-		Corner = 0b000, Center = 0b111, All = 0b1000, None = 0b1001};
+		Corner = 0b000, Center = 0b111, All = 0b1000};
 
 	//count the number of 1s in the first 4 bits
 	constexpr unsigned int count_hex_bits(int x) {
+
 		return (x & 1) + ((x & 2) >> 1) + ((x & 4) >> 2) + ((x & 8) >> 3);
 	}
 
 	//get direction integer from coord_type
 	constexpr int get_dir_from_ctype(Coord_Type ctype) {
+
 		ctype = Coord_Type(ctype & 0b111);
 		if (ctype == Ex || ctype == Hx) return 0;
 		if (ctype == Ey || ctype == Hy) return 1;
@@ -56,12 +58,15 @@ namespace ffip {
 		return -1;
 	}
 
+	//return whether it is electrical point
+	constexpr bool is_e_point(const Coord_Type ctype) {
 
-	constexpr bool is_E_Point(const Coord_Type ctype) {
 		return (ctype == Ex || ctype == Ey || ctype == Ez);
 	}
 	
-	constexpr bool is_M_Point(const Coord_Type ctype) {
+	//return wehether it is magnetic point
+	constexpr bool is_m_point(const Coord_Type ctype) {
+
 		return (ctype == Hx || ctype == Hy || ctype == Hz);
 	}
 	
@@ -203,8 +208,8 @@ namespace ffip {
 
 	/* testing whether a point is inside of a box*/
 	template<typename T1, typename T2>
-	constexpr bool Is_Inside_Box(const Vec3<T1>& p1, const Vec3<T1>& p2, const Vec3<T2>& tp) {
-		return (leq_vec3(p1, tp) && leq_vec3(tp, p2));
+	constexpr bool Is_Inside_Box(const Vec3<T1>& p1, const Vec3<T1>& p2, const Vec3<T2>& tp, const T2 tol = T2{}) {
+		return (leq_vec3(p1, tp + tol) && leq_vec3(tp - tol, p2));
 	}
 	
 	/* make xN the x3 axis */
@@ -470,29 +475,36 @@ namespace ffip {
 		}
 	};
 
-	struct my_iterator {
-		using value_type = int;
-		
-		size_t size, index, end;
-		int x0, y0, z0, x1, y1, z1;
-		int x, y, z;
+	/*
+		Iterator through grid coordinates
+	*/
+	struct Yee_Iterator {
+
+		int x0, y0, z0;
+		int lenx, leny, lenz;
+		int i, j, k;
 		int stride;
 		
-		/* non-parallel version constructor*/
-		my_iterator(const iVec3& p1, const iVec3& p2, const Coord_Type ctype);
-		my_iterator(const std::pair<iVec3, iVec3> corners, const Coord_Type ctype);
-		my_iterator(const fVec3& p1, const fVec3& p2, const Coord_Type ctype);
+		Yee_Iterator(const iVec3& p1, const iVec3& p2, const Coord_Type ctype);
+		Yee_Iterator(const std::pair<iVec3, iVec3> corners, const Coord_Type ctype);
 
-		/* used for paralellization so that the itr only loops through rank/num of the total points */
-		my_iterator(const iVec3& p1, const iVec3& p2, const Coord_Type ctype, const size_t rank, const size_t num);
-		
-		void advance();					//increase index by 1
-		bool is_end() const;			//does it reach the end?
-		bool is_empty() const;			//is the region illegal?
-		iVec3 get_vec() const;			//return the current x, y, z in iVec3
-		iVec3 get_vec(size_t index) const;	//return x, y, z specified by index
-		size_t get_size() const;			//return size of the region
-		sVec3 get_dim() const;		//return the dimension of the region
+		//move to next coordinate
+		void next();
+
+		//does it reach the end
+		bool is_end() const;
+
+		//is it empty
+		bool is_empty() const;
+
+		//return the current coordinate
+		iVec3 get_coord() const;
+
+		//return total num of coordinates
+		size_t get_size() const;
+
+		//return dimension of the region
+		iVec3 get_dim() const;
 	};
 
 	/*
@@ -500,6 +512,7 @@ namespace ffip {
 		for dipole source creation and fields interpolation
 	*/
     struct Yee3 {
+		
 		//physical coordinates
         fVec3 phys_p1, phys_p2;
 		//grid coordinates
@@ -510,6 +523,8 @@ namespace ffip {
 		iVec3 dim;
 		//strides of the array
 		sVec3 stride;
+		//[grid_p1 - tol,grid_p2 + tol] will be deemed as inside the cell
+		double tol = 1e-3;
 
 		Yee3(iVec3 grid_p1, iVec3 grid_p2, fVec3 phys_p1, double dx);
 

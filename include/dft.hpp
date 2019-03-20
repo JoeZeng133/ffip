@@ -5,7 +5,7 @@
 
 namespace ffip {
     using Volume_Metadata = std::tuple<double_arr, double_arr, double_arr>;
-    using Grid3_Metadata = std::tuple<std::vector<int>, std::vector<int>, std::vector<int>>;
+    using Yee3_Metadata = std::tuple<std::vector<int>, std::vector<int>, std::vector<int>>;
 
     /* store and update Fourier transforms of fields */
     class Discrete_Fourier_Chunk {
@@ -29,7 +29,7 @@ namespace ffip {
         Volume_Metadata get_volume_metadata(const fVec3& p1, const fVec3& p2, const Coord_Type ctype) const;
 
         //get grid coordinates of the metadata in the volume
-        Grid3_Metadata get_grid_metadata(const fVec3& p1, const fVec3& p2, const Coord_Type ctype) const;
+        Yee3_Metadata get_grid_metadata(const fVec3& p1, const fVec3& p2, const Coord_Type ctype) const;
 
         //used in get_volume_dft_parallel
         void send_grid_metadata(const fVec3& p1, const fVec3& p2, const Coord_Type ctype, MPI_Comm comm, int dest) const;

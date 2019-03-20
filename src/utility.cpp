@@ -4,7 +4,7 @@ namespace ffip {
     const double pi = 3.141592653589793e+00;
 
 	/*
-		Grid3
+		Yee3
 	*/
 	Yee3::Yee3(iVec3 grid_p1, iVec3 grid_p2, fVec3 phys_p1, double dx):
 
@@ -88,99 +88,63 @@ namespace ffip {
 	}
 	
 	/* 
-		my_iteartor
+		Yee_Iterator
 	*/
-	my_iterator::my_iterator(const std::pair<iVec3, iVec3> corners, const Coord_Type ctype): my_iterator{corners.first, corners.second, ctype} {}
+	Yee_Iterator::Yee_Iterator(const std::pair<iVec3, iVec3> corners, const Coord_Type ctype): Yee_Iterator{corners.first, corners.second, ctype} {}
 	
-	my_iterator::my_iterator(const fVec3& p1, const fVec3& p2, const Coord_Type ctype): my_iterator{get_component_interior(p1, p2, ctype), ctype} {}
-	
-	my_iterator::my_iterator(const iVec3& p1, const iVec3& p2, const Coord_Type ctype) {
+	Yee_Iterator::Yee_Iterator(const iVec3& p1, const iVec3& p2, const Coord_Type ctype) {
 		std::pair<iVec3, iVec3> tmp;
 		
 		// loop through points inside [p1, p2]
+		tmp = get_component_interior(p1, p2, ctype);
 		if (ctype == All) {
-			tmp = get_component_interior(p1, p2, ctype);
 			stride = 1;
-		}
-		else if (ctype == None) {
-			throw std::runtime_error("Invalid Ctype");
-		}
-		else {
-			tmp = get_component_interior(p1, p2, ctype);
+		} else {
 			stride = 2;
 		}
+
+		auto len = (tmp.second - tmp.first) / stride + 1;
 		
-		x = x0 = tmp.first.x;
-		y = y0 = tmp.first.y;
-		z = z0 = tmp.first.z;
-		x1 = tmp.second.x;
-		y1 = tmp.second.y;
-		z1 = tmp.second.z;
-		
-		index = 0;
-		end = size = get_size();
+		x0 = tmp.first.x;
+		y0 = tmp.first.y;
+		z0 = tmp.first.z;
+		lenx = len.x;
+		leny = len.y;
+		lenz = len.z;
+
+		i = j = k = 0;
+
+		if (is_empty()) lenx = leny = lenz = 0;
 	}
 	
-	my_iterator::my_iterator(const iVec3& p1, const iVec3& p2, const Coord_Type ctype, const size_t rank, const size_t num): my_iterator(p1, p2, ctype) {
-		if (rank >= num)
-			throw std::runtime_error("Rank is larger than number of threads");
-		
-		if (size <= num)
-			throw std::runtime_error("Region is too small to divide, Better use non-parallel version");
-		
-		size_t idx1 = (rank * size) / num;
-		size_t idx2 = ((rank + 1) * size) / num;
-		
-		index = idx1;
-		end = idx2;
-		
-		sVec3 dim = get_dim();
-		x = x0 + (idx1 % dim.x) * stride;
-		idx1 /= dim.x;
-		y = y0 + (idx1 % dim.y) * stride;
-		idx1 /= dim.y;
-		z = z0 + (idx1 % dim.z) * stride;
-	}
-	
-	iVec3 my_iterator::get_vec(size_t index) const {
-		int x, y, z;
-		x = x0 + (index % ((x1 - x0) / stride + 1)) * stride;
-		index /= (x1 - x0) / stride + 1;
-		y = y0 + (index % ((y1 - y0) / stride + 1)) * stride;
-		index /= ((y1 - y0) / stride + 1);
-		z = z0 + (index % ((z1 - z0) / stride + 1)) * stride;
-		return {x, y, z};
-	}
-	
-	void my_iterator::advance() {
-		index++;
-		if((x += stride) > x1) {
-			x = x0;
-			if((y += stride) > y1) {
-				y = y0;
-				z += stride;
+	void Yee_Iterator::next() {
+		if (++i == lenx) {
+			i = 0;
+			if (++j == leny) {
+				j = 0;
+				++k;
 			}
 		}
 	}
 	
-	bool my_iterator::is_end() const{
-		return index >= end;
+	bool Yee_Iterator::is_end() const{
+		return k >= lenz;
 	}
 	
-	bool my_iterator::is_empty() const{
-		return x0 > x1 || y0 > y1 || z0 > z1;
+	bool Yee_Iterator::is_empty() const{
+		return lenx <= 0 || leny <= 0 || lenz <= 0;
 	}
 	
-	size_t my_iterator::get_size() const{
-		return is_empty()? 0 : (size_t)((x1 - x0) / stride + 1) * ((y1 - y0) / stride + 1) * ((z1 - z0) / stride + 1);
+	size_t Yee_Iterator::get_size() const{
+		return (size_t)lenx * leny * lenz;
 	}
 	
-	sVec3 my_iterator::get_dim() const {
-		return is_empty()? Vec3<size_t>(0, 0, 0) : Vec3<size_t>((x1 - x0) / stride + 1, (y1 - y0) / stride + 1, (z1 - z0) / stride + 1);
+	iVec3 Yee_Iterator::get_dim() const {
+		return iVec3(lenx, leny, lenz);
 	}
 	
-	iVec3 my_iterator::get_vec() const {
-		return {x, y, z};
+	iVec3 Yee_Iterator::get_coord() const {
+		return {x0 + i * stride, y0 + j * stride, z0 + k * stride};
 	}
 
 	/*

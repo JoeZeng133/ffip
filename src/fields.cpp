@@ -5,6 +5,7 @@ namespace ffip {
         Serialized Gaussian Dipoles 
     */
     void Gaussian_Dipoles_Stepping::organize() {
+
         sort(gaussian1_points.begin(), gaussian1_points.end(), [](const Stepping_Point& a, const Stepping_Point& b){
             return a.index < b.index;
         });
@@ -15,6 +16,7 @@ namespace ffip {
     }
 
     void Gaussian_Dipoles_Stepping::step(double time, std::vector<double>& diffdb) {
+
         if (time > max_end_time) return;
 
         for (auto& point : gaussian1_points) {
@@ -29,24 +31,29 @@ namespace ffip {
     }
 
     void Gaussian_Dipoles_Stepping::add_gaussian1(size_t index, double amp, double start_time, double end_time, double width) {
+
         gaussian1_points.push_back({index, amp, start_time, end_time, width});
     }
 
     void Gaussian_Dipoles_Stepping::add_gaussian2(size_t index, double amp, double start_time, double end_time, double width) {
+
         gaussian2_points.push_back({index, amp, start_time, end_time, width});
     }
 
     void Gaussian_Dipoles_Stepping::output(std::ostream& os) {
+
     }
 
     /*
         Serialize PML steppping
     */
     void PML_Stepping::set_strides(sVec3 strides) {
+
         this->strides = strides;
     }
 
     void PML_Stepping::organize() {
+
         for(int i = 0; i < 3; ++i)
             sort(points[i].begin(), points[i].end(), [](const Stepping_Point& a, const Stepping_Point& b){
                 return a.index < b.index;
@@ -54,6 +61,7 @@ namespace ffip {
     }
 
     void PML_Stepping::step(const std::vector<double>& eh, std::vector<double>& diffdb) {
+
         for(int i = 0; i < 3; ++i) {
             
 			size_t stride1 = strides[(i + 1) % 3];
@@ -73,6 +81,7 @@ namespace ffip {
     }
 
     void PML_Stepping::add_stepping_Point(Direction dir, size_t index, double b1, double c1, double k1, double b2, double c2, double k2) {
+ 
         points[dir].push_back({index, 0, b1, c1, k1, 0, b2, c2, k2});
     }
 
@@ -81,8 +90,8 @@ namespace ffip {
     */
     void Fields::add_dipole_source_gaussian1(fVec3 pos, Coord_Type ctype, double amp, double start_time, double end_time, double frequency, double cutoff) {
 
-        auto interp_info = cells.get_interp_info(0, pos, ctype);
-        auto& gaussian_dipoles = (is_E_Point(ctype)? e_gaussian_dipoles : m_gaussian_dipoles);
+        auto interp_info = cell.get_interp_info(0, pos, ctype);
+        auto& gaussian_dipoles = (is_e_point(ctype)? e_gaussian_dipoles : m_gaussian_dipoles);
         double width = std::sqrt(2.0) / (2 * pi * frequency);
         double actual_end_time = std::min(end_time, start_time + 2 * width * cutoff);
 
@@ -92,8 +101,9 @@ namespace ffip {
     }
 
     void Fields::add_dipole_source_gaussian2(fVec3 pos, Coord_Type ctype, double amp, double start_time, double end_time, double frequency, double cutoff) {
-        auto interp_info = cells.get_interp_info(0, pos, ctype);
-        auto& gaussian_dipoles = (is_E_Point(ctype)? e_gaussian_dipoles : m_gaussian_dipoles);
+
+        auto interp_info = cell.get_interp_info(0, pos, ctype);
+        auto& gaussian_dipoles = (is_e_point(ctype)? e_gaussian_dipoles : m_gaussian_dipoles);
         double width = std::sqrt(2.0) / (2 * pi * frequency);
         double actual_end_time = std::min(end_time, start_time + 2 * width * cutoff);
 
@@ -102,6 +112,31 @@ namespace ffip {
         }
     }
 
-    
+    void Fields::PML_init(const std::array<double_arr, 3>& k, const std::array<double_arr, 3>& b, const std::array<double_arr, 3>& c) {
+
+        PML_init_helper<Ex>(k, b, c);
+        PML_init_helper<Ey>(k, b, c);
+        PML_init_helper<Ez>(k, b, c);
+        PML_init_helper<Hx>(k, b, c);
+        PML_init_helper<Hy>(k, b, c);
+        PML_init_helper<Hz>(k, b, c);
+    }
+
+    double Fields::get_eh_helper(const fVec3& pos, Coord_Type ctype) {
+        return cell.interp(eh, 0, pos, ctype);
+    }
+
+    double Fields::get_db_helper(const fVec3& pos, Coord_Type ctype) {
+        return cell.interp(db, 0, pos, ctype);
+    }
+
+    double Fields::get_eh_raw(const iVec3& pos) {
+        return cell.get_raw_val(eh, pos);
+    }
+
+    double Fields::get_db_raw(const iVec3& pos) {
+        return cell.get_raw_val(db, pos);
+    }
+
 
 }
