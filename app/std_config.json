@@ -1,0 +1,205 @@
+{
+	"number of threads" : 1,
+	"courant number": 0.5,
+	"resolution": 15,
+	"size": [
+		1.0,
+		1.0,
+		1.0
+	],
+	"PML": [
+		{
+			"direction": "x",
+			"side": "high",
+			"thickness": 1.0,
+			"reflection error": 1e-4,
+			"order": 3,
+			"sigma max": 1.0,
+			"chi max": 1.0
+		}
+	],
+	"symmetry": [
+		{
+			"direction": "x",
+			"phase factor": 1
+		}
+	],
+	"bloch periodic": [
+		0,
+		0,
+		0
+	],
+	"input file" : "sth.h5",
+	"fields output file": "sth.h5",
+	"metadata output file": "sth.h5",
+	"smoothing": "Line_Average",
+	"geometry": [
+		{
+			"type": "sphere",
+			"center": [
+				0.0,
+				0.0,
+				0.0
+			],
+			"radius": 1.0,
+			"medium": {
+				"epsilon": 1.0,
+				"mu": 1.0,
+				"E_conductivity": 0.0,
+				"H_conductivity": 0.0,
+				"E_Susceptibility": [
+					{
+						"type": "Lorentz",
+						"frequency": 1.0,
+						"gamma": 1.0,
+						"amplitude": 1.0
+					},
+					{
+						"type": "Drude",
+						"frequency": 1.0,
+						"gamma": 1.0,
+						"amplitude": 1.0
+					}
+				],
+				"H_Susceptibility": []
+			}
+		},
+		{
+			"type": "box",
+			"center": [
+				0.0,
+				0.0,
+				0.0
+			],
+			"size": [
+				1.0,
+				1.0,
+				1.0
+			],
+			"medium": {}
+		},
+		{
+			"type": "inhom",
+			"input dataset": "name of the input dataset that contains rho where e = rho * e1 + (1 - rho) * e2",
+			"center": [
+				0.0,
+				0.0,
+				0.0
+			],
+			"length": [
+				1.0,
+				1.0,
+				1.0
+			],
+			"dim": [
+				100,
+				100,
+				100
+			],
+			"medium1": {},
+			"medium2": {}
+		}
+	],
+	"source": [
+		{
+			"type": "volume source",
+			"center": [
+				0.0,
+				0.0,
+				0.0
+			],
+			"size": [
+				1.0,
+				1.0,
+				1.0
+			],
+			"amplitude": 1.0,
+			"coordinate type": "Ex",
+			"function": {
+				"type": "Gaussian1",
+				"frequency": 1.0,
+				"cutoff": 1,
+				"start_time": 0.0
+			}
+		},
+		{
+			"type": "scattered source",
+			"input data group": "group name that contains all the datasets: x, y, z, coordinate type, amplitude, corresponding function parameters",
+			"function type": "Gaussian1"
+		},
+		{
+			"type": "plane wave",
+			"center": [
+				0.0,
+				0.0,
+				0.0
+			],
+			"size": [
+				1.0,
+				1.0,
+				1.0
+			],
+			"amplitude": 1.0,
+			"function": {}
+		}
+	],
+	"fields output": [
+		{
+			"type": "volume fields dft",
+			"center": [
+				0.0,
+				0.0,
+				0.0
+			],
+			"size": [
+				1.0,
+				1.0,
+				1.0
+			],
+			"frequency": [
+				1.0,
+				1.1,
+				1.2
+			],
+			"coordinate type": "Ex",
+			"output group": "name of output group where fields with metadata are going to be stored: x, y, z, Re, Im index as (x, y, z, f)"
+		},
+		{
+			"type": "scattered fields dft",
+			"input data group": "name of the input group that contains: x, y, z, coordinate type, frequency",
+			"output data group": "name of the output group that cotains: Re, Im indexed as original"
+		}
+	],
+	"metadata": [
+		{
+			"type": "volume closure",
+			"center": [
+				0.0,
+				0.0,
+				0.0
+			],
+			"size": [
+				1.0,
+				1.0,
+				1.0
+			],
+			"coordinate type": "Ex",
+			"output data group" : "name of the output group that contains: x, y, z"
+		},
+		{
+			"type": "volume interior",
+			"center": [
+				0.0,
+				0.0,
+				0.0
+			],
+			"size": [
+				1.0,
+				1.0,
+				1.0
+			],
+			"coordinate type": "Ex",
+			"output data group" :"name of the output group that contains: x, y, z"
+		}
+	]
+}

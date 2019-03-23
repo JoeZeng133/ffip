@@ -167,7 +167,13 @@ namespace ffip {
 						continue;
 
 					auto weights = get_zero_weights();
-					/* spatial averaging */
+
+					//no averaging
+					for (auto solid : solids) {
+						if (item->update_weights())
+					}
+
+					// spatial avering using sampling method
 					//{
 					//	fVec3 box_p1{ (p.x - 1) * dx / 2, (p.y - 1) * dx / 2, (p.z - 1) * dx / 2 };
 					//	for (auto& item : sampled_points) {
@@ -186,24 +192,24 @@ namespace ffip {
 					//	}
 					//}
 
-					/* R. Mittra averaging (line averaging) */
-					{
-						fVec3 fp = p * (dx / 2);
-						for (auto& item : sampled_points_rm[ctype]) {
-							auto sampled_point = fp + item;
-							bool assigned = 0;
+					// R. Mittra averaging (line averaging)
+					// {
+					// 	fVec3 fp = p * (dx / 2);
+					// 	for (auto& item : sampled_points_rm[ctype]) {
+					// 		auto sampled_point = fp + item;
+					// 		bool assigned = 0;
 
-							for (auto item : solids) {
-								if (item->update_weights(sampled_point, weights)) {	//it is true when it is inside the solid
-									assigned = 1;
-									break;
-								}
-							}
+					// 		for (auto item : solids) {
+					// 			if (item->update_weights(sampled_point, weights)) {	//it is true when it is inside the solid
+					// 				assigned = 1;
+					// 				break;
+					// 			}
+					// 		}
 
-							if (!assigned)			//assign background medium;
-								weights[bg_medium->index] += 1;
-						}
-					}
+					// 		if (!assigned)			//assign background medium;
+					// 			weights[bg_medium->index] += 1;
+					// 	}
+					// }
 					
 
 					medium_voxels[itr.index] = weights / (weights.sum());
@@ -220,45 +226,45 @@ namespace ffip {
 		
 
 		// blobs material implementation 1 (source like interpolation) not recommended
-		/*{
-			std::vector<real> weight(8);
-			interpn<3> interp(2, 2, 2);
+		//
+		// 	std::vector<real> weight(8);
+		// 	interpn<3> interp(2, 2, 2);
 
-			for (auto& item : medium_blobs) {
-				for (int ctype_int = 1; ctype_int < 7; ctype_int++) {
-					Coord_Type ctype = static_cast<Coord_Type>(ctype_int);
-					iVec3 base = get_nearest_point<side_low_tag>(item.pos, ctype);
-					fVec3 dp = (item.pos - base) / 2;
+		// 	for (auto& item : medium_blobs) {
+		// 		for (int ctype_int = 1; ctype_int < 7; ctype_int++) {
+		// 			Coord_Type ctype = static_cast<Coord_Type>(ctype_int);
+		// 			iVec3 base = get_nearest_point<side_low_tag>(item.pos, ctype);
+		// 			fVec3 dp = (item.pos - base) / 2;
 
-					std::fill(weight.begin(), weight.end(), 0);
-					interp.put(weight, item.amp, dp.z, dp.y, dp.x);
-					for (auto itr = my_iterator(base, base + iVec3{ 2, 2, 2 }, ctype); !itr.is_end(); itr.advance()) {
-						medium_voxels[get_index(itr.get_vec())][item.medium->index] += weight[itr.index];
-					}
-				}
-			}
-		}*/
+		// 			std::fill(weight.begin(), weight.end(), 0);
+		// 			interp.put(weight, item.amp, dp.z, dp.y, dp.x);
+		// 			for (auto itr = my_iterator(base, base + iVec3{ 2, 2, 2 }, ctype); !itr.is_end(); itr.advance()) {
+		// 				medium_voxels[get_index(itr.get_vec())][item.medium->index] += weight[itr.index];
+		// 			}
+		// 		}
+		// 	}
+		// }
 		
 		// blobs material implementation 2 (small box implementation)
-		{
-			for (auto& item : medium_blobs) {
-				if (!Is_Inside_Box(config.roi_p1, config.roi_p2, item.pos))
-					throw Out_of_the_Domain{};
+		// {
+		// 	for (auto& item : medium_blobs) {
+		// 		if (!Is_Inside_Box(config.roi_p1, config.roi_p2, item.pos))
+		// 			throw Out_of_the_Domain{};
 
-				iVec3 low(floor(item.pos - 1));
-				iVec3 high(ceil(item.pos + 1));
+		// 		iVec3 low(floor(item.pos - 1));
+		// 		iVec3 high(ceil(item.pos + 1));
 
-				for (auto itr = my_iterator(low, high, All); !itr.is_end(); itr.advance()) {
-					auto p = itr.get_vec();
-					fVec3 dist = abs(item.pos - p);
-					real weight = prod(2 - dist) / 8.0;
+		// 		for (auto itr = my_iterator(low, high, All); !itr.is_end(); itr.advance()) {
+		// 			auto p = itr.get_vec();
+		// 			fVec3 dist = abs(item.pos - p);
+		// 			real weight = prod(2 - dist) / 8.0;
 
-					size_t cur_index = get_index(p);
-					if (medium_voxels[cur_index].size())
-						medium_voxels[cur_index][item.medium->index] += weight * item.amp;
-				}
-			}
-		}
+		// 			size_t cur_index = get_index(p);
+		// 			if (medium_voxels[cur_index].size())
+		// 				medium_voxels[cur_index][item.medium->index] += weight * item.amp;
+		// 		}
+		// 	}
+		// }
 		
 		// inhomogeneous region (force material distribution)
 		{
