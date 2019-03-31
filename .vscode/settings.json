@@ -70,7 +70,16 @@
         "utility": "cpp",
         "valarray": "cpp",
         "variant": "cpp",
-        "vector": "cpp"
+        "vector": "cpp",
+        "__hash_table": "cpp",
+        "clocale": "cpp",
+        "forward_list": "cpp",
+        "unordered_map": "cpp",
+        "*.tcc": "cpp",
+        "queue": "cpp",
+        "random": "cpp",
+        "cfenv": "cpp",
+        "cinttypes": "cpp"
     },
     "C_Cpp.intelliSenseEngineFallback": "Disabled"
 }

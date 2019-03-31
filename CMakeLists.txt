@@ -9,12 +9,15 @@ find_package(Python3 REQUIRED Development)
 
 file(GLOB HEADER_FILES
 "include/*.hpp"
+"src/*.cpp"
 )
 
 include_directories(${MPI_CXX_INCLUDE_DIRS})
 include_directories(${Python3_INCLUDE_DIRS})
 include_directories(${Boost_INCLUDE_DIR})
 include_directories(${PROJECT_SOURCE_DIR}/include)
+include_directories(${PROJECT_SOURCE_DIR}/src)
 
 add_subdirectory(src)
 add_subdirectory(py)
+add_subdirectory(test)

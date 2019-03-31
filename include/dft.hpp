@@ -7,11 +7,10 @@ namespace ffip {
     using Volume_Metadata = std::tuple<double_arr, double_arr, double_arr>;
     using Yee3_Metadata = std::tuple<std::vector<int>, std::vector<int>, std::vector<int>>;
 
-    /* store and update Fourier transforms of fields */
+    //store discrete fourier transform
     class Discrete_Fourier_Chunk {
     private:
-        
-
+    
     public:
         //update fourier transforms
         void step(const double time, const Structure& structure);

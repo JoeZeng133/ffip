@@ -4,3 +4,4 @@ build*/
 *.mat
 *.exe
 *.o
+.vscode/ipch/*

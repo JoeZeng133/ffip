@@ -6,34 +6,42 @@
 
 namespace ffip {
     struct Medium_Stepping {
-        struct Abstract_Susceptibility {
-            double c1, c2, c3;
-            Abstract_Susceptibility(const Susceptibility& sus);
-        };
+        struct Stepping_Point {
+            size_t index;
+            double g_inf;
+        };     
 
+        //time step
+        double dt;
         //abstract susceptibility pool, 
         std::vector<Abstract_Susceptibility> sus_pool;
         //susceptibility intensity, num_points x num_sus
-        std::vector<double> sus_sigma;
+        std::vector<double> sus_amp;
         //polarization currents, num_points x num_sus
         std::vector<double> polarization;
         //polarization currents previous step, num_points x num_ss
         std::vector<double> polarization1;
-        
-        struct Stepping_Point {
-            size_t index;
-            bool is_dispersive;
-        };
+        //collection of stepping points
+        std::vector<Stepping_Point> points;
 
         Medium_Stepping() = default;
+
+        //set dt
+        void set_dt(double dt);
+
+
+        //set material pool
+        void set_susceptibility_pool(const std::vector<Abstract_Susceptibility>& sus_pool);
+        void set_susceptibility_pool(const std::vector<Susceptibility>& sus_pool);
+
         //add a point with Medium
-        void add_point(size_t index, const Medium& medium);
-        //add susceptibility to pool
-        void add_susceptibility(const Susceptibility& sus);
+        void add_point(size_t index, double g_inf, const std::valarray<double>& sus_amp);
+
         //re-order to improve performance
         void organize();
+
         //update
-        void step(const std::vector<double>& db, std::vector<double>& eh);
+        void step(const std::vector<double>& accdb, std::vector<double>& eh);
     };
 
     class Structure {
@@ -41,34 +49,49 @@ namespace ffip {
         enum Average_Method {No_Average, Line_Average, Volume_Average};
 
         public:
-            //add electric susceptibility to the pool
-            void add_e_susceptibility(const Susceptibility& sus);
+            Structure(const Yee3& grid);
 
-            //add magnetic susceptibility to the pool
-            void add_h_susceptibility(const Susceptibility& sus);
+            //build susceptibility pool for constructing abstract materials
+            //need to include all possible materials
+            //maximum 64 types of susceptibility
+            void build_material_pool(const std::vector<Medium>& materials);
+
+            //return abstract medium from medium using a pool of susceptibility
+            //used to build geometry objects
+            Abstract_Medium get_abstract_medium(const Medium& medium) const;
 
             //set material properties from a list of geometry objects
             void set_materials_from_geometry
-                (const std::vector<Geometry>& geom_list, const Medium& default_medium, Average_Method method);
-            
+            (const std::vector<Geometry>& geom_list, const Medium& default_medium, Average_Method method);
+
+            //get non-zeros pattern
+            size_t get_non_zeros_from_array(const std::valarray<double>& arr, double tol = 1e-4) const;
+
+            //mask susceptibility based on non-zeros
+            std::vector<Abstract_Susceptibility> mask_susceptibility_pool(size_t mask, const std::vector<Abstract_Susceptibility>& ab_sus_pool) const;
+
+            //return epsilon in complex number
+            std::complex<double> get_epsilon_from_abstract_medium(const Abstract_Medium& medium, double frequency) const;
+
             //step electric fields
             void step_e(const std::vector<double>& d, std::vector<double>& e, std::vector<double>& e1);
 
             //step magnetic fields
-            void setp_h(const std::vector<double>& b, std::vector<double>& h, std::vector<double>& h1);
+            void step_m(const std::vector<double>& b, std::vector<double>& h, std::vector<double>& h1);
 
             //getters for material properties
-            std::complex<double> get_epsilon_x(const fVec3& pos, double frequency);
-            std::complex<double> get_epsilon_y(const fVec3& pos, double frequency);
-            std::complex<double> get_epsilon_z(const fVec3& pos, double frequency);
-            std::complex<double> get_mu_x(const fVec3& pos, double frequency);
-            std::complex<double> get_mu_y(const fVec3& pos, double frequency);
-            std::complex<double> get_mu_z(const fVec3& pos, double frequency);
+            std::complex<double> get_epsilon(const fVec3& pos, double frequency);
 
         private:
-            Grid3 grid;
-            std::vector<Susceptibility> e_sus_pool, h_sus_pool;
+            Yee3 grid;
+            //geometry list
+            std::vector<Geometry> geom_list;
+            //Susceptibility pool, both abstract and original
+            std::vector<Susceptibility> e_sus_pool, m_sus_pool;
+            std::vector<Abstract_Susceptibility> e_ab_sus_pool, m_ab_sus_pool;
+
             std::vector<Medium> medium;
-            Medium_Stepping e_medium, h_medium;
+            //group medium points by their susceptibility non-zeros
+            std::unordered_map<size_t, Medium_Stepping> e_stepping, m_stepping;
     };
 }
