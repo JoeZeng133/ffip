@@ -118,8 +118,8 @@ namespace ffip {
         std::vector<double> eh, accdb;  
         //tentative fields, might not be necessary
         std::vector<double> eh1, eh2, db;
-        //cell information for the current process
-        Yee3 cell;
+        //grid information for the current process
+        Yee3 grid;
         double dx, dt;
         
         PML_Stepping e_pml, m_pml;
@@ -143,7 +143,7 @@ namespace ffip {
         void init(
                 const std::array<double_arr, 3>& k, const std::array<double_arr, 3>& b, const std::array<double_arr, 3>& c, 
                 const iVec3& p1, const iVec3& p2,
-                double dx, double dt, const Yee3& cell);
+                double dx, double dt, const Yee3& grid);
         
         //PML layer initialization helper functions
         template<unsigned int F3>
@@ -152,12 +152,12 @@ namespace ffip {
             const iVec3& p1, const iVec3& p2);
 
         //getter helper functions
-        double get_eh_helper(const fVec3& pos, Coord_Type ctype);
-        double get_db_helper(const fVec3& pos, Coord_Type ctype);
+        double get_eh_helper(const fVec3& pos, Coord_Type ctype) const;
+        double get_db_helper(const fVec3& pos, Coord_Type ctype) const;
 
         //raw getter functions, no range checking
-        double get_eh_raw(const iVec3& pos);
-        double get_db_raw(const iVec3& pos);
+        double get_eh_raw(const iVec3& pos) const;
+        double get_db_raw(const iVec3& pos) const;
 
         //synchronize ghost points of boundaries in a particular direction
         void sync_boundary(MPI_Comm comm, Direction dir);
@@ -185,30 +185,30 @@ namespace ffip {
     template<unsigned int x3, int side>
     void Fields::extract_fields_face(std::vector<double>& buf) {
 
-        iVec3 p1 = cell.get_grid_p1();
-        iVec3 p2 = cell.get_grid_p2();
+        iVec3 p1 = grid.get_grid_p1();
+        iVec3 p2 = grid.get_grid_p2();
 
         auto face = get_face<x3, side>(p1, p2);
         auto itr = Yee_Iterator(p1, p2, All);
         buf.resize(itr.get_size());
 
         for(int index = 0; !itr.is_end(); itr.next(), ++index) {
-            buf[index] = cell.get_raw_val(eh, itr.get_coord());
+            buf[index] = grid.get_raw_val(eh, itr.get_coord());
         }
     }
 
     template<unsigned int x3, int side>
     void Fields::assign_fields_face(const std::vector<double>& buf) {
         constexpr iVec3 face_norm = get_norm_vec(x3, side);
-        iVec3 p1 = cell.get_grid_p1() + face_norm;
-        iVec3 p2 = cell.get_grid_p2() + face_norm;
+        iVec3 p1 = grid.get_grid_p1() + face_norm;
+        iVec3 p2 = grid.get_grid_p2() + face_norm;
 
         auto face = get_face<x3, side>(p1, p2);
         auto itr = Yee_Iterator(p1, p2, All);
         if (buf.size() < itr.get_size()) return;
 
         for(int index = 0; !itr.is_end(); itr.next(), ++index) {
-            eh[cell.get_index_from_coord(itr.get_coord())] = buf[index];
+            eh[grid.get_index_from_coord(itr.get_coord())] = buf[index];
         }
     }
 
@@ -221,12 +221,12 @@ namespace ffip {
 
         //construct face
         constexpr iVec3 face_norm = get_norm_vec(x3, side);
-        auto p1 = cell.get_grid_p1() + face_norm;
-        auto p2 = cell.get_grid_p2() + face_norm;
+        auto p1 = grid.get_grid_p1() + face_norm;
+        auto p2 = grid.get_grid_p2() + face_norm;
         auto face = get_face<x3, side>(p1, p2);
 
         //index offset in the normal direction
-        long long norm_index_offset = cell.get_index_offset(face_norm);
+        long long norm_index_offset = grid.get_index_offset(face_norm);
         //actual phase applied
         int mult = (p1.get<x3>() & 1) ? -phase : phase; 
 
@@ -234,7 +234,7 @@ namespace ffip {
         for(auto itr = Yee_Iterator(face, All); !itr.is_end(); itr.next()) {
         
             //index of the point
-            size_t index = cell.get_index_from_coord(itr.get_coord());    
+            size_t index = grid.get_index_from_coord(itr.get_coord());    
             eh[index] = mult * eh[index - norm_index_offset * 2];
         }
 
@@ -251,10 +251,10 @@ namespace ffip {
         PML_Stepping& pml = (is_e_point(ctype)? e_pml : m_pml);
         Curl_Stepping& curl = (is_e_point(ctype)? e_curl : m_curl);
 
-        for (auto itr = Yee_Iterator(cell.get_grid_p1(), cell.get_grid_p2(), ctype); !itr.is_end(); itr.next()) {
+        for (auto itr = Yee_Iterator(grid.get_grid_p1(), grid.get_grid_p2(), ctype); !itr.is_end(); itr.next()) {
             iVec3 pos = itr.get_coord();
 
-            size_t index = cell.get_index_from_coord(pos);
+            size_t index = grid.get_index_from_coord(pos);
             int x1_index = pos.get<x1>() - p1.get<x1>();
             int x2_index = pos.get<x2>() - p1.get<x2>();
             

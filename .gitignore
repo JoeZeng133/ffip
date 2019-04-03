@@ -4,4 +4,5 @@ build*/
 *.mat
 *.exe
 *.o
+*.h5
 .vscode/ipch/*

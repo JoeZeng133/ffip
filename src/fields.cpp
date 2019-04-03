@@ -124,8 +124,8 @@ namespace ffip {
     void Fields::add_dipole_source_gaussian1(fVec3 pos, Coord_Type ctype, double amp, double start_time, double end_time, double frequency, double cutoff) {
 
         amp = -amp;
-        auto weights = cell.get_interp_weights(pos, ctype);
-        auto base = cell.get_base_point(pos, ctype);
+        auto weights = grid.get_interp_weights(pos, ctype);
+        auto base = grid.get_base_point(pos, ctype);
 
         auto& gaussian_dipoles = (is_e_point(ctype)? e_gaussian_dipoles : m_gaussian_dipoles);
         double width = std::sqrt(2.0) / (2 * pi * frequency);
@@ -136,9 +136,9 @@ namespace ffip {
         for(int i = 0; i < 4; i += 2) {
             auto p = base + iVec3{i, j, k};
             //if not inside, don't care
-            if (cell.is_inside(p))
+            if (grid.is_inside(p))
                 gaussian_dipoles.add_gaussian1
-                (cell.get_index_from_coord(p), amp * weights[index], start_time, actual_end_time, width);
+                (grid.get_index_from_coord(p), amp * weights[index], start_time, actual_end_time, width);
             ++index;
         }
     }
@@ -146,7 +146,7 @@ namespace ffip {
     void Fields::add_dipole_source_gaussian2(fVec3 pos, Coord_Type ctype, double amp, double start_time, double end_time, double frequency, double cutoff) {
 
         amp = -amp;
-        auto weights = cell.get_interp_weights(pos, ctype);
+        auto weights = grid.get_interp_weights(pos, ctype);
         auto base = get_nearest_point<-1>(pos, ctype);
 
         auto& gaussian_dipoles = (is_e_point(ctype)? e_gaussian_dipoles : m_gaussian_dipoles);
@@ -158,9 +158,9 @@ namespace ffip {
         for(int i = 0; i < 4; i += 2) {
             auto p = base + iVec3{i, j, k};
             //if not inside, don't care
-            if (cell.is_inside(p))
+            if (grid.is_inside(p))
                 gaussian_dipoles.add_gaussian2
-                (cell.get_index_from_coord(p), amp * weights[index++], start_time, actual_end_time, width);
+                (grid.get_index_from_coord(p), amp * weights[index++], start_time, actual_end_time, width);
             ++index;
         }
     }
@@ -168,22 +168,22 @@ namespace ffip {
     void Fields::init(
         const std::array<double_arr, 3>& k, const std::array<double_arr, 3>& b, const std::array<double_arr, 3>& c, 
         const iVec3& p1, const iVec3& p2,
-        double dx, double dt, const Yee3& cell) {
+        double dx, double dt, const Yee3& grid) {
         
         this->dx = dx;
         this->dt = dt;
-        this->cell = cell;
+        this->grid = grid;
 
-        e_pml.set_strides(cell.get_stride());
-        e_curl.set_strides(cell.get_stride());
+        e_pml.set_strides(grid.get_stride());
+        e_curl.set_strides(grid.get_stride());
         e_curl.set_dx(dx);
 
-        m_pml.set_strides(-cell.get_stride());
-        m_curl.set_strides(-cell.get_stride());
+        m_pml.set_strides(-grid.get_stride());
+        m_curl.set_strides(-grid.get_stride());
         m_curl.set_dx(dx);
 
-        eh.resize(cell.get_size());
-        accdb.resize(cell.get_size());
+        eh.resize(grid.get_size());
+        accdb.resize(grid.get_size());
 
         PML_init_helper<Ex>(k, b, c, p1, p2);
         PML_init_helper<Ey>(k, b, c, p1, p2);
@@ -193,20 +193,20 @@ namespace ffip {
         PML_init_helper<Hz>(k, b, c, p1, p2);
     }
 
-    double Fields::get_eh_helper(const fVec3& pos, Coord_Type ctype) {
-        return cell.interp(eh, pos, ctype);
+    double Fields::get_eh_helper(const fVec3& pos, Coord_Type ctype) const {
+        return grid.interp(eh, pos, ctype);
     }
 
-    double Fields::get_db_helper(const fVec3& pos, Coord_Type ctype) {
-        return cell.interp(accdb, pos, ctype) * dt;
+    double Fields::get_db_helper(const fVec3& pos, Coord_Type ctype) const {
+        return grid.interp(accdb, pos, ctype) * dt;
     }
 
-    double Fields::get_eh_raw(const iVec3& pos) {
-        return cell.get_raw_val(eh, pos);
+    double Fields::get_eh_raw(const iVec3& pos) const {
+        return grid.get_raw_val(eh, pos);
     }
 
-    double Fields::get_db_raw(const iVec3& pos) {
-        return cell.get_raw_val(accdb, pos) * dt;
+    double Fields::get_db_raw(const iVec3& pos) const {
+        return grid.get_raw_val(accdb, pos) * dt;
     }
 
     void Fields::update_accd(MPI_Comm comm, double time) {
@@ -245,8 +245,8 @@ namespace ffip {
         MPI_Cart_shift(comm, (int)dir, 1, &neg_rank, &pos_rank);
 
         //get face size
-        iVec3 p1 = cell.get_grid_p1();
-        iVec3 p2 = cell.get_grid_p2();
+        iVec3 p1 = grid.get_grid_p1();
+        iVec3 p2 = grid.get_grid_p2();
         auto face = get_face(p1, p2, dir, Positive);
         face_size = Yee_Iterator(face, All).get_size();
 

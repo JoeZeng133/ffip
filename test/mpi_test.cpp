@@ -83,7 +83,7 @@ int main(int argc, char** argv) {
     
     int coords[3];
     MPI_Cart_coords(cart_comm, rank, 3, coords);
-    std::cout << "Rank " << rank << " has coordinates " << coords[0] << coords[1] << coords[2] << "\n";
+    // std::cout << "Rank " << rank << " has coordinates " << coords[0] << coords[1] << coords[2] << "\n";
 
     for(int dir = 0; dir < 3; ++dir) {
         MPI_Status status;
@@ -96,7 +96,13 @@ int main(int argc, char** argv) {
         // MPI_Cart_coords(cart_comm, prev, 3, coords);
         // std::cout << "Rank " << rank << " has neighbors " << next << " " << prev << " in direction " << dir << "\n";
         MPI_Sendrecv(&output, 1, MPI_INT, dest, dir, &input, 1, MPI_INT, source, dir, cart_comm, &status);
-        std::cout <<  "Rank " << rank << "Receives " << std::setfill('0') << std::setw(3) << input << " in direction" << dir << "\n";
+        // std::cout <<  "Rank " << rank << "Receives " << std::setfill('0') << std::setw(3) << input << " in direction" << dir << "\n";
+    }
+
+    if (rank == 0)  {
+        for(int i = 0; i < argc; ++i) {
+            std::cout << argv[i] << "\n";
+        }
     }
 
     MPI_Finalize();

@@ -10,7 +10,7 @@
 	"PML": [
 		{
 			"direction": "x",
-			"side": "Positive",
+			"side": "positive",
 			"thickness": 1.0,
 			"reflection error": 1e-4,
 			"order": 3,

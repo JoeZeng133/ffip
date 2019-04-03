@@ -43,7 +43,7 @@ namespace ffip {
 	enum Coord_Type {
 		Ex = 0b001, Ey = 0b010, Ez = 0b100, Hx = 0b110, Hy = 0b101, Hz = 0b011, 
 		Dx = 0b1001, Dy = 0b1010, Dz = 0b1100, Bx = 0b1110, By = 0b1101, Bz = 0b1011,
-		Corner = 0b000, Center = 0b111, All = 0b1000};
+		Corner = 0b000, Center = 0b111, All = 0b1000, None = -1};
 
 	//initializations of utility (calculating constants)
 	void init();
@@ -67,15 +67,37 @@ namespace ffip {
 	}
 
 	//return whether it is electrical point
-	constexpr bool is_e_point(const Coord_Type ctype) {
+	constexpr bool is_e_point(Coord_Type ctype) {
 
 		return count_hex_bits(ctype & 0b111) == 1;
 	}
 	
 	//return wehether it is magnetic point
-	constexpr bool is_m_point(const Coord_Type ctype) {
+	constexpr bool is_m_point(Coord_Type ctype) {
 
 		return count_hex_bits(ctype & 0b111) == 2;
+	}
+
+	constexpr Coord_Type get_e_ctype_from_dir(unsigned int d) {
+		if (d == 0)
+			return Ex;
+		else if (d == 1)
+			return Ey;
+		else if (d == 2)
+			return Ez;
+		
+		return None;
+	}
+
+	constexpr Coord_Type get_m_ctype_from_dir(unsigned int d) {
+		if (d == 0)
+			return Hx;
+		else if (d == 1)
+			return Hy;
+		else if (d == 2)
+			return Hz;
+		
+		return None;
 	}
 	
 	// light weight 3 element vector
@@ -92,11 +114,29 @@ namespace ffip {
 		template<typename T2>
 		explicit Vec3(const Vec3<T2>& other): x(other.x), y(other.y), z(other.z) {}
 
+		std::vector<T> to_vector() const {
+			return {x, y, z};
+		}
+
+		std::vector<T> to_vector_reverse() const {
+			return {z, y, x};
+		}
+
 		// copy assignment
 		template<typename T2>
 		Vec3& operator=(const Vec3<T2>& other) {
 			return Vec3{other};
 		};
+
+		// to_string conversion
+		std::string to_string() const {
+			return std::to_string(x) + std::to_string(y) + std::to_string(z);
+		}
+
+		// comparison
+		bool operator==(const Vec3& other) const {
+			return x == other.x && y == other.y && z == other.z;
+		}
 
 		//Unary -
 		Vec3 operator-() const {
@@ -112,6 +152,18 @@ namespace ffip {
 		template<typename T2>
 		std::common_type_t<T, T2> dot(const Vec3<T2>& other) const {
 			return x * other.x + y * other.y + z * other.z;
+		}
+
+		//pointwise division
+		template<typename T2>
+		Vec3<std::common_type_t<T, T2>> operator/(const Vec3<T2>& div) const {
+			return {x / div.x, y / div.y, z / div.z};
+		}
+
+		//pointwise division assiginment
+		template<typename T2>
+		Vec3<std::common_type_t<T, T2>>& operator/=(const Vec3<T2>& div) const {
+			x /= div.x; y /= div.y; z /= div.z;
 		}
 
 		//scalar division
@@ -202,6 +254,10 @@ namespace ffip {
 			return Vec3( std::floor(x), std::floor(y), std::floor(z) );
 		}
 
+		Vec3 round() const {
+			return Vec3( std::round(x), std::round(y), std::round(z) );
+		}
+
 		//absolute value
 		Vec3 abs() const {
 			return Vec3( std::abs(x),  std::abs(y), std::abs(z) );
@@ -282,16 +338,6 @@ namespace ffip {
 		return { 1, dim.x, dim.x * dim.y }; 
 	}
 	
-	// template<int N, typename T>
-	// constexpr Vec3<T> rotate_frame(const Vec3<T>& p) {
-	// 	if constexpr(N == 0)
-	// 		return {p.y, p.z, p.x};
-	// 	else if constexpr(N == 1)
-	// 		return {p.z, p.x, p.y};
-	// 	else if constexpr(N == 2)
-	// 		return p;
-	// }
-	
 	//return nearest odd(even) integer of a integer
 	template<int S, unsigned int T>
 	constexpr int get_nearest_int(const int x) {
@@ -360,27 +406,6 @@ namespace ffip {
 
 		return std::make_pair(	get_nearest_point<Negative>(p1, type), get_nearest_point<Positive>(p2, type));
 	}
-
-	// constexpr std::pair<iVec3, iVec3>
-	// 	get_component_closure_exact(const fVec3& p1, const fVec3& p2, const Coord_Type ctype, double dx) {
-	// 		auto res = get_component_closure(p1/dx, p2/dx, ctype);
-	// 		int stride = (ctype == Coord_Type::All)? 1 : 2;
-			
-	// 		res.first -= stride * 2;
-	// 		res.second += stride * 2;
-	// 		while( res.first.x * dx <= p1.x ) res.first.x++;
-	// 		while( res.first.y * dx <= p1.y ) res.first.y++;
-	// 		while( res.first.z * dx <= p1.z ) res.first.z++;
-
-	// 		while( res.second.x * dx >= p2.x ) res.first.x++;
-	// 		while( res.second.y * dx >= p2.y ) res.first.y++;
-	// 		while( res.second.z * dx >= p2.z ) res.first.z++;
-
-	// 		res.first -= 1;
-	// 		res.second += 1;
-
-	// 		return res;
-	// 	}
 
 	//return intersection of two intervals
 	template<typename T>
@@ -468,7 +493,8 @@ namespace ffip {
 		return !(value < Negative) && !(Positive < value);
 	}
 	
-	//interpn, linear interpolation with nearest extrapolation
+	//interpn, linear interpolation with 0 padding extrapolation
+	//0 padding extrapolation is compatible with paralell interpolation
 	template<int N>
 	class interpn : public interpn<N - 1> {
 	public:
@@ -497,17 +523,23 @@ namespace ffip {
 			if (dimn == 1)
 				return base_class::get(data, args...);
 			
-			//nearest extrapolation
-			xq = std::clamp<int>(0, dimn - 1, xq);
+			//0 padding extrapolation
+			if (xq <= 0) {
+				if (xq <= -1) return T{};
+				return (xq + 1) * base_class::get(data, args...);
+			}
+
+			if (xq >= dimn - 1) {
+				if (xq >= dimn) return T{};
+				return (dimn - xq) * base_class::get(data + stride * (dimn - 1), args...);
+			}
+
 			
 			size_t index = xq;
 			double tx = xq - index;
 			
-			if (index + 1 < dimn)
-				return	tx * base_class::get(data + stride * (index + 1), args...) +
-						(1 - tx) * base_class::get(data + stride * index, args...);
-			else
-				return	base_class::get(data + stride * index, args...);
+			return	tx * base_class::get(data + stride * (index + 1), args...) +
+					(1 - tx) * base_class::get(data + stride * index, args...);
 		}
 		
 		//interpolate xn, xn-1, ..., x1
@@ -528,16 +560,26 @@ namespace ffip {
 				return;
 			}
 			
-			//nearest extrapolation
-			xq = std::clamp<int>(0, dimn - 1, xq);
+			//0 padding extrapolation
+			if (xq <= 0) {
+				if (xq <= -1) return;
+				base_class::transpose_helper(data, val * (1 + xq), args...);
+				return;
+			}
+
+			if (xq >= dimn - 1) {
+				if (xq >= dimn) return;
+				base_class::transpose_helper(data + stride * (dimn - 1), val * (dimn - xq), args...);
+				return;
+			}
 			
 			size_t index = xq;
 			double tx = xq - index;
 			
-			if (index + 1 < dimn)
-				base_class::transpose_helper(data + stride * (index + 1), val * tx, args...);
-
+			base_class::transpose_helper(data + stride * (index + 1), val * tx, args...);
 			base_class::transpose_helper(data + stride * index, val * (1 - tx), args...);
+
+			return;
 		}
 		
 		// the put function might skip placing 0s in some elements of the array
@@ -575,17 +617,21 @@ namespace ffip {
 			if (dimn == 1)		
 				return data[0];
 			
-			//nearest extrapolation
-			xq = std::clamp<int>(0, dimn - 1, xq);
+			//0 padding extrapolation
+			if (xq <= 0) {
+				if (xq <= -1) return T{};
+				return (xq + 1) * data[0];
+			}
+
+			if (xq >= dimn - 1) {
+				if (xq >= dimn) return T{};
+				return (dimn - xq) * data[dimn - 1];
+			}
 			
 			size_t index = xq;
 			double tx = xq - index;
-			
-			if (index + 1 < dimn)
-				return tx * data[index + 1] + (1 - tx) * data[index];
-			else
-				return data[index];
-			
+
+			return tx * data[index + 1] + (1 - tx) * data[index];			
 		}
 		
 		template<typename T>
@@ -607,18 +653,24 @@ namespace ffip {
 				return;
 			}
 			
-			xq = std::clamp<int>(0, dimn - 1, xq);
+			//0 padding extrapolation
+			if (xq <= 0) {
+				if (xq <= -1) return;
+				data[0] += val * (1 + xq);
+				return;
+			}
+
+			if (xq >= dimn - 1) {
+				if (xq >= dimn) return;
+				data[dimn - 1] += val * (dimn - xq);
+				return;
+			}
 			
 			size_t index = xq;
 			double tx = xq - index;
-			
-			if (index + 1 < dimn) {
-				data[index + 1] = val * tx;
-				data[index] = val * (1 - tx);
-			}
-			else {
-				data[index] = val;
-			}
+
+			data[index + 1] += val * tx;
+			data[index] += val * (1 - tx);
 		}
 	};
 
@@ -679,6 +731,10 @@ namespace ffip {
 		//return strides in array
 		sVec3 get_stride() const;
 
+		//intersect with
+		std::pair<iVec3, iVec3> intersect_with(const iVec3& p1, const iVec3& p2) const;
+		std::pair<iVec3, iVec3> intersect_with(const std::pair<iVec3, iVec3>& box) const;
+
 		//an alias for get_nearest_point<Negative>(pos, ctype)
 		iVec3 get_base_point(const fVec3& pos, Coord_Type ctype) const;
 
@@ -704,8 +760,6 @@ namespace ffip {
 			return dim.get<N>();
 		}
 
-		
-
 		//access the raw value from a grid coordinate, no range checking
 		template<typename T>
 		T get_raw_val(const std::vector<T>& data, const iVec3& pos) const {
@@ -719,12 +773,12 @@ namespace ffip {
 		std::vector<double> get_interp_weights(const fVec3& s) const;
 
 		//return interpolation weights
-        std::vector<double> get_interp_weights(fVec3 pos, Coord_Type ctype) const;
+        std::vector<double> get_interp_weights(const fVec3& pos, Coord_Type ctype) const;
 
 		//trilinear interpolate a value from a 3d gridded data
 		//in MPI reduce, it makes sure interpolation added together is correct
 		template<typename T>
-		T interp(const std::vector<T>& data, fVec3 pos, const Coord_Type ctype) const {
+		T interp(const std::vector<T>& data, const fVec3& pos, const Coord_Type ctype) const {
 			iVec3 base = get_base_point(pos, ctype);
 			T res{};
 
@@ -761,6 +815,25 @@ namespace ffip {
 		}
     };
 
+	//for interpolation of a particular coord_type
+	struct Grid_3 {
+		iVec3 p1, p2;
+		sVec3 dim;
+		interpn<3> interpolant;
+
+		Grid_3(const iVec3& p1, const iVec3& p2);
+
+		template<typename T>
+		T interp(const std::vector<T>& data, const fVec3& pos) const {
+			auto rel_pos = (pos - p1) / 2.0;
+			return interpolant(data, rel_pos.z, rel_pos.y, rel_pos.x);
+		}
+
+		size_t get_size() const;
+
+		sVec3 get_dim() const;
+	};
+
 	//output overloading
 	std::ostream& operator<<(std::ostream& os, const std::complex<double>& c);
 	
@@ -782,4 +855,7 @@ namespace ffip {
 
 	//Gaussian second derivative
 	double Gaussian2(double t, double width);
+
+	//linspace integer
+	std::vector<double> linspace(int s, int e, int stride = 1);
 }

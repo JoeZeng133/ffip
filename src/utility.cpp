@@ -104,6 +104,14 @@ namespace ffip {
 		return stride;
 	}
 
+	std::pair<iVec3, iVec3> Yee3::intersect_with(const iVec3& p1, const iVec3& p2) const {
+		return get_intersection(grid_p1, grid_p2, p1, p2);
+	}
+
+	std::pair<iVec3, iVec3> Yee3::intersect_with(const std::pair<iVec3, iVec3>& box) const {
+		return get_intersection(grid_p1, grid_p2, box.first, box.second);
+	}
+
 	iVec3 Yee3::get_base_point(const fVec3& pos, Coord_Type ctype) const {
 		return get_nearest_point<Negative>(pos, ctype);
 	}
@@ -171,7 +179,7 @@ namespace ffip {
 	}
 
 	std::vector<double> Yee3::get_interp_weights
-	(fVec3 pos, Coord_Type ctype) const {
+	(const fVec3& pos, Coord_Type ctype) const {
 
 		iVec3 base = get_base_point(pos, ctype);
 		double sx = (pos.x - base.x) / 2;
