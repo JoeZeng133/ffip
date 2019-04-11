@@ -6,7 +6,7 @@ namespace ffip {
     }
 
     fVec3 point3_to_vec3(const Point_3& p) {
-        return {p.x().to_double(), p.y().to_double(), p.z().to_double()};
+        return {p.x(), p.y(), p.z()};
     }
 
     //Sphere
@@ -50,7 +50,7 @@ namespace ffip {
     (const fVec3& center, const fVec3& size, const iVec3& dim, const Abstract_Medium& m1, const Abstract_Medium& m2, const std::vector<double>& rho):
     geom(vec3_to_point3(center - size / 2), vec3_to_point3(center + size / 2)), m1(m1), m2(m2), dim(dim)
     {
-        interp = interpn<3>{dim.z + 1, dim.y + 1, dim.x + 1};
+        interp = interpn<3>{dim.z, dim.y, dim.x};
         p1 = center - size / 2;
         p2 = center + size / 2;
     }
@@ -65,9 +65,9 @@ namespace ffip {
 
     Abstract_Medium Mixed2::get_medium(const fVec3& p) const {
         double val = interp(rho, 
-        (p.z - p1.z) / (p2.z - p1.z) * dim.z, 
-        (p.y - p1.y) / (p2.y - p1.y) * dim.y,
-        (p.x - p1.x) / (p2.x - p1.x) * dim.x);
+        (p.z - p1.z) / (p2.z - p1.z) * (dim.z - 1), 
+        (p.y - p1.y) / (p2.y - p1.y) * (dim.y - 1),
+        (p.x - p1.x) / (p2.x - p1.x) * (dim.x - 1));
 
         return m1 * val + m2 * (1 - val);
     }

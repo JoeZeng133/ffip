@@ -1,5 +1,4 @@
 {
-	"number of threads" : 1,
 	"courant number": 0.5,
 	"resolution": 15,
 	"size": [
@@ -24,15 +23,33 @@
 			"phase factor": 1
 		}
 	],
-	"bloch periodic": [
+	"periodic": [
 		0,
 		0,
 		0
 	],
-	"input file" : "sth.h5",
+	"background medium": {
+		"epsilon": 1.0,
+		"mu": 1.0
+	},
+	"input file": "sth.h5",
 	"fields output file": "sth.h5",
 	"metadata output file": "sth.h5",
-	"smoothing": "Line_Average",
+	"smoothing": "Line Average",
+	"stop condition1" : {
+		"type" : "time",
+		"time" : 1
+	},
+	"stop condition2" : {
+		"type" : "decay",
+		"position" : [
+			1,1,1
+		],
+		"field component" : "Ex",
+		"time interval examined" : 1,
+		"decayed by" : 1e-3
+	},
+	"progress interval" : 4.0,
 	"geometry": [
 		{
 			"type": "sphere",
@@ -46,7 +63,7 @@
 				"epsilon": 1.0,
 				"mu": 1.0,
 				"E_conductivity": 0.0,
-				"H_conductivity": 0.0,
+				"M_conductivity": 0.0,
 				"E_Susceptibility": [
 					{
 						"type": "Lorentz",
@@ -61,7 +78,7 @@
 						"amplitude": 1.0
 					}
 				],
-				"H_Susceptibility": []
+				"M_Susceptibility": []
 			}
 		},
 		{
@@ -79,14 +96,14 @@
 			"medium": {}
 		},
 		{
-			"type": "inhom",
+			"type": "mixed2",
 			"input dataset": "name of the input dataset that contains rho where e = rho * e1 + (1 - rho) * e2",
 			"center": [
 				0.0,
 				0.0,
 				0.0
 			],
-			"length": [
+			"size": [
 				1.0,
 				1.0,
 				1.0
@@ -114,33 +131,18 @@
 				1.0
 			],
 			"amplitude": 1.0,
-			"coordinate type": "Ex",
+			"field component": "Ex",
 			"function": {
 				"type": "Gaussian1",
 				"frequency": 1.0,
 				"cutoff": 1,
-				"start_time": 0.0
+				"start time": 0.0
 			}
 		},
 		{
 			"type": "scattered source",
-			"input data group": "group name that contains all the datasets: x, y, z, coordinate type, amplitude, corresponding function parameters",
+			"input data group": "x, y, z, amp, field component in integer, [frequency, cutoff, start time]",
 			"function type": "Gaussian1"
-		},
-		{
-			"type": "plane wave",
-			"center": [
-				0.0,
-				0.0,
-				0.0
-			],
-			"size": [
-				1.0,
-				1.0,
-				1.0
-			],
-			"amplitude": 1.0,
-			"function": {}
 		}
 	],
 	"fields output": [
@@ -161,51 +163,48 @@
 				1.1,
 				1.2
 			],
-			"coordinate type": "Ex",
-			"output group": "name of output group where fields with metadata are going to be stored: x, y, z, Re, Im index as (x, y, z, f)"
+			"field component": "Ex",
+			"output group": "x, y, z, f, re(f(x, y, z, f)), im(f)"
 		},
 		{
 			"type": "scattered fields dft",
-			"input data group": "name of the input group that contains: x, y, z, coordinate type, frequency",
-			"output data group": "name of the output group that cotains: Re, Im indexed as original"
-		}
-	],
-	"metadata": [
+			"input data group": "x, y, z, field component(int), frequency",
+			"output data group": "re(f), im(f)"
+		},
 		{
-			"type": "volume closure",
+			"type": "volume fields",
 			"center": [
-				0.0,
-				0.0,
-				0.0
+				0,
+				0,
+				0
 			],
 			"size": [
-				1.0,
-				1.0,
-				1.0
+				1,
+				1,
+				1
 			],
-			"coordinate type": "Ex",
-			"output data group" : "name of the output group that contains: x, y, z"
-        },
-        {
-            "type" :"volume closure exact"
-        },
-        {
-            "type":"volume interior exact"
-        },
+			"start time": 0,
+			"end time": 1e20,
+			"field component": "Ex",
+			"output group": "x, y, z, t, f(x, y, z, t)"
+		},
 		{
-			"type": "volume interior",
+			"type": "flux box",
 			"center": [
-				0.0,
-				0.0,
-				0.0
+				0,
+				0,
+				0
 			],
 			"size": [
-				1.0,
-				1.0,
-				1.0
+				1,
+				1,
+				1
 			],
-			"coordinate type": "Ex",
-			"output data group" :"name of the output group that contains: x, y, z"
+			"frequency": [
+				1.0,
+				1.1
+			],
+			"output dataset": "flux(frequency)"
 		}
 	]
 }

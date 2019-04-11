@@ -4,16 +4,19 @@
 #include <medium.hpp>
 #include <geometry.hpp>
 
-namespace ffip {
-    struct Medium_Stepping {
-        struct Stepping_Point {
+namespace ffip
+{
+    struct Medium_Stepping
+    {
+        struct Stepping_Point
+        {
             size_t index;
             double g_inf;
-        };     
+        };
 
         //time step
         double dt;
-        //abstract susceptibility pool, 
+        //abstract susceptibility pool,
         std::vector<Abstract_Susceptibility> sus_pool;
         //susceptibility intensity, num_points x num_sus
         std::vector<double> sus_amp;
@@ -29,69 +32,78 @@ namespace ffip {
         //set dt
         void set_dt(double dt);
 
-
         //set material pool
-        void set_susceptibility_pool(const std::vector<Abstract_Susceptibility>& sus_pool);
-        void set_susceptibility_pool(const std::vector<Susceptibility>& sus_pool);
+        void set_susceptibility_pool(const std::vector<Abstract_Susceptibility> &sus_pool);
+        void set_susceptibility_pool(const std::vector<Susceptibility> &sus_pool);
 
         //add a point with Medium
-        void add_point(size_t index, double g_inf, const std::valarray<double>& sus_amp);
+        void add_point(size_t index, double g_inf, const std::valarray<double> &sus_amp);
 
         //re-order to improve performance
         void organize();
 
         //update
-        void step(const std::vector<double>& accdb, std::vector<double>& eh);
+        void step(const std::vector<double> &accdb, std::vector<double> &eh);
     };
 
-    class Structure {
+    class Structure
+    {
+    private:
+        Yee3 grid;
+        double dx, dt;
+
+        //geometry list
+        std::vector<Geometry> geom_list;
+
+        //Susceptibility pool, both abstract and original
+        std::vector<Susceptibility> e_sus_pool, m_sus_pool;
+        std::vector<Abstract_Susceptibility> e_ab_sus_pool, m_ab_sus_pool;
+        std::vector<Medium> medium;
+
+        //group medium points by their susceptibility non-zeros
+        std::unordered_map<size_t, Medium_Stepping> e_stepping, m_stepping;
+
+    public:
         //avering method used for material averaging
-        enum Average_Method {No_Average, Line_Average, Volume_Average};
+        enum Average_Method
+        {
+            No_Average,
+            Line_Average,
+            Volume_Average
+        };
 
-        public:
-            Structure(const Yee3& grid);
+        Structure() = default;
 
-            //build susceptibility pool for constructing abstract materials
-            //need to include all possible materials
-            //maximum 64 types of susceptibility
-            void build_material_pool(const std::vector<Medium>& materials);
+        void set_grid(const Yee3 &grid, double dx, double dt);
 
-            //return abstract medium from medium using a pool of susceptibility
-            //used to build geometry objects
-            Abstract_Medium get_abstract_medium(const Medium& medium) const;
+        //build susceptibility pool for constructing abstract materials
+        //need to include all possible materials
+        //maximum 64 types of susceptibility
+        void build_material_pool(const std::vector<Medium> &materials);
 
-            //set material properties from a list of geometry objects
-            void set_materials_from_geometry
-            (const std::vector<Geometry>& geom_list, const Medium& default_medium, Average_Method method);
+        //return abstract medium from medium using a pool of susceptibility
+        //used to build geometry objects
+        Abstract_Medium get_abstract_medium(const Medium &medium) const;
 
-            //get non-zeros pattern
-            size_t get_non_zeros_from_array(const std::valarray<double>& arr, double tol = 1e-4) const;
+        //set material properties from a list of geometry objects
+        void set_materials_from_geometry(const std::vector<std::reference_wrapper<Geometry>> &geom_list, const Medium &default_medium, Average_Method method);
 
-            //mask susceptibility based on non-zeros
-            std::vector<Abstract_Susceptibility> mask_susceptibility_pool(size_t mask, const std::vector<Abstract_Susceptibility>& ab_sus_pool) const;
+        //get non-zeros pattern
+        size_t get_non_zeros_from_array(const std::valarray<double> &arr, double tol = 1e-4) const;
 
-            //return epsilon in complex number
-            std::complex<double> get_epsilon_from_abstract_medium(const Abstract_Medium& medium, double frequency) const;
+        //mask susceptibility based on non-zeros
+        std::vector<Abstract_Susceptibility> mask_susceptibility_pool(size_t mask, const std::vector<Abstract_Susceptibility> &ab_sus_pool) const;
 
-            //step electric fields
-            void step_e(const std::vector<double>& d, std::vector<double>& e, std::vector<double>& e1);
+        //return epsilon in complex number
+        std::complex<double> get_epsilon_from_abstract_medium(const Abstract_Medium &medium, double frequency) const;
 
-            //step magnetic fields
-            void step_m(const std::vector<double>& b, std::vector<double>& h, std::vector<double>& h1);
+        //step electric fields
+        void step_e(const std::vector<double> &d, std::vector<double> &e, std::vector<double> &e1);
 
-            //getters for material properties
-            std::complex<double> get_epsilon(const fVec3& pos, double frequency);
+        //step magnetic fields
+        void step_m(const std::vector<double> &b, std::vector<double> &h, std::vector<double> &h1);
 
-        private:
-            Yee3 grid;
-            //geometry list
-            std::vector<Geometry> geom_list;
-            //Susceptibility pool, both abstract and original
-            std::vector<Susceptibility> e_sus_pool, m_sus_pool;
-            std::vector<Abstract_Susceptibility> e_ab_sus_pool, m_ab_sus_pool;
-
-            std::vector<Medium> medium;
-            //group medium points by their susceptibility non-zeros
-            std::unordered_map<size_t, Medium_Stepping> e_stepping, m_stepping;
+        //getters for material properties
+        std::complex<double> get_epsilon(const fVec3 &pos, double frequency);
     };
-}
+} // namespace ffip

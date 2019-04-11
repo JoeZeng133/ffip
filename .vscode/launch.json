@@ -8,7 +8,7 @@
             "name": "(lldb) Launch",
             "type": "cppdbg",
             "request": "launch",
-            "program": "${workspaceFolder}/build/test/mpi_hdf5",
+            "program": "${workspaceFolder}/build/test/catch_practice",
             "args": [],
             "stopAtEntry": false,
             "cwd": "${workspaceFolder}/test",
