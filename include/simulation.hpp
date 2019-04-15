@@ -12,7 +12,6 @@
 
 namespace ffip
 {
-
     //json string to coord type
     Coord_Type json2ctype(const json &j);
 
@@ -30,6 +29,12 @@ namespace ffip
 
     //json number array to vector
     double_arr json2double_arr(const json &j);
+
+    //json string to direction
+    Direction json2direction(const json &j);
+
+    //json string to side
+    Side json2side(const json& j);
 
     //flux spectrum around a box
     struct Box_Flux
@@ -56,7 +61,7 @@ namespace ffip
         //Coordinate type
         Coord_Type ctype;
         //output group name string
-        std::string group_str;
+        std::string group_name;
 
         Volume_Fields_DFT(const json &config, DFT_Hub &hub);
 
@@ -94,7 +99,7 @@ namespace ffip
 
         Boundary_Condition bcs[3][2];
 
-        HighFive::File input_file, fields_output_file;
+        HighFive::File *input_file{nullptr}, *fields_output_file{nullptr};
 
         std::vector<Volume_Fields_DFT> volume_fields_dft;
 
@@ -102,25 +107,29 @@ namespace ffip
 
         int time_step;
 
-        double progress_interval;
+        double progress_interval{4};
 
         //simulation start time, previous report time
         decltype(std::chrono::system_clock::now()) sim_start_time, sim_prev_time;
 
     public:
-        Simulation() = default;
+        //return field component at a particular point
+		double at(const fVec3& pt, const Coord_Type ctype);
 
         //initialize configurations using json file
         void init(const json &config);
 
-        //set up symmetry(PEC, PMC), sync boundary conditions
+        //set up symmetry(PEC, PMC), sync boundary conditions for the whole simulation
         void set_boundary_conditions(const json &config);
 
-        //
+        //round size of cell to be multiple of dx
         void set_size(const json &config);
 
+        //PML regions are calculated based on original size,
+        //so it might be either truncated or elongated
         void set_pmls(const json &pmls);
 
+        //decompose grid into chunks, and set up boundary conditions
         void set_grid();
 
         void set_geometry(const json &geoms);

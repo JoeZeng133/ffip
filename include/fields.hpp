@@ -8,11 +8,17 @@ namespace ffip
     //for generating k, b, c
     struct PML
     {
-        double sigma_max, k_max, d;
+        double sigma_max;
+        double k_max;
+        //thickness of PML
+        double d;
+        //polynomial order
         int m;
 
+        //sigma_max = 0 uses recommended sigma_max with Reflection error as 1e-4
         PML(double d, double sigma_max = 0, double k_max = 1, int m = 3);
 
+        //getters
         double get_b(double x, double dt);
         double get_c(double x, double dt);
         double get_sigma(double x);
@@ -35,13 +41,13 @@ namespace ffip
             double width;
         };
 
-        double max_end_time;
+        double max_end_time{0};
 
         std::vector<Stepping_Point> gaussian1_points;
         std::vector<Stepping_Point> gaussian2_points;
 
     public:
-        Gaussian_Dipoles_Stepping() = default;
+        // Gaussian_Dipoles_Stepping() = default;
 
         //increase possibility of locality
         void organize();
@@ -59,7 +65,7 @@ namespace ffip
         void output(std::ostream &os);
     };
 
-    //PML Regions curls E, H
+    //PML Regions curls E, H calculation
     class PML_Stepping
     {
     private:
@@ -70,19 +76,25 @@ namespace ffip
             double phi1;
             double b1;
             double c1;
-            double k1;
+            double inv_k1;
 
             double phi2;
             double b2;
             double c2;
-            double k2;
+            double inv_k2;
         };
 
+        double inv_dx;
+
         sVec3 strides;
+        //points in x, y, z direction
         std::vector<Stepping_Point> points[3];
 
     public:
-        PML_Stepping() = default;
+        // PML_Stepping() = default;
+
+        //set dx for use in curl calculation
+        void set_dx(double dx);
 
         //set strides for use in stepping
         void set_strides(sVec3 strides);
@@ -103,10 +115,10 @@ namespace ffip
     private:
         sVec3 strides;
         std::vector<size_t> points[3];
-        double dx;
+        double inv_dx;
 
     public:
-        Curl_Stepping() = default;
+        // Curl_Stepping() = default;
 
         //set dx for calculating curl
         void set_dx(double dx);
@@ -159,19 +171,19 @@ namespace ffip
         //tentative fields, might not be necessary
         std::vector<double> eh1, eh2, db;
 
-        Fields() = default;
+        // Fields() = default;
+		void set_boundary_conditions(Boundary_Condition _bc[3][2]);
 
         void set_grid(const Yee3 &grid, double dx, double dt);
 
         //add gaussian1 dipole, flip amplitude
-        void add_dipole_source_gaussian1(const fVec3 &pos, Coord_Type ctype, double amp, double start_time, double end_time, double frequency, double cutoff);
+        void add_dipole_source_gaussian1(const fVec3 &pos, Coord_Type ctype, double amp, double start_time, double frequency, double cutoff);
 
         //add gaussian2 dipole
-        void add_dipole_source_gaussian2(const fVec3 &pos, Coord_Type ctype, double amp, double start_time, double end_time, double frequency, double cutoff);
+        void add_dipole_source_gaussian2(const fVec3 &pos, Coord_Type ctype, double amp, double start_time, double frequency, double cutoff);
 
         //Initializations of curl
         //providing k, b, c from PML and the index extend [p1, p2] covering the whole simulation
-        //provide dx for discretized curl calculation
         void init(
             const std::array<double_arr, 3> &k, const std::array<double_arr, 3> &b, const std::array<double_arr, 3> &c,
             const iVec3 &p1, const iVec3 &p2);
@@ -185,6 +197,8 @@ namespace ffip
         //getter helper functions
         double get_eh_helper(const fVec3 &pos, Coord_Type ctype) const;
         double get_db_helper(const fVec3 &pos, Coord_Type ctype) const;
+        //return a e,h,d,b field components
+        double get(const fVec3& pos, Coord_Type ctype) const;
 
         //raw getter functions, no range checking
         double get_eh_raw(const iVec3 &pos) const;
@@ -211,9 +225,6 @@ namespace ffip
         //update accb = -curlE - M
         void step_accb(MPI_Comm comm, double time);
 
-        //save fields into hdf5 for reloading
-        void save_hdf5();
-
         //return turned off time of source
         double get_source_turnoff_time() const;
     };
@@ -226,7 +237,7 @@ namespace ffip
         iVec3 p2 = grid.get_grid_p2();
 
         auto face = get_face<x3, side>(p1, p2);
-        auto itr = Yee_Iterator(p1, p2);
+        auto itr = Yee_Iterator(face);
         buf.resize(itr.get_size());
 
         for (int index = 0; !itr.is_end(); itr.next(), ++index)
@@ -241,25 +252,24 @@ namespace ffip
         constexpr auto x3 = static_cast<Direction>(x3_int);
         constexpr auto side = static_cast<Side>(side_int);
 
-        iVec3 face_norm = get_norm_vec(static_cast<Direction>(x3), static_cast<Side>(side));
-        iVec3 p1 = grid.get_grid_p1() + face_norm;
-        iVec3 p2 = grid.get_grid_p2() + face_norm;
+        iVec3 face_norm = get_norm_vec(x3, side);
+        iVec3 p1 = grid.get_grid_p1();
+        iVec3 p2 = grid.get_grid_p2();
 
         auto face = get_face<x3, side>(p1, p2);
-        auto itr = Yee_Iterator(p1, p2);
+        auto itr = Yee_Iterator(face);
         if (buf.size() < itr.get_size())
             return;
 
         for (int index = 0; !itr.is_end(); itr.next(), ++index)
         {
-            eh[grid.get_index_from_coord(itr.get_coord())] = buf[index];
+            eh[grid.get_index_from_coord(itr.get_coord() + face_norm)] = buf[index];
         }
     }
 
     template <unsigned int x3_int, int side_int>
     void Fields::sync_symmetry_boundary(int phase)
     {
-
         //orientation (x1, x2, x3)
         constexpr auto x1 = static_cast<Direction>((x3_int + 1) % 3);
         constexpr auto x2 = static_cast<Direction>((x3_int + 2) % 3);
@@ -268,8 +278,8 @@ namespace ffip
 
         //construct face
         iVec3 face_norm = get_norm_vec(x3, side);
-        auto p1 = grid.get_grid_p1() + face_norm;
-        auto p2 = grid.get_grid_p2() + face_norm;
+        auto p1 = grid.get_grid_p1();
+        auto p2 = grid.get_grid_p2();
         auto face = get_face<x3, side>(p1, p2);
 
         //index offset in the normal direction
@@ -277,13 +287,12 @@ namespace ffip
         //actual phase applied
         int mult = (p1.get<x3>() & 1) ? -phase : phase;
 
-        //loop through points of inner faces
+        //loop through ghost points
         for (auto itr = Yee_Iterator(face); !itr.is_end(); itr.next())
         {
-
             //index of the point
             size_t index = grid.get_index_from_coord(itr.get_coord());
-            eh[index] = mult * eh[index - norm_index_offset * 2];
+            eh[index + norm_index_offset] = mult * eh[index - norm_index_offset];
         }
     }
 
@@ -293,8 +302,8 @@ namespace ffip
 
         constexpr auto ctype = static_cast<Coord_Type>(F3);
         constexpr auto x3 = get_dir_from_ctype(ctype);
-        constexpr auto x1 = (x3 + 1) % 3;
-        constexpr auto x2 = (x3 + 2) % 3;
+        constexpr auto x1 = static_cast<Direction>((x3 + 1) % 3);
+        constexpr auto x2 = static_cast<Direction>((x3 + 2) % 3);
 
         PML_Stepping &pml = (is_e_point(ctype) ? e_pml : m_pml);
         Curl_Stepping &curl = (is_e_point(ctype) ? e_curl : m_curl);
@@ -310,8 +319,8 @@ namespace ffip
             //if it is a PML point
             if (c[x1][x1_index] != 0 || c[x2][x2_index] != 0)
                 pml.add_stepping_point(x3, index,
-                                    b[x1][x1_index], c[x1][x1_index] / dx, 1 / dx / k[x1][x1_index],
-                                    b[x2][x2_index], c[x2][x2_index] / dx, 1 / dx / k[x2][x2_index]);
+                                    b[x1][x1_index], c[x1][x1_index], k[x1][x1_index],
+                                    b[x2][x2_index], c[x2][x2_index], k[x2][x2_index]);
             //if it is not a PML point
             else
                 curl.add_stepping_point(x3, index);

@@ -61,8 +61,6 @@ namespace ffip
 
 	size_t Yee_Iterator::get_size(const iVec3 &p1, const iVec3 &p2, const Coord_Type ctype)
 	{
-		auto tmp = get_component_interior(p1, p2, ctype);
-
 		return (((p2.x - p1.x) / 2 + 1) * ((p2.y - p1.y) / 2 + 1) * ((p2.z - p1.z) / 2 + 1));
 	}
 
@@ -129,6 +127,8 @@ namespace ffip
 	}
 
 	//Yee3
+	Yee3::Yee3() : Yee3({0, 0, 0}, {0, 0, 0}) {}
+
 	Yee3::Yee3(const iVec3& ghost_p1, const iVec3& ghost_p2) : ghost_p1(ghost_p1), ghost_p2(ghost_p2)
 	{
 
@@ -302,11 +302,14 @@ namespace ffip
 		return dim;
 	}
 
-	std::vector<double> linspace(int s, int e, int stride)
+	std::vector<double> linspace(double s, double e, unsigned int dim)
 	{
 		std::vector<double> res;
-		for (; s <= e; s += stride)
-			res.push_back(s);
+		if (dim <= 1)	return {(double)s};
+
+		double stride = (double)(e - s) / (dim - 1);
+		for(int i = 0; i < dim; ++i)
+			res.push_back(s + i * stride);
 
 		return res;
 	}

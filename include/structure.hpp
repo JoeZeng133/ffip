@@ -27,8 +27,6 @@ namespace ffip
         //collection of stepping points
         std::vector<Stepping_Point> points;
 
-        Medium_Stepping() = default;
-
         //set dt
         void set_dt(double dt);
 
@@ -72,7 +70,7 @@ namespace ffip
             Volume_Average
         };
 
-        Structure() = default;
+        // Structure() = default;
 
         void set_grid(const Yee3 &grid, double dx, double dt);
 
@@ -94,16 +92,10 @@ namespace ffip
         //mask susceptibility based on non-zeros
         std::vector<Abstract_Susceptibility> mask_susceptibility_pool(size_t mask, const std::vector<Abstract_Susceptibility> &ab_sus_pool) const;
 
-        //return epsilon in complex number
-        std::complex<double> get_epsilon_from_abstract_medium(const Abstract_Medium &medium, double frequency) const;
-
         //step electric fields
-        void step_e(const std::vector<double> &d, std::vector<double> &e, std::vector<double> &e1);
+        void step_e(const std::vector<double> &accd, std::vector<double> &e, std::vector<double> &e1);
 
         //step magnetic fields
-        void step_m(const std::vector<double> &b, std::vector<double> &h, std::vector<double> &h1);
-
-        //getters for material properties
-        std::complex<double> get_epsilon(const fVec3 &pos, double frequency);
+        void step_m(const std::vector<double> &accb, std::vector<double> &h, std::vector<double> &h1);
     };
 } // namespace ffip

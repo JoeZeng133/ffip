@@ -1,0 +1,210 @@
+{
+	"courant_number": 0.5,
+	"resolution": 15,
+	"size": [
+		1.0,
+		1.0,
+		1.0
+	],
+	"PML": [
+		{
+			"direction": "x",
+			"side": "positive",
+			"thickness": 1.0,
+			"reflection_error": 1e-4,
+			"order": 3,
+			"sigma_max": 1.0,
+			"chi_max": 1.0
+		}
+	],
+	"symmetry": [
+		{
+			"direction": "x",
+			"phase_factor": 1
+		}
+	],
+	"periodic": [
+		0,
+		0,
+		0
+	],
+	"background_medium": {
+		"epsilon": 1.0,
+		"mu": 1.0
+	},
+	"input_file": "sth.h5",
+	"fields_output_file": "sth.h5",
+	"metadata_output_file": "sth.h5",
+	"smoothing": "line average",
+	"stop_condition1" : {
+		"type" : "time",
+		"time" : 1
+	},
+	"stop_condition2" : {
+		"type" : "decay",
+		"position" : [
+			1,1,1
+		],
+		"field_component" : "Ex",
+		"time_interval_examined" : 1,
+		"decayed_by" : 1e-3
+	},
+	"progress_interval" : 4.0,
+	"geometry": [
+		{
+			"type": "sphere",
+			"center": [
+				0.0,
+				0.0,
+				0.0
+			],
+			"radius": 1.0,
+			"medium": {
+				"epsilon": 1.0,
+				"mu": 1.0,
+				"electric_conductivity": 0.0,
+				"magnetic_conductivity": 0.0,
+				"electric_susceptibility": [
+					{
+						"type": "Lorentz",
+						"frequency": 1.0,
+						"gamma": 1.0,
+						"amplitude": 1.0
+					},
+					{
+						"type": "Drude",
+						"frequency": 1.0,
+						"gamma": 1.0,
+						"amplitude": 1.0
+					}
+				],
+				"magnetic_susceptibility": []
+			}
+		},
+		{
+			"type": "box",
+			"center": [
+				0.0,
+				0.0,
+				0.0
+			],
+			"size": [
+				1.0,
+				1.0,
+				1.0
+			],
+			"medium": {}
+		},
+		{
+			"type": "mixed2",
+			"input_dataset": "name of the input dataset that contains rho where e = rho * e1 + (1 - rho) * e2",
+			"center": [
+				0.0,
+				0.0,
+				0.0
+			],
+			"size": [
+				1.0,
+				1.0,
+				1.0
+			],
+			"dim": [
+				100,
+				100,
+				100
+			],
+			"medium1": {},
+			"medium2": {}
+		}
+	],
+	"source": [
+		{
+			"type": "volume source",
+			"center": [
+				0.0,
+				0.0,
+				0.0
+			],
+			"size": [
+				1.0,
+				1.0,
+				1.0
+			],
+			"amplitude": 1.0,
+			"field_component": "Ex",
+			"function": {
+				"type": "Gaussian1",
+				"frequency": 1.0,
+				"cutoff": 1,
+				"start_time": 0.0
+			}
+		},
+		{
+			"type": "scattered source",
+			"input_data_group": "x, y, z, amp, field component in integer, [frequency, cutoff, start time]",
+			"function_type": "Gaussian1"
+		}
+	],
+	"fields_output": [
+		{
+			"type": "volume fields dft",
+			"center": [
+				0.0,
+				0.0,
+				0.0
+			],
+			"size": [
+				1.0,
+				1.0,
+				1.0
+			],
+			"frequency": [
+				1.0,
+				1.1,
+				1.2
+			],
+			"field_component": "Ex",
+			"output_group": "x, y, z, f, re(f(x, y, z, f)), im(f)"
+		},
+		{
+			"type": "scattered fields dft",
+			"input_data_group": "x, y, z, field component(int), frequency",
+			"output_data_group": "re(f), im(f)"
+		},
+		{
+			"type": "volume fields",
+			"center": [
+				0,
+				0,
+				0
+			],
+			"size": [
+				1,
+				1,
+				1
+			],
+			"start_time": 0,
+			"end_time": 1e20,
+			"field_component": "Ex",
+			"output_group": "x, y, z, t, f(x, y, z, t)"
+		},
+		{
+			"type": "flux box",
+			"center": [
+				0,
+				0,
+				0
+			],
+			"size": [
+				1,
+				1,
+				1
+			],
+			"frequency": [
+				1.0,
+				1.1
+			],
+			"output_dataset": "flux(frequency)"
+		}
+	]
+}

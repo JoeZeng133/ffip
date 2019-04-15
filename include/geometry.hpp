@@ -22,7 +22,6 @@ namespace ffip
     fVec3 point3_to_vec3(const Point_3 &p);
 
     //geometry class wrapper
-    //alNegative material function
     class Geometry
     {
     public:
@@ -35,6 +34,8 @@ namespace ffip
 
         //return medium at particular position, if homogeneous, pos ignored
         virtual Abstract_Medium get_medium(const fVec3 &pos) const = 0;
+		
+		virtual ~Geometry() {};
     };
 
     //Sphere geometry

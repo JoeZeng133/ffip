@@ -30,12 +30,14 @@ namespace ffip
         std::vector<Susceptibility> e_sus, m_sus;
         std::vector<double> e_sus_amp, m_sus_amp;
 
+        Medium();
         Medium(double epsilon, double mu);
         void add_e_susceptibility(const Susceptibility &sus, double amp);
         void add_m_susceptibility(const Susceptibility &sus, double amp);
     };
 
     //Abstract Medium
+    //stores only amplitudes of each susceptibility
     struct Abstract_Medium
     {
         double epsilon, mu;
@@ -49,7 +51,7 @@ namespace ffip
     };
 
     //return a measure of norm on the medium
-    //used for medium averaging
+    //used for medium averaging to measure error
     double norm(const Abstract_Medium &medium);
 
     //linear space operations
@@ -63,4 +65,5 @@ namespace ffip
     Susceptibility make_Drude_susceptibility(double frequeency, double gamma);
 
     Susceptibility make_conductivity_susceptibility();
+
 } // namespace ffip

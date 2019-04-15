@@ -8,10 +8,10 @@
             "name": "(lldb) Launch",
             "type": "cppdbg",
             "request": "launch",
-            "program": "${workspaceFolder}/build/test/catch_practice",
+            "program": "${workspaceFolder}/build/app/run_sim_json",
             "args": [],
             "stopAtEntry": false,
-            "cwd": "${workspaceFolder}/test",
+            "cwd": "${workspaceFolder}/build/app/",
             "environment": [],
             "externalConsole": true,
             "MIMode": "lldb"

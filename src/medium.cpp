@@ -26,6 +26,8 @@ namespace ffip
     }
 
     //Medium
+    Medium::Medium() : Medium(0, 0) {}
+    
     Medium::Medium(double epsilon, double mu) : epsilon(epsilon), mu(mu) {}
 
     void Medium::add_e_susceptibility(const Susceptibility &sus, double amp)
@@ -86,13 +88,13 @@ namespace ffip
     Susceptibility make_Lorentz_susceptibility(double frequency, double gamma)
     {
         double omega = 2 * pi * frequency;
-        return Susceptibility{omega * omega, omega * omega, gamma, 1};
+        return Susceptibility{omega * omega, omega * omega, 2 * pi * gamma, 1};
     }
 
     Susceptibility make_Drude_susceptibility(double frequency, double gamma)
     {
         double omega = 2 * pi * frequency;
-        return Susceptibility{omega * omega, 0, gamma, 1};
+        return Susceptibility{omega * omega, 0, 2 * pi * gamma, 1};
     }
 
     Susceptibility make_conductivity_susceptibility()

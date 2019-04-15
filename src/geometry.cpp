@@ -23,7 +23,7 @@ namespace ffip {
     }
 
     Sphere::Sphere(const fVec3& center, const double radius, const Abstract_Medium& medium):
-    geom({center.x, center.y, center.z}, radius * radius) ,medium(medium), center(center), radius(radius) {}
+    geom(vec3_to_point3(center), radius * radius) ,medium(medium), center(center), radius(radius) {}
 
     //Block
     bool Block::is_inside(const fVec3& pos) const {
@@ -46,11 +46,11 @@ namespace ffip {
     }
 
     //Mixe2
-    Mixed2::Mixed2
+	Mixed2::Mixed2
     (const fVec3& center, const fVec3& size, const iVec3& dim, const Abstract_Medium& m1, const Abstract_Medium& m2, const std::vector<double>& rho):
-    geom(vec3_to_point3(center - size / 2), vec3_to_point3(center + size / 2)), m1(m1), m2(m2), dim(dim)
+    geom(vec3_to_point3(center - size / 2), vec3_to_point3(center + size / 2)), m1(m1), m2(m2), dim(dim), rho(rho)
     {
-        interp = interpn<3>{dim.z, dim.y, dim.x};
+        interp = interpn<3>{(size_t)dim.z, (size_t)dim.y, (size_t)dim.x};
         p1 = center - size / 2;
         p2 = center + size / 2;
     }

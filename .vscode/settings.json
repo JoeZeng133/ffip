@@ -79,7 +79,9 @@
         "queue": "cpp",
         "random": "cpp",
         "cfenv": "cpp",
-        "cinttypes": "cpp"
+        "cinttypes": "cpp",
+        "memory_resource": "cpp",
+        "regex": "cpp"
     },
     "C_Cpp.intelliSenseEngineFallback": "Disabled",
     "C_Cpp.configurationWarnings": "Disabled"

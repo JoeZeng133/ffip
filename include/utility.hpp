@@ -916,6 +916,8 @@ namespace ffip
 		//strides of the array
 		sVec3 stride;
 
+		Yee3();
+
 		Yee3(const iVec3& ghost_p1, const iVec3& ghost_p2);
 
 		//get grid lower corner, excluding ghost point
@@ -1067,7 +1069,7 @@ namespace ffip
 	double Gaussian2(double t, double width);
 
 	//linspace integer
-	std::vector<double> linspace(int s, int e, int stride = 1);
+	std::vector<double> linspace(double s, double e, unsigned int dim = 2);
 
 	//return maximum size of chunk among chunks in domain divided by [num1, num2, num3]
 	size_t get_max_size_chunk(const iVec3 &dim, const iVec3 &num);
