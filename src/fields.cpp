@@ -18,7 +18,7 @@ namespace ffip
     {
         if (time > max_end_time)
             return;
-
+		
         for (auto &point : gaussian1_points)
         {
             if (time > point.start_time && time < point.end_time)
@@ -44,7 +44,16 @@ namespace ffip
         max_end_time = std::max(end_time, max_end_time);
     }
 
-    void Gaussian_Dipoles_Stepping::output(std::ostream &os) {}
+    void Gaussian_Dipoles_Stepping::output_details(std::ostream &os, const Yee3& grid) const
+	{
+		os << "Reporting gaussian1 points\n";
+		for(auto &point : gaussian1_points)
+            os << "coord=" <<  grid.get_coord_from_index(point.index) << ",amp=" << point.amp << ",st=" << point.start_time << ",et=" << point.end_time << ",w=" << point.width << "\n";
+		
+		os << "Reporting gaussian2 points\n";
+		for(auto &point : gaussian2_points)
+			os << "coord=" <<  grid.get_coord_from_index(point.index) << ",amp=" << point.amp << ",st=" << point.start_time << ",et=" << point.end_time << ",w=" << point.width << "\n";
+	}
 
     //PML Stepping
     void PML_Stepping::set_strides(sVec3 strides)
@@ -64,10 +73,21 @@ namespace ffip
                 return a.index < b.index;
             });
     }
+	
+	void PML_Stepping::output_details(std::ostream& os, const Yee3& grid) const
+	{
+		for(int i = 0; i < 3; ++i)
+		{
+			os << "Reporting PML" << i << "direction points\n";
+			
+			for(auto &point : points[i])
+				os << "coord=" << grid.get_coord_from_index(point.index) <<
+				",b1=" << point.b1 << ",b2=" << point.b2 << ",invk1=" << point.inv_k1 << ",invk2=" << point.inv_k2 << "\n";
+		}
+	}
 
     void PML_Stepping::step(const std::vector<double> &eh, std::vector<double> &accdb)
     {
-
         for (int i = 0; i < 3; ++i)
         {
             //stride in x2
@@ -114,15 +134,15 @@ namespace ffip
     {
         for (int i = 0; i < 3; ++i)
         {
-            long stride1 = strides[(i + 1) % 3];
-            long stride2 = strides[(i + 2) % 3];
+            long long stride1 = strides[(i + 1) % 3];
+            long long stride2 = strides[(i + 2) % 3];
 
             for (auto point : points[i])
             {
-                double curl1 = (eh[point + stride1] - eh[point - stride1]);
-                double curl2 = (eh[point + stride2] - eh[point - stride2]);
+                double curl1 = (eh[point + stride1] - eh[point - stride1]) * inv_dx;
+                double curl2 = (eh[point + stride2] - eh[point - stride2]) * inv_dx;
 
-                accdb[point] += (curl1 - curl2) * inv_dx;
+                accdb[point] += (curl1 - curl2);
             }
         }
     }
@@ -221,12 +241,6 @@ namespace ffip
         PML_init_helper<Hx>(k, b, c, p1, p2);
         PML_init_helper<Hy>(k, b, c, p1, p2);
         PML_init_helper<Hz>(k, b, c, p1, p2);
-		
-		e_pml.set_dx(dx);
-		e_curl.set_dx(dx);
-		
-		m_curl.set_dx(dx);
-		m_pml.set_dx(dx);
     }
 
     double Fields::get_eh_helper(const fVec3 &pos, Coord_Type ctype) const
@@ -252,7 +266,48 @@ namespace ffip
     double Fields::get(const fVec3& pos, Coord_Type ctype) const {
         if (is_eh_point(ctype))
             return get_eh_helper(pos, ctype);
-        return get_db_helper(pos, ctype);
+        return get_db_helper(pos, ctype) * dt;
+    }
+	
+	void Fields::report() const
+	{
+		double tmp=0;
+		for(auto x : accdb)
+			tmp += std::abs(x);
+		std::cout << "accdb=" << tmp;
+		
+		tmp = 0;
+		for(auto x : eh)
+			tmp += std::abs(x);
+		std::cout << ",eh=" << tmp << "\n";
+	}
+
+    void Fields::output_fields(std::ostream& os) const
+    {
+        os << "Reporting eh fields:\n";
+        auto p1 = iVec3(-5, -5, -5);
+        auto p2 = iVec3(5, 5, 5);
+
+		for(auto itr = Yee_Iterator(p1, p2); !itr.is_end(); itr.next())
+        {
+			size_t index = grid.get_index_from_coord(itr.get_coord());
+			if (eh[index] != 0 || accdb[index] != 0) {
+				os << "index=" << index << ",coord=" <<  itr.get_coord() << ",eh=" << eh[index] << ",accdb=" << accdb[index] << "\n";
+			}
+        }
+//        os << "\n";
+    }
+
+    void Fields::output_details(std::ostream& os) const
+    {
+        os << "e_pml\n";
+        e_pml.output_details(os, grid);
+        os << "m_pml\n";
+        m_pml.output_details(os, grid);
+        os << "e gaussian dipoles\n";
+        e_gaussian_dipoles.output_details(os, grid);
+        os << "m gaussian dipoles\n";
+        m_gaussian_dipoles.output_details(os, grid);
     }
 
     void Fields::step_accd(MPI_Comm comm, double time)
@@ -260,10 +315,6 @@ namespace ffip
         e_pml.step(eh, accdb);
         e_curl.step(eh, accdb);
         e_gaussian_dipoles.step(time, accdb);
-
-        sync_boundary(comm, X);
-        sync_boundary(comm, Y);
-        sync_boundary(comm, Z);
     }
 
     void Fields::step_accb(MPI_Comm comm, double time)
@@ -271,24 +322,19 @@ namespace ffip
         m_pml.step(eh, accdb);
         m_curl.step(eh, accdb);
         m_gaussian_dipoles.step(time, accdb);
-
-        sync_boundary(comm, X);
-        sync_boundary(comm, Y);
-        sync_boundary(comm, Z);
     }
 
     void Fields::sync_boundary(MPI_Comm comm, Direction dir)
     {
-
         //send, receive for the positive face
         static std::vector<double> pos_send_buf, pos_receive_buf;
         //send, receive for the negative face
         static std::vector<double> neg_send_buf, neg_receive_buf;
 
         int rank, pos_rank, neg_rank;
-        int face_size;
-        int pos_send_size, pos_receive_size, neg_send_size, neg_receive_size;
-        int phase;
+        size_t face_size;
+        size_t pos_send_size, pos_receive_size, neg_send_size, neg_receive_size;
+        Boundary_Condition pos_bc = bc[dir][1], neg_bc = bc[dir][0];
 
         MPI_Comm_rank(comm, &rank);
         MPI_Cart_shift(comm, (int)dir, 1, &neg_rank, &pos_rank);
@@ -298,112 +344,68 @@ namespace ffip
         iVec3 p2 = grid.get_grid_p2();
         auto face = get_face(p1, p2, dir, Positive);
         face_size = Yee_Iterator(face).get_size();
+		
+		//resizing buffer when necessary
+		if (face_size > pos_send_buf.size()) {
+			pos_send_buf.resize(face_size);
+			neg_send_buf.resize(face_size);
+			pos_receive_buf.resize(face_size);
+			neg_receive_buf.resize(face_size);
+		}
 
-        //positive face
-        phase = 1;
-        switch (bc[dir][1])
+        //extract fields depending on particular boundary conditiosn
+        auto extraction = [&]
+        (Boundary_Condition bc, Direction dir, Side side, std::vector<double>& buf) -> size_t
         {
-        //PEC
-        case PEC:
-            phase = -1;
-
-        //PEC, PMC
-        case PMC:
-            switch (dir)
+            switch(bc)
             {
-            case X:
-                sync_symmetry_boundary<X, Positive>(phase);
+            case None:
+                return 0;
                 break;
 
-            case Y:
-                sync_symmetry_boundary<Y, Positive>(phase);
+            case PEC:
+                extract_symmetry_face(dir, side, -1, buf);
+                return 0;
                 break;
 
-            case Z:
-                sync_symmetry_boundary<Z, Positive>(phase);
+            case PMC:
+                extract_symmetry_face(dir, side, 1, buf);
+                return 0;
+                break;
+
+            case Period:
+                return extract_fields_face(dir, side, -1, buf);
+                break;
+
+            case Sync:
+                return extract_fields_face(dir, side, 0, buf);
                 break;
             }
+        };
 
-        //PEC, PMC, None
-        case None:
-            pos_send_size = pos_receive_size = 0;
-            pos_send_buf.resize(0);
-            pos_receive_buf.resize(0);
-            break;
-
-        case Sync:
-            pos_send_size = pos_receive_size = face_size;
-            pos_receive_buf.resize(face_size);
-            pos_send_buf.resize(face_size);
-            switch (dir)
-            {
-            case X:
-                extract_fields_face<X, Positive>(pos_send_buf);
-                break;
-
-            case Y:
-                extract_fields_face<Y, Positive>(pos_send_buf);
-                break;
-
-            case Z:
-                extract_fields_face<Z, Positive>(pos_send_buf);
-                break;
-            }
-            break;
-        }
-
-        //negative face
-        phase = 1;
-        switch (bc[dir][0])
+        //assigning fields
+        auto assignment = [&]
+        (Boundary_Condition bc, Direction dir, Side side, const std::vector<double>& send_buf, const std::vector<double>& receive_buf)
         {
-        //PEC
-        case PEC:
-            phase = -1;
-
-        //PEC, PMC
-        case PMC:
-            switch (dir)
+            switch(bc)
             {
-            case X:
-                sync_symmetry_boundary<X, Negative>(phase);
-                break;
-
-            case Y:
-                sync_symmetry_boundary<Y, Negative>(phase);
-                break;
-
-            case Z:
-                sync_symmetry_boundary<Z, Negative>(phase);
-                break;
+                case None:
+					break;
+					
+                case PMC:
+                case PEC:
+					assign_fields_face(dir, side, 1, send_buf);
+					break;
+					
+                case Sync:
+                case Period:
+					assign_fields_face(dir, side, 1, receive_buf);
+					break;
             }
+        };
 
-        //PEC, PMC, None
-        case None:
-            neg_send_size = neg_receive_size = 0;
-            neg_send_buf.resize(0);
-            neg_receive_buf.resize(0);
-            break;
-
-        case Sync:
-            neg_send_size = neg_receive_size = face_size;
-            neg_receive_buf.resize(face_size);
-            neg_send_buf.resize(face_size);
-            switch (dir)
-            {
-            case X:
-                extract_fields_face<X, Negative>(neg_send_buf);
-                break;
-
-            case Y:
-                extract_fields_face<Y, Negative>(neg_send_buf);
-                break;
-
-            case Z:
-                extract_fields_face<Z, Negative>(neg_send_buf);
-                break;
-            }
-            break;
-        }
+        neg_receive_size = neg_send_size = extraction(neg_bc, dir, Negative, neg_send_buf);
+        pos_receive_size = pos_send_size = extraction(pos_bc, dir, Positive, pos_send_buf);
 
         MPI_Status status;
 
@@ -419,24 +421,8 @@ namespace ffip
             pos_receive_buf.data(), pos_receive_size, MPI_DOUBLE, pos_rank, dir,
             comm, &status);
 
-        //assigning fields
-        switch (dir)
-        {
-        case X:
-            assign_fields_face<X, Positive>(pos_receive_buf);
-            assign_fields_face<X, Negative>(neg_receive_buf);
-            break;
-
-        case Y:
-            assign_fields_face<Y, Positive>(pos_receive_buf);
-            assign_fields_face<Y, Negative>(neg_receive_buf);
-            break;
-
-        case Z:
-            assign_fields_face<Z, Positive>(pos_receive_buf);
-            assign_fields_face<Z, Negative>(neg_receive_buf);
-            break;
-        }
+        assignment(neg_bc, dir, Negative, neg_send_buf, neg_receive_buf);
+        assignment(pos_bc, dir, Positive, pos_send_buf, pos_receive_buf);
     }
 
     double Fields::get_source_turnoff_time() const
@@ -444,34 +430,77 @@ namespace ffip
         return turnoff_time;
     }
 
+    size_t Fields::extract_fields_face(Direction x3, Side side, int offset, std::vector<double> &buf)
+    {
+        iVec3 p1 = grid.get_grid_p1();
+        iVec3 p2 = grid.get_grid_p2();
+
+        auto norm = get_norm_vec(x3, side);
+        auto face = get_face(p1 + norm * offset, p2 + norm * offset, x3, side);
+        auto itr = Yee_Iterator(face);
+
+        for (int index = 0; !itr.is_end(); itr.next(), ++index)
+        {
+            buf[index] = grid.get_raw_val(eh, itr.get_coord());
+        }
+
+        return itr.get_size();
+    }
+
+    void Fields::assign_fields_face(Direction x3, Side side, int offset, const std::vector<double> &buf)
+    {
+        iVec3 p1 = grid.get_grid_p1();
+        iVec3 p2 = grid.get_grid_p2();
+
+        auto norm = get_norm_vec(x3, side);
+        auto face = get_face(p1 + norm * offset, p2 + norm * offset, x3, side);
+        auto itr = Yee_Iterator(face);
+
+        for (int index = 0; !itr.is_end(); itr.next(), ++index)
+        {
+            eh[grid.get_index_from_coord(itr.get_coord())] = buf[index];
+        }
+    }
+
+    size_t Fields::extract_symmetry_face(Direction x3, Side side, int phase, std::vector<double> &buf)
+    {
+        iVec3 p1 = grid.get_grid_p1();
+		iVec3 p2 = grid.get_grid_p2();
+		int pos;
+		if (side == Negative)
+			pos = p1[x3];
+		else
+			pos = p2[x3];
+		
+        //orientation (x1, x2, x3)
+        int mult = (pos & 1) ? phase : -phase;
+        size_t len = extract_fields_face(x3, side, -1, buf);
+        for(size_t i = 0; i < len; ++i)
+            buf[i] *= mult;
+        
+        return len;
+    }
+
     //PML class
     PML::PML(double d, double sigma_max, double k_max, int m) : d(d), sigma_max(sigma_max), k_max(k_max), m(m)
-    {
-		if (std::abs(sigma_max) < 1e-9)
-            this->sigma_max = get_sigma_max(d, 1e-4, m, 1);
-    }
+    {}
 
-    double PML::get_sigma_max(double d, double R, double m, double imp)
-    {
-        return -(m + 1) * std::log(R) / (imp * 2 * d);
-    }
-
-    double PML::get_b(double x, double dt)
+    double PML::get_b(double x, double dt) const
     {
         return std::exp(-get_sigma(x) / get_k(x) * dt);
     }
 
-    double PML::get_c(double x, double dt)
+    double PML::get_c(double x, double dt) const
     {
         return 1 / get_k(x) * (get_b(x, dt) - 1);
     }
 
-    double PML::get_sigma(double x)
+    double PML::get_sigma(double x) const
     {
         return std::pow(x / d, m) * sigma_max;
     }
 
-    double PML::get_k(double x)
+    double PML::get_k(double x) const
     {
         return 1 + (k_max - 1) * std::pow(x / d, m);
     }

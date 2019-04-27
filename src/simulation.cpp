@@ -4,11 +4,10 @@ namespace ffip
 {
     using namespace HighFive;
 
-    Side json2side(const json& j)
-	{
+    Side json2side(const json &j)
+    {
         static std::unordered_map<std::string, Side> map = {
-            {"positive", Positive}, {"negative", Negative}
-        };
+            {"positive", Positive}, {"negative", Negative}};
 
         return map.at(j.get<std::string>());
     }
@@ -16,20 +15,16 @@ namespace ffip
     Coord_Type json2ctype(const json &j)
     {
         static std::unordered_map<std::string, Coord_Type> map = {
-            {"Ex", Ex}, {"Ey", Ey}, {"Ez", Ez},
-            {"Hx", Hx}, {"Hy", Hy}, {"Hz", Hz},
-            {"Dx", Dx}, {"Dy", Dy}, {"Dz", Dz},
-            {"Bx", Bx}, {"By", By}, {"Bz", Bz}};
+            {"Ex", Ex}, {"Ey", Ey}, {"Ez", Ez}, {"Hx", Hx}, {"Hy", Hy}, {"Hz", Hz}, {"Dx", Dx}, {"Dy", Dy}, {"Dz", Dz}, {"Bx", Bx}, {"By", By}, {"Bz", Bz}};
 
         std::string str = j.get<std::string>();
         return map.at(str);
     }
 
     Direction json2direction(const json &j)
-	{
+    {
         static std::unordered_map<std::string, Direction> map = {
-            {"x", Direction::X}, {"y", Direction::Y}, {"z", Direction::Z}
-        };
+            {"x", Direction::X}, {"y", Direction::Y}, {"z", Direction::Z}};
 
         std::string str = j.get<std::string>();
         return map.at(str);
@@ -49,24 +44,24 @@ namespace ffip
     {
         Medium res(medium_json.at("epsilon").get<double>(), medium_json.at("mu").get<double>());
 
-        if (auto e_cond = medium_json.at("electric_conductivity").get<double>(); e_cond != 0)
+        if (auto e_cond = medium_json.at("electric conductivity").get<double>(); e_cond != 0)
             res.add_e_susceptibility(make_conductivity_susceptibility(), e_cond);
 
-        if (auto m_cond = medium_json.at("magnetic_conductivity").get<double>(); m_cond != 0)
+        if (auto m_cond = medium_json.at("magnetic conductivity").get<double>(); m_cond != 0)
             res.add_m_susceptibility(make_conductivity_susceptibility(), m_cond);
 
-        if (auto e_sus = medium_json.find("electric_susceptibility"); e_sus != medium_json.end())
+        if (auto e_sus = medium_json.find("electric susceptibility"); e_sus != medium_json.end())
             for (auto itr = e_sus->begin(); itr != e_sus->end(); itr++)
             {
                 res.add_e_susceptibility(json2susceptibility(*itr), itr->at("amplitude").get<double>());
             }
 
-        if (auto m_sus = medium_json.find("magnetic_susceptibility"); m_sus != medium_json.end())
+        if (auto m_sus = medium_json.find("magnetic susceptibility"); m_sus != medium_json.end())
             for (auto itr = m_sus->begin(); itr != m_sus->end(); itr++)
             {
                 res.add_m_susceptibility(json2susceptibility(*itr), itr->at("amplitude").get<double>());
             }
-        
+
         return res;
     }
 
@@ -83,7 +78,7 @@ namespace ffip
             return make_Lorentz_susceptibility(sus_json.at("frequency").get<double>(), sus_json.at("gamma").get<double>());
         else if (type_str == "Drude")
             return make_Drude_susceptibility(sus_json.at("frequency").get<double>(), sus_json.at("gamma").get<double>());
-        
+
         throw std::runtime_error("Unknonw susceptibility");
     }
 
@@ -95,7 +90,7 @@ namespace ffip
         auto center = json2fvec3(config.at("center")) / (dx / 2);
         auto size = json2fvec3(config.at("size")) / (dx / 2);
         freqs = json2double_arr(config.at("frequency"));
-        config.at("output_dataset").get_to(dataset_name);
+        config.at("output dataset").get_to(dataset_name);
 
         //process
         p1 = center - size / 2;
@@ -133,8 +128,8 @@ namespace ffip
         auto center = json2fvec3(config.at("center")) / (dx / 2);
         auto size = json2fvec3(config.at("size")) / (dx / 2);
         freqs = json2double_arr(config.at("frequency"));
-        ctype = json2ctype(config.at("field_component"));
-        config.at("output_group").get_to(group_name);
+        ctype = json2ctype(config.at("field component"));
+        config.at("output group").get_to(group_name);
 
         p1 = center - size / 2;
         p2 = center + size / 2;
@@ -154,7 +149,7 @@ namespace ffip
         double sc;
 
         //dx dt
-        if (auto itr = config.find("courant_number"); itr != config.end())
+        if (auto itr = config.find("courant number"); itr != config.end())
             itr->get_to(sc);
         else
             sc = 0.5;
@@ -168,34 +163,39 @@ namespace ffip
         set_boundary_conditions(config);
         set_grid();
 
-        input_file = new File(config.at("input_file").get<std::string>(),
-							  File::ReadOnly,
-							  MPIOFileDriver(cart_comm, MPI_INFO_NULL));
-		
-        fields_output_file = new File(config.at("fields_output_file").get<std::string>(),
-									  File::ReadWrite | File::Create | File::Truncate,
-									  MPIOFileDriver(cart_comm, MPI_INFO_NULL));
+        input_file = new File(config.at("input file").get<std::string>(),
+                            File::ReadOnly | File::Create,
+                            MPIOFileDriver(cart_comm, MPI_INFO_NULL));
 
-        if (auto itr = config.find("background_medium"); itr != config.end())
+        fields_output_file = new File(config.at("fields output file").get<std::string>(),
+                                    File::ReadWrite | File::Create | File::Truncate,
+                                    MPIOFileDriver(cart_comm, MPI_INFO_NULL));
+
+        if (auto itr = config.find("default material"); itr != config.end())
             bg_medium = json2medium(*itr);
         else
             bg_medium = Medium(1, 1);
 
+        //add background medium as well
+        structure.add_to_material_pool({bg_medium});
+
         if (auto itr = config.find("PML"); itr != config.end())
             set_pmls(*itr);
-
-		if (auto itr = config.find("geometry"); itr != config.end())
-			set_geometry(*itr);
 		else
-			set_geometry(json{});
+			set_pmls(json{});
 
-        if (auto itr = config.find("source"); itr != config.end())
+        if (auto itr = config.find("geometry"); itr != config.end())
+            set_geometry(*itr);
+        else
+            set_geometry(json{});
+
+        if (auto itr = config.find("sources"); itr != config.end())
             set_source(*itr);
 
-        if (auto itr = config.find("fields_output"); itr != config.end())
+        if (auto itr = config.find("fields output"); itr != config.end())
             set_fields_output(*itr);
 
-        if (auto itr = config.find("progress_interval"); itr != config.end())
+        if (auto itr = config.find("progress interval"); itr != config.end())
             itr->get_to(progress_interval);
     }
 
@@ -205,27 +205,29 @@ namespace ffip
         auto center = json2fvec3(src.at("center")) / dx2;
         auto size = json2fvec3(src.at("size")) / dx2;
         double amp = src.at("amplitude").get<double>();
-        auto ctype = json2ctype(src.at("field_component"));
+        auto ctype = json2ctype(src.at("field component"));
         auto func_json = src.at("function");
         auto func_type_str = func_json.at("type").get<std::string>();
         auto freq = func_json.at("frequency").get<double>();
         auto cutoff = func_json.at("cutoff").get<double>();
-        auto stime = func_json.at("start_time").get<double>();
+        auto stime = func_json.at("start time").get<double>();
 
         auto p1 = center - size / 2;
         iVec3 count = (size / 2).round();
         fVec3 dlen;
 
         //rescale amplitude, reduction of dimension is considered
-        for(int i = 0; i < 3; ++i) {
-            if (count[i] != 0) {
+        for (int i = 0; i < 3; ++i)
+        {
+            if (count[i] != 0)
+            {
                 dlen[i] = size[i] / count[i];
                 amp *= dlen[i] / 2;
             }
             else
                 dlen[i] = 0;
         }
-        
+
         if (func_type_str == "Gaussian1")
         {
             for (auto itr = Yee_Iterator({0, 0, 0}, count); !itr.is_end(); itr.next())
@@ -248,7 +250,7 @@ namespace ffip
 
     void Simulation::set_scattered_source(const json &src)
     {
-        std::string gname = src.at("input_data_group").get<std::string>();
+        std::string gname = src.at("input data group").get<std::string>();
 
         auto group = input_file->getGroup(gname);
 
@@ -270,16 +272,16 @@ namespace ffip
         auto cutoff_dataset = group.getDataSet("cutoff");
         cutoff_dataset.read(cutoff);
 
-        auto stime_dataset = group.getDataSet("start_time");
+        auto stime_dataset = group.getDataSet("start time");
         stime_dataset.read(stime);
 
-        auto ctype_dataset = group.getDataSet("field_component");
+        auto ctype_dataset = group.getDataSet("field component");
         ctype_dataset.read(ctype);
 
         auto amp_dataset = group.getDataSet("amplitidue");
         amp_dataset.read(amp);
 
-        std::string func_type = src.at("function_type").get<std::string>();
+        std::string func_type = src.at("function type").get<std::string>();
 
         if (func_type == "Gaussian1")
             for (int i = 0; i < x.size(); ++i)
@@ -297,18 +299,18 @@ namespace ffip
 
     void Simulation::set_source(const json &src)
     {
-		for(auto itr = src.begin(); itr != src.end(); ++itr)
-		{
-			auto type_str = itr->at("type").get<std::string>();
-			
-			if (type_str == "volume source")
-				set_volume_source(*itr);
-			
-			else if (type_str == "scattered source")
-				set_scattered_source(*itr);
-			else
-				std::cout << "Unknown souce type\n";
-		}
+        for (auto itr = src.begin(); itr != src.end(); ++itr)
+        {
+            auto type_str = itr->at("type").get<std::string>();
+
+            if (type_str == "volume source")
+                set_volume_source(*itr);
+
+            else if (type_str == "scattered source")
+                set_scattered_source(*itr);
+            else
+                std::cout << "Unknown souce type\n";
+        }
     }
 
     void Simulation::set_geometry(const json &geoms)
@@ -335,7 +337,7 @@ namespace ffip
             }
         }
 
-        structure.build_material_pool(materials);
+        structure.add_to_material_pool(materials);
 
         for (auto itr = geoms.begin(); itr != geoms.end(); itr++)
         {
@@ -350,7 +352,7 @@ namespace ffip
 
     std::reference_wrapper<Geometry> Simulation::build_geometry_from_json(const json &geom_json)
     {
-		Geometry *res = nullptr;
+        Geometry *res = nullptr;
         std::string type_str = geom_json.at("type").get<std::string>();
 
         if (type_str == "box")
@@ -377,7 +379,7 @@ namespace ffip
             auto size = json2fvec3(geom_json.at("size"));
             auto dim = json2ivec3(geom_json.at("dimension"));
 
-            std::string dataset_name = geom_json.at("input_dataset").get<std::string>();
+            std::string dataset_name = geom_json.at("input dataset").get<std::string>();
 
             //read rho
             std::vector<double> rho;
@@ -401,7 +403,7 @@ namespace ffip
         sim_dim = sim_p2 - sim_p1 + 1;
 
         auto num = decompose_domain(sim_dim, np);
-        int periods[3] = {bcs[0][0] == Sync, bcs[1][0] == Sync, bcs[2][0] == Sync};
+        int periods[3] = {bcs[0][0] == Period, bcs[1][0] == Period, bcs[2][0] == Period};
 
         MPI_Cart_create(MPI_COMM_WORLD, 3, num.to_array().data(), periods, 1, &cart_comm);
         MPI_Comm_rank(cart_comm, &rank);
@@ -419,12 +421,19 @@ namespace ffip
         dft_hub.set_grid(grid, dx, dt);
 
         //set up boundary conditions for the current chunk
-        for(unsigned int dir = 0; dir < 3; ++dir) {
+        for (unsigned int dir = 0; dir < 3; ++dir)
+        {
             if (coords[dir] != 0)
                 bcs[dir][0] = Sync;
             if (coords[dir] != num[dir] - 1)
                 bcs[dir][1] = Sync;
         }
+
+        std::cout << "The grid spans from " << grid_p1 << " to " << grid_p2 << "\n";
+
+        fields.set_boundary_conditions(bcs);
+
+        // std::cout << "Rank " << rank << " has " << grid_p1 << " to " << grid_p2 << "\n";
     }
 
     void Simulation::set_size(const json &config)
@@ -486,7 +495,7 @@ namespace ffip
             }
         }
 
-        if (auto pd = config.find("peridoic"); pd != config.end())
+        if (auto pd = config.find("periodic"); pd != config.end())
         {
             try
             {
@@ -501,7 +510,7 @@ namespace ffip
                             bcs[i][1] = bcs[i][0];
                         //if one direction is only peridoic
                         else
-                            bcs[i][0] = bcs[i][1] = Sync;
+                            bcs[i][0] = bcs[i][1] = Period;
                     }
                 }
             }
@@ -510,8 +519,6 @@ namespace ffip
                 std::cout << "Failed to read periodic boundary conditions\n";
             }
         }
-		
-		fields.set_boundary_conditions(bcs);
     }
 
     void Simulation::set_pmls(const json &pmls)
@@ -529,37 +536,7 @@ namespace ffip
         c[1].resize(sim_dim.y);
         c[2].resize(sim_dim.z);
 
-        for (auto itr = pmls.begin(); itr != pmls.end(); ++itr)
-        {
-
-            double thickness = itr->at("thickness").get<double>();
-            int R, m, sigma_max, k_max;
-
-            Direction dir = json2direction(itr->at("direction"));
-            Side side = json2side(itr->at("side"));
-
-            if (auto find = itr->find("reflection_error"); find != itr->end())
-                find->get_to(R);
-            else
-                R = 1e-4;
-
-            if (auto find = itr->find("sigma_max"); find != itr->end())
-                find->get_to(sigma_max);
-            else
-                sigma_max = 0;
-
-            if (auto find = itr->find("chi_max"); find != itr->end())
-                find->get_to(k_max);
-            else
-                k_max = 1;
-
-            if (auto find = itr->find("order"); find != itr->end())
-                m = find->get<double>();
-            else
-                m = 3;
-
-            PML pml(thickness, sigma_max, k_max, m);
-
+        auto one_side_setup = [&](const Direction dir, const Side side, double thickness, const PML &pml) {
             for (int i = sim_p1[dir]; i <= sim_p2[dir]; ++i)
                 if (side == Positive && (i * dx2 >= sim_size[dir] / 2 - thickness))
                 {
@@ -579,6 +556,33 @@ namespace ffip
                     b[dir][index] = pml.get_b(x, dt);
                     c[dir][index] = pml.get_c(x, dt);
                 }
+        };
+
+        for (auto itr = pmls.begin(); itr != pmls.end(); ++itr)
+        {
+            double thickness = itr->at("thickness").get<double>();
+            double k_max = itr->at("k max").get<double>();
+            double sigma_max = itr->at("sigma max").get<double>();
+            int order = itr->at("order").get<int>();
+
+            PML pml(thickness, sigma_max, k_max, order);
+
+            int dir0 = 0, dir1 = 2;
+            int side0 = -1, side1 = 1;
+
+            if (auto find = itr->find("direction"); find != itr->end())
+            {
+                dir0 = dir1 = json2direction(itr->at("direction"));
+            }
+
+            if (auto find = itr->find("side"); find != itr->end())
+                side0 = side1 = json2side(itr->at("side"));
+
+            for (int dir = dir0; dir <= dir1; ++dir)
+                for (int side = side0; side <= side1; side += 2)
+                {
+                    one_side_setup(static_cast<Direction>(dir), static_cast<Side>(side), thickness, pml);
+                }
         }
 
         fields.init(k, b, c, sim_p1, sim_p2);
@@ -586,39 +590,46 @@ namespace ffip
 
     void Simulation::set_fields_output(const json &j)
     {
-		for(auto itr = j.begin(); itr != j.end(); ++itr) {
-			std::string type_str = itr->at("type").get<std::string>();
-			
-			if (type_str == "volume fields dft")
-			{
-				volume_fields_dft.push_back(Volume_Fields_DFT(*itr, dft_hub));
-			}
-			else if (type_str == "flux box")
-			{
-				box_flux.push_back(Box_Flux(*itr, dft_hub));
-			}
-			else
-				std::cout << "Unable to read fields_output configuration\n";
-		}
-		
-		dft_hub.init();
+        for (auto itr = j.begin(); itr != j.end(); ++itr)
+        {
+            std::string type_str = itr->at("type").get<std::string>();
+
+            if (type_str == "volume fields dft")
+            {
+                volume_fields_dft.push_back(Volume_Fields_DFT(*itr, dft_hub));
+            }
+            else if (type_str == "flux box")
+            {
+                box_flux.push_back(Box_Flux(*itr, dft_hub));
+            }
+            else
+                std::cout << "Unable to read fields_output configuration\n";
+        }
+
+        dft_hub.init();
     }
 
     void Simulation::step_e()
     {
         fields.step_accd(cart_comm, (time_step + 0.5) * dt);
-        structure.step_e(fields.accdb, fields.eh, fields.eh1);
+        structure.step_e(fields.accdb, fields.eh);
+        fields.sync_boundary(cart_comm, X);
+        fields.sync_boundary(cart_comm, Y);
+        fields.sync_boundary(cart_comm, Z);
         dft_hub.step_e((time_step + 1) * dt, fields);
     }
 
     void Simulation::step_m()
     {
         fields.step_accb(cart_comm, (time_step)*dt);
-        structure.step_m(fields.accdb, fields.eh, fields.eh1);
+        structure.step_m(fields.accdb, fields.eh);
+        fields.sync_boundary(cart_comm, X);
+        fields.sync_boundary(cart_comm, Y);
+        fields.sync_boundary(cart_comm, Z);
         dft_hub.step_m((time_step + 0.5) * dt, fields);
     }
 
-    void Simulation::run_until_time(double time)
+    void Simulation::run_until_time(double time, std::ostream &os)
     {
         sim_start_time = std::chrono::system_clock::now();
         sim_prev_time = sim_start_time;
@@ -628,13 +639,18 @@ namespace ffip
             step_m();
             step_e();
             ++time_step;
+
+//            if (time_step < 10)
+//            {
+//				std::cout << "step=" << time_step << "\n";
+//                os << "Reporting at Step=" << time_step << "\n";
+//                fields.output_fields(os);
+//            }
             report();
-			
-//			std::cout << at({0, 0, 0}, Ez) << std::endl;
         }
     }
 
-    void Simulation::run_until_fields_decayed(double interval, const fVec3 &pt, const Coord_Type ctype, double decay_by)
+    void Simulation::run_until_fields_decayed(double interval, const fVec3 &pt, const Coord_Type ctype, double decay_by, std::ostream &os)
     {
         sim_start_time = std::chrono::system_clock::now();
         sim_prev_time = sim_start_time;
@@ -656,6 +672,8 @@ namespace ffip
                 max_field_sqr = cur_field;
         }
 
+        //		std::cout << "Maximum field" << max_field_sqr << "\n";
+
         int extension = 1;
         double cur_max_field_sqr;
         do
@@ -676,10 +694,17 @@ namespace ffip
                     cur_max_field_sqr = cur_field;
             }
             extension++;
+
+            if (cur_max_field_sqr > max_field_sqr)
+                max_field_sqr = cur_max_field_sqr;
+
+            if (rank == 0)
+                std::cout << "Field Decay = " << cur_max_field_sqr / max_field_sqr << std::endl;
+
         } while (cur_max_field_sqr / max_field_sqr > decay_by);
     }
 
-    void Simulation::run(const json &stop_cond)
+    void Simulation::run(const json &stop_cond, std::ostream& os)
     {
         std::string cond_str;
         stop_cond.at("type").get_to(cond_str);
@@ -687,23 +712,33 @@ namespace ffip
         //run until a certain reaches
         if (cond_str == "time")
         {
-            run_until_time(stop_cond.at("time").get<double>());
+            run_until_time(stop_cond.at("time").get<double>(), os);
         }
         else
         {
             //run until the field decays at a particular point
             auto pt = json2fvec3(stop_cond.at("position"));
-            Coord_Type ctype = json2ctype(stop_cond.at("field_component"));
-            double time_interval = stop_cond.at("time_interval_examined").get<double>();
-            double decayed_by = stop_cond.at("decayed_by").get<double>();
+            Coord_Type ctype = json2ctype(stop_cond.at("field component"));
+            double time_interval = stop_cond.at("time interval examined").get<double>();
+            double decayed_by = stop_cond.at("decayed by").get<double>();
 
-            run_until_fields_decayed(time_interval, pt / dx2, ctype, decayed_by);
+            run_until_fields_decayed(time_interval, pt / dx2, ctype, decayed_by, os);
         }
 
-        auto end = std::chrono::system_clock::now();
-        std::chrono::duration<double> elapsed_seconds = end - sim_start_time;
-        std::cout << "Simulation complete, Total time spent = " << elapsed_seconds.count() << " s\n";
-        std::cout << "Last time step = " << time_step << "\n";
+        if (rank == 0)
+        {
+            auto end = std::chrono::system_clock::now();
+            std::chrono::duration<double> elapsed_seconds = end - sim_start_time;
+            std::cout << "Simulation complete, Total time spent = " << elapsed_seconds.count() << " s\n";
+            std::cout << "Last time step = " << time_step << "\n";
+        }
+    }
+
+    void Simulation::output_details(std::ostream& os) const
+    {
+        os<<"Report simulation details\n";
+        fields.output_details(os);
+        structure.output_details(os);
     }
 
     void Simulation::output()
@@ -730,12 +765,12 @@ namespace ffip
         if (elapsed_seconds.count() > progress_interval)
         {
             sim_prev_time = end;
-			std::cout << "Time Step = " << time_step << ", time = " << time_step * dt << std::endl;
+            std::cout << "Time Step = " << time_step << ", time = " << time_step * dt << std::endl;
         }
     }
-	
-	double Simulation::at(const fVec3& pt, const Coord_Type ctype)
-	{
-		return fields.get(pt / dx2, ctype);
-	}
+
+    double Simulation::at(const fVec3 &pt, const Coord_Type ctype)
+    {
+        return fields.get(pt / dx2, ctype);
+}
 } // namespace ffip

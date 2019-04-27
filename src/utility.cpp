@@ -258,10 +258,11 @@ namespace ffip
 		return get_interp_weights(sx, sy, sz);
 	}
 
-	//Gaussian functions
+	//normalized
 	double Gaussian1(double t, double width)
 	{
-		return t * std::exp(-(t * t / 2 / width / width));
+		double arg = (t / width);
+		return arg * std::exp(- arg * arg / 2);
 	}
 
 	double Gaussian2(double t, double width)
@@ -269,7 +270,7 @@ namespace ffip
 		double arg = (t / width);
 		arg = arg * arg;
 
-		return (1 - arg) * exp(-arg);
+		return (1 - arg) * std::exp(-arg);
 	}
 
 	//Output overloading

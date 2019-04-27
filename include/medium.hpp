@@ -7,9 +7,10 @@ namespace ffip
     //Susceptibility in polynomial form
     struct Susceptibility
     {
-        double a0, b0, b1, b2;
+        double a0, a1, b0, b1, b2;
 
         //return complex value
+		Susceptibility(double a0, double a1, double b0, double b1, double b2);
         std::complex<double> get_val(double frequency) const;
     };
 
@@ -34,6 +35,7 @@ namespace ffip
         Medium(double epsilon, double mu);
         void add_e_susceptibility(const Susceptibility &sus, double amp);
         void add_m_susceptibility(const Susceptibility &sus, double amp);
+		double get_imp() const;
     };
 
     //Abstract Medium
@@ -65,5 +67,6 @@ namespace ffip
     Susceptibility make_Drude_susceptibility(double frequeency, double gamma);
 
     Susceptibility make_conductivity_susceptibility();
+	
 
 } // namespace ffip

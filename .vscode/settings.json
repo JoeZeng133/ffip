@@ -1,5 +1,5 @@
 {
-    "python.pythonPath": "/usr/local/bin/python3",
+    "python.pythonPath": "/Users/joez/anaconda/envs/meep/bin/python",
     "files.associations": {
         "complex": "cpp",
         "__bit_reference": "cpp",
@@ -84,5 +84,6 @@
         "regex": "cpp"
     },
     "C_Cpp.intelliSenseEngineFallback": "Disabled",
-    "C_Cpp.configurationWarnings": "Disabled"
+    "C_Cpp.configurationWarnings": "Disabled",
+    "python.linting.enabled": true
 }

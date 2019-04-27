@@ -1,0 +1,6 @@
+{
+    "C_Cpp.default.configurationProvider": "vector-of-bool.cmake-tools",
+    "python.pythonPath": "/Users/joez/anaconda/envs/meep/bin/python",
+    "python.linting.pylintEnabled": true,
+    "python.linting.enabled": true
+}

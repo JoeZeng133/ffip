@@ -16,16 +16,14 @@ namespace ffip
         int m;
 
         //sigma_max = 0 uses recommended sigma_max with Reflection error as 1e-4
-        PML(double d, double sigma_max = 0, double k_max = 1, int m = 3);
+        PML(double d, double sigma_max, double k_max = 1, int m = 3);
 
         //getters
-        double get_b(double x, double dt);
-        double get_c(double x, double dt);
-        double get_sigma(double x);
-        double get_k(double x);
+        double get_b(double x, double dt) const;
+        double get_c(double x, double dt) const;
+        double get_sigma(double x) const;
+        double get_k(double x) const;
 
-        //return recomended sigma_max
-        static double get_sigma_max(double d, double R = 1e-4, double m = 3, double imp = 1);
     };
 
     //Dipole Sources (Gaussian Types)
@@ -62,7 +60,7 @@ namespace ffip
         void add_gaussian2(size_t index, double amp, double start_time, double end_time, double width);
 
         //output debug information
-        void output(std::ostream &os);
+        void output_details(std::ostream &os, const Yee3& grid) const;
     };
 
     //PML Regions curls E, H calculation
@@ -107,6 +105,8 @@ namespace ffip
 
         //add one PML points
         void add_stepping_point(Direction dir, size_t index, double b1, double c1, double k1, double b2, double c2, double k2);
+		
+		void output_details(std::ostream& os, const Yee3& grid) const;
     };
 
     //Non PML Regions
@@ -141,7 +141,8 @@ namespace ffip
         PEC,  //same as symmetry with phase -1
         PMC,  //same as symmetry with phase 1
         None, //ghost points forced to be zeros
-        Sync  //ghost points comming from another chunk
+        Sync,  //ghost points comming from another chunk
+        Period, //forcing fields to be the same at two sides
     };
 
     //Store fields
@@ -168,8 +169,6 @@ namespace ffip
         //eh = [E, H], accdb = sum(-curl E - M) or sum(curl H - J))
         //d = accdb * dt;
         std::vector<double> eh, accdb;
-        //tentative fields, might not be necessary
-        std::vector<double> eh1, eh2, db;
 
         // Fields() = default;
 		void set_boundary_conditions(Boundary_Condition _bc[3][2]);
@@ -207,18 +206,15 @@ namespace ffip
         //synchronize ghost points of boundaries in a particular direction
         void sync_boundary(MPI_Comm comm, Direction dir);
 
-        //extract fields on a particular face and store it in the buffer
-        template <unsigned int x3, int side>
-        void extract_fields_face(std::vector<double> &buf);
-
-        //assign fields to a particular face, reject empty buffer
-        template <unsigned int x3, int side>
-        void assign_fields_face(const std::vector<double> &buf);
+        //extract fields on a particular face with offset and store it in the buffer and return face size
+        size_t extract_fields_face(Direction x3, Side side, int offset, std::vector<double> &buf);
 
         //symmetry boundary with phase = 1, -1
-        template <unsigned int dir, int side>
-        void sync_symmetry_boundary(int phase);
+        size_t extract_symmetry_face(Direction x3, Side side, int phase, std::vector<double> &buf);
 
+        //assign fields to a particular face with offset
+        void assign_fields_face(Direction x3, Side side, int offset, const std::vector<double> &buf);
+        
         //update accd = curlH - J
         void step_accd(MPI_Comm comm, double time);
 
@@ -227,74 +223,12 @@ namespace ffip
 
         //return turned off time of source
         double get_source_turnoff_time() const;
+		
+		//report something
+		void report() const;
+		void output_details(std::ostream& os) const;
+        void output_fields(std::ostream& os) const;
     };
-
-    template <unsigned int x3, int side>
-    void Fields::extract_fields_face(std::vector<double> &buf)
-    {
-
-        iVec3 p1 = grid.get_grid_p1();
-        iVec3 p2 = grid.get_grid_p2();
-
-        auto face = get_face<x3, side>(p1, p2);
-        auto itr = Yee_Iterator(face);
-        buf.resize(itr.get_size());
-
-        for (int index = 0; !itr.is_end(); itr.next(), ++index)
-        {
-            buf[index] = grid.get_raw_val(eh, itr.get_coord());
-        }
-    }
-
-    template <unsigned int x3_int, int side_int>
-    void Fields::assign_fields_face(const std::vector<double> &buf)
-    {
-        constexpr auto x3 = static_cast<Direction>(x3_int);
-        constexpr auto side = static_cast<Side>(side_int);
-
-        iVec3 face_norm = get_norm_vec(x3, side);
-        iVec3 p1 = grid.get_grid_p1();
-        iVec3 p2 = grid.get_grid_p2();
-
-        auto face = get_face<x3, side>(p1, p2);
-        auto itr = Yee_Iterator(face);
-        if (buf.size() < itr.get_size())
-            return;
-
-        for (int index = 0; !itr.is_end(); itr.next(), ++index)
-        {
-            eh[grid.get_index_from_coord(itr.get_coord() + face_norm)] = buf[index];
-        }
-    }
-
-    template <unsigned int x3_int, int side_int>
-    void Fields::sync_symmetry_boundary(int phase)
-    {
-        //orientation (x1, x2, x3)
-        constexpr auto x1 = static_cast<Direction>((x3_int + 1) % 3);
-        constexpr auto x2 = static_cast<Direction>((x3_int + 2) % 3);
-        constexpr auto x3 = static_cast<Direction>(x3_int);
-        constexpr auto side = static_cast<Side>(side_int);
-
-        //construct face
-        iVec3 face_norm = get_norm_vec(x3, side);
-        auto p1 = grid.get_grid_p1();
-        auto p2 = grid.get_grid_p2();
-        auto face = get_face<x3, side>(p1, p2);
-
-        //index offset in the normal direction
-        long long norm_index_offset = grid.get_index_offset(face_norm);
-        //actual phase applied
-        int mult = (p1.get<x3>() & 1) ? -phase : phase;
-
-        //loop through ghost points
-        for (auto itr = Yee_Iterator(face); !itr.is_end(); itr.next())
-        {
-            //index of the point
-            size_t index = grid.get_index_from_coord(itr.get_coord());
-            eh[index + norm_index_offset] = mult * eh[index - norm_index_offset];
-        }
-    }
 
     template <unsigned int F3>
     void Fields::PML_init_helper(const std::array<double_arr, 3> &k, const std::array<double_arr, 3> &b, const std::array<double_arr, 3> &c, const iVec3 &p1, const iVec3 &p2)

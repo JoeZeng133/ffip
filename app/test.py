@@ -1,0 +1,2 @@
+input('Enter')
+print('Ended')

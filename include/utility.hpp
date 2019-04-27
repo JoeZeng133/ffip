@@ -416,6 +416,19 @@ namespace ffip
 			return z;
 		}
 
+		T &operator[](const Direction dir)
+		{
+			switch(dir)
+			{
+				case X:
+					return x;
+				case Y:
+					return y;
+				case Z:
+					return z;
+			}
+		}
+
 		//[] style access
 		const T &operator[](const size_t n) const
 		{
@@ -604,29 +617,14 @@ namespace ffip
 	template <typename T>
 	pair_Vec3<T> get_face(Vec3<T> p1, Vec3<T> p2, Direction dir, Side side)
 	{
-
-		switch (dir)
+		switch (side)
 		{
-		case X:
-			if (side == Positive)
-				p1.template get<X>() = p2.template get<X>();
-			else
-				p2.template get<X>() = p1.template get<X>();
-			break;
-
-		case Y:
-			if (side == Positive)
-				p1.template get<Y>() = p2.template get<Y>();
-			else
-				p2.template get<Y>() = p1.template get<Y>();
-			break;
-
-		case Z:
-			if (side == Positive)
-				p1.template get<Z>() = p2.template get<Z>();
-			else
-				p2.template get<Z>() = p1.template get<Z>();
-			break;
+			case Positive:
+				p1[dir] = p2[dir];
+				break;
+			case Negative:
+				p2[dir] = p1[dir];
+				break;
 		}
 
 		return {p1, p2};

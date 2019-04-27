@@ -42,6 +42,8 @@ namespace ffip
 
         //update
         void step(const std::vector<double> &accdb, std::vector<double> &eh);
+
+        void output_details(std::ostream& os, const Yee3& grid) const;
     };
 
     class Structure
@@ -77,7 +79,7 @@ namespace ffip
         //build susceptibility pool for constructing abstract materials
         //need to include all possible materials
         //maximum 64 types of susceptibility
-        void build_material_pool(const std::vector<Medium> &materials);
+        void add_to_material_pool(const std::vector<Medium> &materials);
 
         //return abstract medium from medium using a pool of susceptibility
         //used to build geometry objects
@@ -91,11 +93,15 @@ namespace ffip
 
         //mask susceptibility based on non-zeros
         std::vector<Abstract_Susceptibility> mask_susceptibility_pool(size_t mask, const std::vector<Abstract_Susceptibility> &ab_sus_pool) const;
+		
+		std::valarray<double> mask_susceptibility_amp(size_t mask, const std::valarray<double> &arr) const;
 
         //step electric fields
-        void step_e(const std::vector<double> &accd, std::vector<double> &e, std::vector<double> &e1);
+        void step_e(const std::vector<double> &accd, std::vector<double> &e);
 
         //step magnetic fields
-        void step_m(const std::vector<double> &accb, std::vector<double> &h, std::vector<double> &h1);
+        void step_m(const std::vector<double> &accb, std::vector<double> &h);
+
+        void output_details(std::ostream& os) const;
     };
 } // namespace ffip

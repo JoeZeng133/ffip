@@ -34,9 +34,34 @@ namespace ffip
 
     void Medium_Stepping::organize() {}
 
+
+    void Medium_Stepping::output_details(std::ostream& os, const Yee3& grid) const
+    {
+        os << "Reporting susceptibility pool\n";
+        for(auto& sus : sus_pool)
+            os << "c1=" << sus.c1 << ",c2=" << sus.c2 << ",c3=" << sus.c3 << "\n";
+
+        os << "Reporting each point\n";
+        for (int i = 0; i < points.size(); ++i)
+        {
+            os << "coord=" << grid.get_coord_from_index(points[i].index) << ",g_inf=" << points[i].g_inf;
+            os << ",sigmas=[";
+            for(int j = 0; j <  sus_pool.size(); ++j)
+                os << "," << sus_amp[i * sus_pool.size() + j];
+            os << "]\n";
+        }
+            
+    }
+
     void Medium_Stepping::step(const std::vector<double> &accdb, std::vector<double> &eh)
     {
         const size_t stride = sus_pool.size();
+        
+        if (polarization1.size() == 0)
+        {
+            polarization1.resize(stride * points.size(), 0);
+            polarization.resize(stride * points.size(), 0);
+        }
 
         for (int i = 0; i < points.size(); ++i)
         {
@@ -44,15 +69,18 @@ namespace ffip
             double g_inf = points[i].g_inf;
 			double *p = &polarization[i * stride];
 			double *p1 = &polarization1[i * stride];
-
+			double *amp = &sus_amp[i * stride];
+			
             for (int n = 0; n < stride; ++n)
             {
                 auto &sus = sus_pool[n];
-
-                p[n] = sus.c1 * p[n] + sus.c2 * p1[n] + sus.c3 * eh[index];
+				double tmp = p[n];
+				
+                p[n] = sus.c1 * p[n] + sus.c2 * p1[n] + amp[n] * sus.c3 * eh[index];
+				p1[n] = tmp;
             }
 
-            eh[index] = (accdb[index] * dt - std::accumulate(p, p + stride, 0)) / g_inf;
+            eh[index] = (accdb[index] * dt - std::accumulate(p, p + stride, 0.0)) / g_inf;
         }
     }
 
@@ -64,7 +92,7 @@ namespace ffip
         this->dt = dt;
     }
 
-    void Structure::build_material_pool(const std::vector<Medium> &materials)
+    void Structure::add_to_material_pool(const std::vector<Medium> &materials)
     {
         auto add_sus_to_pool = [](const Susceptibility &sus, std::vector<Susceptibility> &sus_pool) {
             bool found = 0;
@@ -78,15 +106,21 @@ namespace ffip
             if (!found)
                 sus_pool.push_back(sus);
         };
-
+		
         for (auto &m : materials)
         {
             for (auto &e_sus : m.e_sus)
-                add_sus_to_pool(e_sus, e_sus_pool);
+				add_sus_to_pool(e_sus, e_sus_pool);
 
             for (auto &m_sus : m.m_sus)
                 add_sus_to_pool(m_sus, m_sus_pool);
         }
+		
+		for(int i = e_ab_sus_pool.size(); i < e_sus_pool.size(); ++i)
+			e_ab_sus_pool.push_back({e_sus_pool[i], dt});
+		
+		for(int i = m_ab_sus_pool.size(); i < m_sus_pool.size(); ++i)
+			m_ab_sus_pool.push_back({m_sus_pool[i], dt});
     }
 
     Abstract_Medium Structure::get_abstract_medium(const Medium &medium) const
@@ -95,8 +129,8 @@ namespace ffip
         res.epsilon = medium.epsilon;
         res.mu = medium.mu;
 
-        auto build_sus_amp = [](const Susceptibility &sus, double amp, const std::vector<Susceptibility> &sus_pool, std::valarray<double> &sus_amp) {
-            sus_amp.resize(sus_pool.size());
+        auto build_sus_amp = [](const Susceptibility &sus, double amp, const std::vector<Susceptibility> &sus_pool, std::valarray<double> &sus_amp)
+		{
             for (int j = 0; j < sus_pool.size(); ++j)
                 if (sus_pool[j] == sus)
                 {
@@ -104,7 +138,11 @@ namespace ffip
                     break;
                 }
         };
-
+		
+		//resizing valarray reassigns the values
+		res.e_sus_amp.resize(e_sus_pool.size());
+		res.m_sus_amp.resize(m_sus_pool.size());
+		
         for (int i = 0; i < medium.e_sus.size(); ++i)
             build_sus_amp(medium.e_sus[i], medium.e_sus_amp[i], e_sus_pool, res.e_sus_amp);
 
@@ -117,6 +155,40 @@ namespace ffip
     void Structure::set_materials_from_geometry(const std::vector<std::reference_wrapper<Geometry>> &geom_list, const Medium &default_medium, Average_Method method)
     {
 		auto default_ab_medium = get_abstract_medium(default_medium);
+		
+		auto set_medium = [&](const iVec3 p, const Abstract_Medium& medium) {
+			if (is_e_point(p.get_type()))
+			{
+				//get nonzeros pattern
+				size_t nonzeros = get_non_zeros_from_array(medium.e_sus_amp, 1e-4);
+				
+				//create a new Medium_Stepping corresponding to the pattern
+				if (auto itr = e_stepping.find(nonzeros); itr == e_stepping.end())
+				{
+					e_stepping[nonzeros] = Medium_Stepping();
+					e_stepping[nonzeros].set_susceptibility_pool(mask_susceptibility_pool(nonzeros, e_ab_sus_pool));
+				}
+				
+				//add the point to the stepping
+				e_stepping[nonzeros].add_point(grid.get_index_from_coord(p), medium.epsilon,
+											   mask_susceptibility_amp(nonzeros, medium.e_sus_amp));
+			}
+			else
+			{
+				//get nonzeros pattern
+				size_t nonzeros = get_non_zeros_from_array(medium.m_sus_amp, 1e-4);
+				
+				//create a new Medium_Stepping corresponding to the pattern
+				if (auto itr = m_stepping.find(nonzeros); itr == m_stepping.end())
+				{
+					m_stepping[nonzeros] = Medium_Stepping();
+					m_stepping[nonzeros].set_susceptibility_pool(mask_susceptibility_pool(nonzeros, m_ab_sus_pool));
+				}
+				
+				//add the point to the stepping
+				m_stepping[nonzeros].add_point(grid.get_index_from_coord(p), medium.mu, mask_susceptibility_amp(nonzeros, medium.m_sus_amp));
+			}
+		};
 
         switch (method)
         {
@@ -143,38 +215,7 @@ namespace ffip
                     {
 						found = 1;
                         auto medium = geom.get_medium(phys_p);
-                        //electrical point
-                        if (is_e_point(grid_p.get_type()))
-                        {
-                            //get nonzeros pattern
-                            size_t nonzeros = get_non_zeros_from_array(medium.e_sus_amp, 1e-4);
-
-                            //create a new Medium_Stepping corresponding to the pattern
-                            if (auto itr = e_stepping.find(nonzeros); itr == e_stepping.end())
-                            {
-                                e_stepping[nonzeros] = Medium_Stepping();
-                                e_stepping[nonzeros].set_susceptibility_pool(mask_susceptibility_pool(nonzeros, e_ab_sus_pool));
-                            }
-
-                            //add the point to the stepping
-                            e_stepping[nonzeros].add_point(grid.get_index_from_coord(grid_p), medium.epsilon, medium.e_sus_amp);
-                        }
-                        else
-                        {
-                            //get nonzeros pattern
-                            size_t nonzeros = get_non_zeros_from_array(medium.m_sus_amp, 1e-4);
-
-                            //create a new Medium_Stepping corresponding to the pattern
-                            if (auto itr = m_stepping.find(nonzeros); itr == m_stepping.end())
-                            {
-                                m_stepping[nonzeros] = Medium_Stepping();
-                                m_stepping[nonzeros].set_susceptibility_pool(mask_susceptibility_pool(nonzeros, m_ab_sus_pool));
-                            }
-
-                            //add the point to the stepping
-                            m_stepping[nonzeros].add_point(grid.get_index_from_coord(grid_p), medium.mu, medium.m_sus_amp);
-                        }
-
+						set_medium(grid_p, medium);
                         break;
                     }
                 }
@@ -182,30 +223,7 @@ namespace ffip
 				//use default medium
 				if (!found)
 				{
-					auto& medium = default_ab_medium;
-					//electrical point
-					if (is_e_point(grid_p.get_type()))
-					{
-						//create a new Medium_Stepping corresponding to the pattern
-						if (auto itr = e_stepping.find(0); itr == e_stepping.end())
-						{
-							e_stepping[0] = Medium_Stepping();
-						}
-						
-						//add the point to the stepping
-						e_stepping[0].add_point(grid.get_index_from_coord(grid_p), medium.epsilon, medium.e_sus_amp);
-					}
-					else
-					{
-						//create a new Medium_Stepping corresponding to the pattern
-						if (auto itr = m_stepping.find(0); itr == m_stepping.end())
-						{
-							m_stepping[0] = Medium_Stepping();
-						}
-						
-						//add the point to the stepping
-						m_stepping[0].add_point(grid.get_index_from_coord(grid_p), medium.mu, medium.m_sus_amp);
-					}
+					set_medium(grid_p, default_ab_medium);
 				}
             }
         }
@@ -233,7 +251,7 @@ namespace ffip
     Structure::mask_susceptibility_pool(size_t mask, const std::vector<Abstract_Susceptibility> &ab_sus_pool) const
     {
         std::vector<Abstract_Susceptibility> res;
-        for (int i = 0; mask >= 0; ++i)
+        for (int i = 0; mask > 0; ++i)
         {
             if (mask & 1)
             {
@@ -245,8 +263,26 @@ namespace ffip
 
         return res;
     }
+	
+	std::valarray<double>
+	Structure::mask_susceptibility_amp(size_t mask, const std::valarray<double> &arr) const
+	{
+		std::vector<double> res;
+		
+		for (int i = 0; mask > 0; ++i)
+		{
+			if (mask & 1)
+			{
+				res.push_back(arr[i]);
+			}
+			
+			mask >>= 1;
+		}
+		
+		return {res.data(), res.size()};
+	}
 
-    void Structure::step_e(const std::vector<double> &accd, std::vector<double> &e, std::vector<double> &e1)
+    void Structure::step_e(const std::vector<double> &accd, std::vector<double> &e)
     {
         for (auto &item : e_stepping)
         {
@@ -254,11 +290,29 @@ namespace ffip
         }
     }
 
-    void Structure::step_m(const std::vector<double> &accb, std::vector<double> &h, std::vector<double> &h1)
+    void Structure::step_m(const std::vector<double> &accb, std::vector<double> &h)
     {
         for (auto &item : m_stepping)
         {
             item.second.step(accb, h);
+        }
+    }
+
+    void Structure::output_details(std::ostream& os) const
+    {
+        
+        size_t index=0;
+        for(auto& item : e_stepping)
+        {
+            os << "Reporting the " << index++ << "th e medium\n";
+            item.second.output_details(os, grid);
+        }
+
+        index = 0;
+        for(auto& item : m_stepping)
+        {
+            os << "Reporting the " << index++ << "th m medium\n";
+            item.second.output_details(os, grid);
         }
     }
 

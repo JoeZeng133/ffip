@@ -149,19 +149,22 @@ namespace ffip
         void step_m();
 
         //run until reaching a certain time
-        void run_until_time(double time);
+        void run_until_time(double time, std::ostream &os);
 
         //run until the absolute squared value of field at a particular point decays to decay_by
-        void run_until_fields_decayed(double interval, const fVec3 &pt, const Coord_Type ctype, double decay_by);
+        void run_until_fields_decayed(double interval, const fVec3 &pt, const Coord_Type ctype, double decay_by, std::ostream &os);
 
         //run the simulation with a stop condition
-        void run(const json &stop_cond);
+        void run(const json &stop_cond, std::ostream &os);
 
         //output everything
         void output();
 
         //print information every progress interval (seconds)
         void report();
+
+        //output details of simulation
+        void output_details(std::ostream& os) const;
 
         //json conversions
         std::reference_wrapper<Geometry> build_geometry_from_json(const json &geom_json);

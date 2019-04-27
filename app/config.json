@@ -1,127 +1,142 @@
 {
-	"courant_number": 0.5,
-	"resolution": 1,
-	"size": [
-		42,
-		42,
-		42
-	],
-	"PML": [
-		{
-			"direction": "x",
-			"side": "positive",
-			"thickness": 6.0
-        },
+    "courant number": 0.5,
+    "resolution": 0.5,
+    "size": [
+        64.0,
+        64.0,
+        64.0
+    ],
+    "default material": {
+        "epsilon": 1.0,
+        "mu": 1,
+        "electric conductivity": 0,
+        "magnetic conductivity": 0,
+        "electric susceptibility": [
+            {
+                "type": "Drude",
+                "frequency": 1e-10,
+                "gamma": 4.2747384741214544e-05,
+                "amplitude": 4031405219136196.5
+            },
+            {
+                "type": "Lorentz",
+                "frequency": 0.0003347200880680007,
+                "gamma": 0.00019437961740816426,
+                "amplitude": 11.362935694585572
+            },
+            {
+                "type": "Lorentz",
+                "frequency": 0.0006694401761360014,
+                "gamma": 0.0002782612780324343,
+                "amplitude": 1.1836391348526636
+            },
+            {
+                "type": "Lorentz",
+                "frequency": 0.002394660099937094,
+                "gamma": 0.0007017023532991822,
+                "amplitude": 0.6567702228064309
+            },
+            {
+                "type": "Lorentz",
+                "frequency": 0.0034714102627582534,
+                "gamma": 0.0020115467461243224,
+                "amplitude": 2.645485876585798
+            }
+        ],
+        "magnetic susceptibility": []
+    },
+    "progress interval": 4,
+    "input file": "empty.h5",
+    "fields output file": "output.h5",
+    "stop condition": {
+        "type": "time",
+        "time": 3183.0988618379065
+    },
+    "PML": [
         {
-			"direction": "y",
-			"side": "positive",
-			"thickness": 6.0
-        },
-        {
-			"direction": "z",
-			"side": "positive",
-			"thickness": 6.0
-        },
-        {
-			"direction": "x",
-			"side": "negative",
-			"thickness": 6.0
-        },
-        {
-			"direction": "y",
-			"side": "negative",
-			"thickness": 6.0
-        },
-        {
-			"direction": "z",
-			"side": "negative",
-			"thickness": 6.0
+            "thickness": 12.0,
+            "k max": 1.0,
+            "order": 3,
+            "sigma max": 1.6
         }
-	],
-	"input_file": "empty.h5",
-	"fields_output_file": "fields.h5",
-	"stop_condition" : {
-		"type" : "time",
-		"time" : 100
-	},
-	"progress_interval" : 4.0,
-	"source": [
-		{
-			"type": "volume source",
-			"center": [
-				0.0,
-				0.0,
-				0.0
-			],
-			"size": [
-				0,
-				0,
-				0
-			],
-			"amplitude": 1.0,
-			"field_component": "Ez",
-			"function": {
-				"type": "Gaussian1",
-				"frequency": 0.0333,
-				"cutoff": 4,
-				"start_time": 0.0
-			}
-		}
-	],
-	"fields_output": [
-		{
-			"type": "volume fields dft",
-			"center": [
-				0.0,
-				0.0,
-				0.0
-			],
-			"size": [
-				20.0,
-				20.0,
-				20.0
-			],
-			"frequency": [
-				0.0333
-			],
-			"field_component": "Ex",
-			"output_group": "Ex"
-		},
-		{
-			"type": "volume fields dft",
-			"center": [
-				0.0,
-				0.0,
-				0.0
-			],
-			"size": [
-				20.0,
-				20.0,
-				20.0
-			],
-			"frequency": [
-				0.0333
-			],
-			"field_component": "Ey",
-			"output_group": "Ey"
-		},
-		{
-			"type": "volume fields dft",
-			"center": [
-				0.0,
-				0.0,
-				0.0
-			],
-			"size": [
-				20.0,
-				20.0,
-				20.0
-			],
-			"frequency": [
-				0.0333
-			],
-			"field_component": "Ez",
-			"output_group": "Ez"
-		}
-	]
+    ],
+    "fields output": [
+        {
+            "type": "volume fields dft",
+            "center": [
+                0.0,
+                0.0,
+                0.0
+            ],
+            "size": [
+                40.0,
+                40.0,
+                40.0
+            ],
+            "frequency": [
+                0.002
+            ],
+            "field component": "Ex",
+            "output group": "volume fields dft0"
+        },
+        {
+            "type": "volume fields dft",
+            "center": [
+                0.0,
+                0.0,
+                0.0
+            ],
+            "size": [
+                40.0,
+                40.0,
+                40.0
+            ],
+            "frequency": [
+                0.002
+            ],
+            "field component": "Ey",
+            "output group": "volume fields dft1"
+        },
+        {
+            "type": "volume fields dft",
+            "center": [
+                0.0,
+                0.0,
+                0.0
+            ],
+            "size": [
+                40.0,
+                40.0,
+                40.0
+            ],
+            "frequency": [
+                0.002
+            ],
+            "field component": "Ez",
+            "output group": "volume fields dft2"
+        }
+    ],
+    "sources": [
+        {
+            "type": "volume source",
+            "center": [
+                0.0,
+                0.0,
+                0.0
+            ],
+            "size": [
+                0.0,
+                0.0,
+                0.0
+            ],
+            "amplitude": 1.0,
+            "field component": "Ez",
+            "function": {
+                "type": "Gaussian1",
+                "frequency": 0.002,
+                "cutoff": 4,
+                "start time": 0
+            }
+        }
+    ]
 }

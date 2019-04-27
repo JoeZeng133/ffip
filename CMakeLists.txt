@@ -1,5 +1,4 @@
 cmake_minimum_required(VERSION 3.13)
-set(Boost_DEBUG=ON)
 project(ffip)
 
 find_package(CGAl 4.13 REQUIRED)
@@ -22,6 +21,5 @@ set(HEADER_FILES
 )
 
 add_subdirectory(src)
-add_subdirectory(py)
 add_subdirectory(test)
 add_subdirectory(app)

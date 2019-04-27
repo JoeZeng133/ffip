@@ -4,15 +4,20 @@
 namespace ffip
 {
     //Susceptibility
+	Susceptibility::Susceptibility(double a0, double a1, double b0, double b1, double b2):
+	a0(a0), a1(a1), b0(b0), b1(b1), b2(b2) {}
+	
     std::complex<double> Susceptibility::get_val(double frequency) const
     {
         double omega = 2 * pi * frequency;
-        return a0 / (b0 + b1 * std::complex<double>{0, omega} - b2 * omega * omega);
+		auto jw = std::complex<double>{0, omega};
+		
+        return (a0 + a1 * jw) / (b0 + b1 * jw - b2 * omega * omega);
     }
 
     bool operator==(const Susceptibility &x, const Susceptibility &y)
     {
-        return x.a0 == y.a0 && x.b0 == y.b0 && x.b1 == y.b1 && x.b2 == y.b2;
+		return x.a0 == y.a0 && x.b0 == y.b0 && x.b1 == y.b1 && x.b2 == y.b2 && x.a1 == y.a1;
     }
 
     //Abstract Susceptibility
@@ -29,6 +34,11 @@ namespace ffip
     Medium::Medium() : Medium(0, 0) {}
     
     Medium::Medium(double epsilon, double mu) : epsilon(epsilon), mu(mu) {}
+	
+	double Medium::get_imp() const
+	{
+		return std::sqrt(mu / epsilon);
+	}
 
     void Medium::add_e_susceptibility(const Susceptibility &sus, double amp)
     {
@@ -88,17 +98,17 @@ namespace ffip
     Susceptibility make_Lorentz_susceptibility(double frequency, double gamma)
     {
         double omega = 2 * pi * frequency;
-        return Susceptibility{omega * omega, omega * omega, 2 * pi * gamma, 1};
+        return Susceptibility{omega * omega, 0, omega * omega, 2 * pi * gamma, 1};
     }
 
     Susceptibility make_Drude_susceptibility(double frequency, double gamma)
     {
         double omega = 2 * pi * frequency;
-        return Susceptibility{omega * omega, 0, 2 * pi * gamma, 1};
+        return Susceptibility{omega * omega, 0, 0, 2 * pi * gamma, 1};
     }
 
     Susceptibility make_conductivity_susceptibility()
     {
-        return Susceptibility{1, 0, 1, 0};
+        return Susceptibility{1, 0, 0, 1, 0};
     }
 } // namespace ffip
