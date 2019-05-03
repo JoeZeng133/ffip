@@ -9,17 +9,6 @@ int main(int argc, char** argv) {
     MPI_Init(&argc, &argv);
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
 
-    // if (rank == 0)
-    // {
-    //     int i = 0;
-    //     char hostname[256];
-    //     gethostname(hostname, sizeof(hostname));
-    //     printf("PID %d on %s ready for attach\n", getpid(), hostname);
-    //     fflush(stdout);
-    //     while(i==0) sleep(5);
-    //     std::cout << "Process Attached\n";
-    // }
-
     std::fstream file{"config.json", std::ios::in};
     std::fstream dbfile{"debug.txt", std::ios::out};
     json config;
@@ -27,6 +16,7 @@ int main(int argc, char** argv) {
     file >> config;
     Simulation sim;
     sim.init(config);
+    std::cout << "Process " << rank << " start running\n";
     // sim.output_details(dbfile);
     sim.run(config.at("stop condition"), dbfile);
     sim.output();

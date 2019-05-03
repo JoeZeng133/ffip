@@ -175,6 +175,9 @@ namespace ffip
 		m_pml.set_dx(dx);
 		m_curl.set_strides(-grid.get_stride());
 		m_curl.set_dx(dx);
+
+        eh.resize(grid.get_size(), 0);
+        accdb.resize(grid.get_size(), 0);
     }
 
     void Fields::add_dipole_source_gaussian1(const fVec3 &pos, Coord_Type ctype, double amp, double start_time, double frequency, double cutoff)
@@ -197,7 +200,7 @@ namespace ffip
                 {
                     auto p = base + iVec3{i, j, k};
                     //if not inside, don't care
-                    if (grid.is_inside(p))
+                    if (grid.is_inside(p) && weights[index] > 1e-4)
                         gaussian_dipoles.add_gaussian1(grid.get_index_from_coord(p), amp * weights[index], start_time, end_time, width);
                     ++index;
                 }
@@ -232,9 +235,6 @@ namespace ffip
         const std::array<double_arr, 3> &k, const std::array<double_arr, 3> &b, const std::array<double_arr, 3> &c,
         const iVec3 &p1, const iVec3 &p2)
     {
-        eh.resize(grid.get_size());
-        accdb.resize(grid.get_size());
-
         PML_init_helper<Ex>(k, b, c, p1, p2);
         PML_init_helper<Ey>(k, b, c, p1, p2);
         PML_init_helper<Ez>(k, b, c, p1, p2);

@@ -12,6 +12,12 @@
 
 namespace ffip
 {
+    extern std::map<Boundary_Condition, std::string> bc_map;
+    extern std::map<Direction, std::string> dir_map;
+    extern std::map<Side, std::string> side_map;
+
+    void wait_until_attach();
+
     //json string to coord type
     Coord_Type json2ctype(const json &j);
 
@@ -35,21 +41,6 @@ namespace ffip
 
     //json string to side
     Side json2side(const json& j);
-
-    //flux spectrum around a box
-    struct Box_Flux
-    {
-        //box coordinates
-        fVec3 p1, p2;
-        //frequencies
-        double_arr freqs;
-        //output group name string
-        std::string dataset_name;
-
-        Box_Flux(const json &config, DFT_Hub &hub);
-
-        void output(MPI_Comm comm, DFT_Hub &hub, HighFive::File &file);
-    };
 
     //gridded fields in a volume
     struct Volume_Fields_DFT
@@ -103,8 +94,6 @@ namespace ffip
 
         std::vector<Volume_Fields_DFT> volume_fields_dft;
 
-        std::vector<Box_Flux> box_flux;
-
         int time_step;
 
         double progress_interval{4};
@@ -120,7 +109,7 @@ namespace ffip
         void init(const json &config);
 
         //set up symmetry(PEC, PMC), sync boundary conditions for the whole simulation
-        void set_boundary_conditions(const json &config);
+        void read_boundary_conditions(const json &config);
 
         //round size of cell to be multiple of dx
         void set_size(const json &config);
@@ -171,36 +160,4 @@ namespace ffip
 
         Abstract_Medium build_abstract_medium_from_json(const json &medium_json);
     };
-
-    //non gridded fields output
-    // struct Scattered_Fields_DFT {
-    //     double_arr x, y, z, freqs;
-    //     std::vector<Coord_Type> ctypes;
-    //     std::string group_str;
-
-    //     double_arr real, imag;
-
-    //     //configure from json
-    //     Scattered_Fields_DFT(const json& config);
-
-    //     //update each time
-    //     void step_e(double time, const Fields& fields);
-    //     void step_m(double time, const Fields& fields);
-
-    //     //output collectively to a data group
-    //     void output_collective(MPI_Comm comm);
-    // };
-
-    // //gridded fields in time domain
-    // struct Volume_Fields {
-    //     double_arr x, y, z;
-    //     double start_time, end_time;
-    //     Coord_Type ctype;
-    //     std::string group_str;
-
-    //     Volume_Fields(const json& config);
-
-    //     void step_e(double time, const Fields& fields);
-    //     void step_m(double time, const Fields& fields);
-    // };
 } // namespace ffip

@@ -114,17 +114,7 @@ namespace ffip
         DFT_Unit *find_unit(const iVec3 &p1, const iVec3 &p2, Coord_Type ctype);
         DFT_Unit *find_unit(const DFT_Unit &x);
 
-    public:
-        //register a flux monitor with norm specified
-        void register_flux_monitor(const fVec3 &p1, const fVec3 &p2, const iVec3 &norm, const double_arr &freqs);
-
-        //return flux collectively
-        double_arr get_flux_collective(const fVec3 &p1, const fVec3 &p2, const iVec3 &norm, const double_arr &freqs, MPI_Comm comm);
-
     private:
-        //return local contribution of flux
-        double_arr get_flux_local(const fVec3 &p1, const fVec3 &p2, const iVec3 &norm, const double_arr &freqs);
-
         //return local portion of fields
         double_arr get_fields_local(const fVec3 &p1, const fVec3 &p2, Coord_Type ctype, const double_arr &freqs);
     };

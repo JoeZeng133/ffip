@@ -102,3 +102,41 @@ fic_susc = [LorentzianSusceptibility(frequency=fic1_frq0, gamma=fic1_gam0, sigma
             LorentzianSusceptibility(frequency=fic1_frq1, gamma=fic1_gam1, sigma=fic1_sig1)]
 
 fic = Medium(epsilon=1, mu=1, E_susceptibilities=fic_susc)
+
+#------------------------------------------------------------------
+# elemental metals from A.D. Rakic et al., Applied Optics, Vol. 37, No. 22, pp. 5271-83, 1998
+# wavelength range: 0.2 - 12.4 um
+
+# metal_range = mp.FreqRange(min=um_scale/12.4, max=um_scale/0.2)
+
+# silver (Ag)
+
+Ag_plasma_frq = 9.01*eV_um_scale
+Ag_f0 = 0.845
+Ag_frq0 = 1e-10
+Ag_gam0 = 0.048*eV_um_scale
+Ag_sig0 = Ag_f0*Ag_plasma_frq**2/Ag_frq0**2
+Ag_f1 = 0.065
+Ag_frq1 = 0.816*eV_um_scale      # 1.519 um
+Ag_gam1 = 3.886*eV_um_scale
+Ag_sig1 = Ag_f1*Ag_plasma_frq**2/Ag_frq1**2
+Ag_f2 = 0.124
+Ag_frq2 = 4.481*eV_um_scale      # 0.273 um
+Ag_gam2 = 0.452*eV_um_scale
+Ag_sig2 = Ag_f2*Ag_plasma_frq**2/Ag_frq2**2
+Ag_f3 = 0.011
+Ag_frq3 = 8.185*eV_um_scale      # 0.152 um
+Ag_gam3 = 0.065*eV_um_scale
+Ag_sig3 = Ag_f3*Ag_plasma_frq**2/Ag_frq3**2
+Ag_f4 = 0.840
+Ag_frq4 = 9.083*eV_um_scale      # 0.137 um
+Ag_gam4 = 0.916*eV_um_scale
+Ag_sig4 = Ag_f4*Ag_plasma_frq**2/Ag_frq4**2
+
+Ag_susc = [DrudeSusceptibility(frequency=Ag_frq0, gamma=Ag_gam0, sigma=Ag_sig0),
+           LorentzianSusceptibility(frequency=Ag_frq1, gamma=Ag_gam1, sigma=Ag_sig1),
+           LorentzianSusceptibility(frequency=Ag_frq2, gamma=Ag_gam2, sigma=Ag_sig2),
+           LorentzianSusceptibility(frequency=Ag_frq3, gamma=Ag_gam3, sigma=Ag_sig3),
+           LorentzianSusceptibility(frequency=Ag_frq4, gamma=Ag_gam4, sigma=Ag_sig4)]
+
+Ag = Medium(epsilon=1.0, E_susceptibilities=Ag_susc)

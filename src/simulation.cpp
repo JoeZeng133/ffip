@@ -4,6 +4,21 @@ namespace ffip
 {
     using namespace HighFive;
 
+    std::map<Boundary_Condition, std::string> bc_map = {{PEC, "PEC"}, {PMC, "PMC"}, {None, "None"}, {Sync, "Sync"}, {Period, "Period"}};
+    std::map<Direction, std::string> dir_map = {{X, "x"}, {Y, "y"}, {Z, "z"}};
+    std::map<Side, std::string> side_map = {{Positive, "+"}, {Negative, "-"}};
+
+    void wait_until_attach()
+    {
+        int i = 0;
+        char hostname[256];
+        gethostname(hostname, sizeof(hostname));
+        printf("PID %d on %s ready for attach\n", getpid(), hostname);
+        fflush(stdout);
+        while(i==0) sleep(5);
+        std::cout << "Process Attached\n";
+    }
+
     Side json2side(const json &j)
     {
         static std::unordered_map<std::string, Side> map = {
@@ -82,45 +97,6 @@ namespace ffip
         throw std::runtime_error("Unknonw susceptibility");
     }
 
-    //Box_Flux
-    Box_Flux::Box_Flux(const json &config, DFT_Hub &hub)
-    {
-        //read configurations
-        double dx = hub.get_dx();
-        auto center = json2fvec3(config.at("center")) / (dx / 2);
-        auto size = json2fvec3(config.at("size")) / (dx / 2);
-        freqs = json2double_arr(config.at("frequency"));
-        config.at("output dataset").get_to(dataset_name);
-
-        //process
-        p1 = center - size / 2;
-        p2 = center + size / 2;
-
-        for (unsigned int dir = X; dir < 3; ++dir)
-            for (int side = -1; side < 2; side += 2)
-            {
-                auto face = get_face(p1, p2, (Direction)dir, (Side)side);
-                hub.register_flux_monitor(face.first, face.second, get_norm_vec(Direction(dir), Side(dir)), freqs);
-            }
-    }
-
-    void Box_Flux::output(MPI_Comm comm, DFT_Hub &hub, File &file)
-    {
-        double_arr res(freqs.size());
-
-        for (unsigned int dir = 0; dir < 3; ++dir)
-            for (int side = -1; side < 2; side += 2)
-            {
-                auto face = get_face(p1, p2, (Direction)dir, (Side)side);
-                auto tmp = hub.get_flux_collective(face.first, face.second, get_norm_vec(Direction(dir), Side(dir)), freqs, comm);
-                for (int i = 0; i < freqs.size(); ++i)
-                    res[i] += tmp[i];
-            }
-
-        auto dataset = file.createDataSet<double>(dataset_name, DataSpace({res.size()}));
-        dataset.write(res);
-    }
-
     //Volume_Fields_DFT
     Volume_Fields_DFT::Volume_Fields_DFT(const json &config, DFT_Hub &hub)
     {
@@ -133,6 +109,8 @@ namespace ffip
 
         p1 = center - size / 2;
         p2 = center + size / 2;
+
+        // wait_until_attach();
 
         hub.register_volume_dft(p1, p2, ctype, freqs);
     }
@@ -160,7 +138,7 @@ namespace ffip
         dx2 = dx / 2;
 
         set_size(config);
-        set_boundary_conditions(config);
+        read_boundary_conditions(config);
         set_grid();
 
         input_file = new File(config.at("input file").get<std::string>(),
@@ -311,6 +289,8 @@ namespace ffip
             else
                 std::cout << "Unknown souce type\n";
         }
+
+        std::cout << "Process " << rank << " sources initialized\n";
     }
 
     void Simulation::set_geometry(const json &geoms)
@@ -321,6 +301,10 @@ namespace ffip
         for (auto itr = geoms.begin(); itr != geoms.end(); itr++)
         {
             auto type_str = itr->at("type").get<std::string>();
+            if (rank == 0)
+            {
+                std::cout << "Setting up geometry " << type_str << "\n";
+            }
 
             if (type_str != "mixed2")
             {
@@ -348,6 +332,8 @@ namespace ffip
         Structure::Average_Method method = Structure::No_Average;
 
         structure.set_materials_from_geometry(geom_list, bg_medium, method);
+
+        std::cout << "Rank " << rank << " geometry initialized\n";
     }
 
     std::reference_wrapper<Geometry> Simulation::build_geometry_from_json(const json &geom_json)
@@ -429,11 +415,11 @@ namespace ffip
                 bcs[dir][1] = Sync;
         }
 
-        std::cout << "The grid spans from " << grid_p1 << " to " << grid_p2 << "\n";
-
+        std::cout << "Process " << rank << " :the grid spans from " << grid_p1 << " to " << grid_p2 << "\n";
+        std::cout << "Process " << rank << " Direction x boundaries:" << bc_map[bcs[0][0]] << "," << bc_map[bcs[0][1]] << "\n";
+        std::cout << "Process " << rank << " Direction y boundaries:" << bc_map[bcs[1][0]] << "," << bc_map[bcs[1][1]] << "\n";
+        std::cout << "Process " << rank << " Direction z boundaries:" << bc_map[bcs[2][0]] << "," << bc_map[bcs[2][1]] << "\n";
         fields.set_boundary_conditions(bcs);
-
-        // std::cout << "Rank " << rank << " has " << grid_p1 << " to " << grid_p2 << "\n";
     }
 
     void Simulation::set_size(const json &config)
@@ -449,7 +435,7 @@ namespace ffip
         sim_p2 = sim_span / 2;
     }
 
-    void Simulation::set_boundary_conditions(const json &config)
+    void Simulation::read_boundary_conditions(const json &config)
     {
         //Initialize to default boundary conditions
         for (int i = 0; i < 3; ++i)
@@ -581,11 +567,17 @@ namespace ffip
             for (int dir = dir0; dir <= dir1; ++dir)
                 for (int side = side0; side <= side1; side += 2)
                 {
+                    if (rank == 0)
+                    {
+                        std::cout << "Setting up pml, direction=" << dir_map[static_cast<Direction>(dir)] <<
+                        ",side=" << side_map[static_cast<Side>(side)] << ",thickness=" << thickness << "\n";
+                    }
                     one_side_setup(static_cast<Direction>(dir), static_cast<Side>(side), thickness, pml);
                 }
         }
 
         fields.init(k, b, c, sim_p1, sim_p2);
+        std::cout << "Process " << rank << " PML initiliazed\n";
     }
 
     void Simulation::set_fields_output(const json &j)
@@ -598,15 +590,15 @@ namespace ffip
             {
                 volume_fields_dft.push_back(Volume_Fields_DFT(*itr, dft_hub));
             }
-            else if (type_str == "flux box")
-            {
-                box_flux.push_back(Box_Flux(*itr, dft_hub));
-            }
             else
                 std::cout << "Unable to read fields_output configuration\n";
         }
 
+        
+
         dft_hub.init();
+
+        std::cout << "Process " << rank << " Fields output initialized\n";
     }
 
     void Simulation::step_e()
@@ -672,8 +664,6 @@ namespace ffip
                 max_field_sqr = cur_field;
         }
 
-        //		std::cout << "Maximum field" << max_field_sqr << "\n";
-
         int extension = 1;
         double cur_max_field_sqr;
         do
@@ -706,6 +696,7 @@ namespace ffip
 
     void Simulation::run(const json &stop_cond, std::ostream& os)
     {
+        time_step = 0;
         std::string cond_str;
         stop_cond.at("type").get_to(cond_str);
 
@@ -724,6 +715,8 @@ namespace ffip
 
             run_until_fields_decayed(time_interval, pt / dx2, ctype, decayed_by, os);
         }
+
+        std::cout << "Process " << rank << " finished\n";
 
         if (rank == 0)
         {
@@ -747,11 +740,8 @@ namespace ffip
         {
             item.output(cart_comm, dft_hub, *fields_output_file);
         }
-
-        for (auto &item : box_flux)
-        {
-            item.output(cart_comm, dft_hub, *fields_output_file);
-        }
+        //need to make sure all I/Os finished before exiting
+        MPI_Barrier(cart_comm);
     }
 
     void Simulation::report()
@@ -772,5 +762,5 @@ namespace ffip
     double Simulation::at(const fVec3 &pt, const Coord_Type ctype)
     {
         return fields.get(pt / dx2, ctype);
-}
+    }
 } // namespace ffip

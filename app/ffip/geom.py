@@ -23,6 +23,9 @@ class Vector3(object):
         return self.x == other.x and self.y == other.y and self.z == other.z
 
     def __add__(self, other):
+        if (isinstance(other, Number)):
+            other = Vector3(other, other, other)
+
         x = self.x + other.x
         y = self.y + other.y
         z = self.z + other.z
@@ -30,6 +33,9 @@ class Vector3(object):
         return Vector3(x, y, z)
 
     def __sub__(self, other):
+        if (isinstance(other, Number)):
+            other = Vector3(other, other, other)
+
         x = self.x - other.x
         y = self.y - other.y
         z = self.z - other.z
@@ -65,6 +71,16 @@ class Vector3(object):
             return self.y
         elif i == 2:
             return self.z
+        else:
+            raise IndexError("No value at index {}".format(i))
+    
+    def __setitem__(self, i, data):
+        if i == 0:
+            self.x = data
+        elif i == 1:
+            self.y = data
+        elif i == 2:
+            self.z = data
         else:
             raise IndexError("No value at index {}".format(i))
 

@@ -22,6 +22,8 @@ namespace ffip
 
     void DFT_Unit::update(double time, const Fields &fields)
     {
+        if (local_size == 0) return;
+
         buf.resize(get_local_size());
         if (is_eh_point(ctype)) {
             size_t index = 0;
@@ -84,6 +86,8 @@ namespace ffip
 
     double_arr DFT_Unit::select_local_helper(const double_arr &freqs, const double_arr &data) const
     {
+        if (local_size == 0) return {};
+
         double_arr res(freqs.size() * local_size);
 
         for (int i = 0; i < freqs.size(); ++i)
@@ -136,6 +140,14 @@ namespace ffip
 
     void DFT_Unit::set_local_region(const iVec3 &grid_p1, const iVec3 &grid_p2)
     {
+        if (!is_intersect(p1, p2, grid_p1, grid_p2))
+        {
+            //for degenerate case, make sure the h5 write offset is valid
+            local_dim = {0, 0, 0};
+            local_size = 0;
+            return;
+        }
+
         auto intersect = get_intersection(p1, p2, grid_p1, grid_p2);
         auto tmp = get_component_interior(intersect.first, intersect.second, ctype);
 
@@ -254,23 +266,26 @@ namespace ffip
         auto re_dataset = group.createDataSet<double>("real", HighFive::DataSpace(dim));
         auto im_dataset = group.createDataSet<double>("imag", HighFive::DataSpace(dim));
 
-        //independent write to different slabs of dataset
-		auto tmp = unit_ptr->select_local_real(freqs);
-        re_dataset.select(selection.first, selection.second).write<double>(tmp.data());
-		
-		tmp = unit_ptr->select_local_imag(freqs);
-        im_dataset.select(selection.first, selection.second).write<double>(tmp.data());
-
         //metadata creation
         auto x_dataset = group.createDataSet<double>("x", HighFive::DataSpace({dim[3]}));
         auto y_dataset = group.createDataSet<double>("y", HighFive::DataSpace({dim[2]}));
         auto z_dataset = group.createDataSet<double>("z", HighFive::DataSpace({dim[1]}));
         auto f_dataset = group.createDataSet<double>("f", HighFive::DataSpace({dim[0]}));
 
+        //independent write to different slabs of dataset, degenerate case considered
+        if (unit_ptr->get_local_size())
+        {
+            auto tmp = unit_ptr->select_local_real(freqs);
+            re_dataset.select(selection.first, selection.second).write<double>(tmp.data());
+		
+		    tmp = unit_ptr->select_local_imag(freqs);
+            im_dataset.select(selection.first, selection.second).write<double>(tmp.data());    
+        }
+
         int rank;
         MPI_Comm_rank(comm, &rank);
 
-        if (rank == 0)
+        if (1)
         {
             auto phys_p1 = closure.first * (dx / 2);
             auto phys_p2 = closure.second * (dx / 2);
@@ -286,115 +301,6 @@ namespace ffip
     {
         //yet to be implemented
         return {};
-    }
-
-    void DFT_Hub::register_flux_monitor(const fVec3 &p1, const fVec3 &p2, const iVec3 &norm, const double_arr &freqs)
-    {
-        if (!leq_vec3(p1, p2))
-            throw std::runtime_error("Invalid face: register_flux_monitor");
-
-        //check normal vector
-        if (std::abs(norm.x) + std::abs(norm.y) + std::abs(norm.z) != 1)
-            throw std::runtime_error("Invalid Normal Vector: register_flux_monitor");
-
-        //get x1, x2, x3
-        int x3, x2, x1;
-        if (norm.get<0>() != 0)
-            x3 = 0;
-        if (norm.get<1>() != 0)
-            x3 = 1;
-        if (norm.get<2>() != 0)
-            x3 = 2;
-        x1 = (x3 + 1) % 3;
-        x2 = (x3 + 2) % 3;
-        auto E1 = get_e_ctype_from_dir(static_cast<Direction>(x1));
-        auto H2 = get_m_ctype_from_dir(static_cast<Direction>(x2));
-
-        if (p1[x3] != p2[3])
-            throw std::runtime_error("Invalid face: register_flux_monitor");
-
-        register_volume_dft(p1, p2, E1, freqs);
-        register_volume_dft(p1, p2, H2, freqs);
-    }
-
-    double_arr DFT_Hub::get_flux_collective(const fVec3 &p1, const fVec3 &p2, const iVec3 &norm, const double_arr &freqs, MPI_Comm comm)
-    {
-        auto flux_local = get_flux_local(p1, p2, norm, freqs);
-        double_arr res(freqs.size(), 0);
-
-        MPI_Allreduce(flux_local.data(), res.data(), freqs.size(), MPI_DOUBLE, MPI_SUM, comm);
-        return res;
-    }
-
-    double_arr DFT_Hub::get_flux_local(const fVec3 &p1, const fVec3 &p2, const iVec3 &norm, const double_arr &freqs)
-    {
-        //check normal vector
-        if (std::abs(norm.x) + std::abs(norm.y) + std::abs(norm.z) != 1)
-            throw std::runtime_error("Invalid Normal Vector");
-
-        //get x1, x2, x3
-        int x3, x2, x1;
-        if (norm.get<0>() != 0)
-            x3 = 0;
-        if (norm.get<1>() != 0)
-            x3 = 1;
-        if (norm.get<2>() != 0)
-            x3 = 2;
-        x1 = (x3 + 1) % 3;
-        x2 = (x3 + 2) % 3;
-        auto E1 = get_e_ctype_from_dir(static_cast<Direction>(x1));
-        auto H2 = get_m_ctype_from_dir(static_cast<Direction>(x2));
-
-        //check whehter the volume is registered
-        auto closure_e = get_component_closure(p1, p2, E1);
-        auto closure_m = get_component_closure(p1, p2, H2);
-
-        auto unit_ptr_e = find_unit(closure_e.first, closure_e.second, E1);
-        auto unit_ptr_m = find_unit(closure_m.first, closure_m.second, H2);
-
-        if (unit_ptr_e == nullptr || unit_ptr_m == nullptr)
-            throw std::runtime_error("Volume not registered");
-
-        if (!unit_ptr_e->has_frequencies(freqs))
-            throw std::runtime_error("Frequencies not registered");
-
-        if (p1[x3] != p2[3])
-            throw std::runtime_error("Invalid face: register_flux_monitor");
-
-        //retrieve real and imaginary part
-        auto grid_e = Grid_3(unit_ptr_e->p1_local, unit_ptr_e->p2_local);
-        auto grid_m = Grid_3(unit_ptr_m->p1_local, unit_ptr_m->p2_local);
-
-        //discretizing the plane and integerate using trapezoidal rule
-        iVec3 count(((p2 - p1) / 2).round());
-        fVec3 dlen = (p2 - p1) / count;
-        double w = dlen[x1] * dlen[2] * dx * dx / 4;
-        double_arr res(freqs.size());
-
-        for (int f = 0; f < freqs.size(); ++f)
-        {
-            auto real_e = unit_ptr_e->select_local_real({freqs[f]});
-            auto imag_e = unit_ptr_e->select_local_imag({freqs[f]});
-            auto real_m = unit_ptr_m->select_local_real({freqs[f]});
-            auto imag_m = unit_ptr_m->select_local_imag({freqs[f]});
-
-            for (int k = 0; k <= count.z; ++k)
-                for (int j = 0; j <= count.y; ++j)
-                    for (int i = 0; i <= count.x; ++i)
-                    {
-
-                        auto p = p1 + dlen * iVec3{i, j, k};
-                        double trap_w = ((i == 0 || i == count.x) ? 0.5 : 1) *
-                                        ((j == 0 || j == count.y) ? 0.5 : 1) *
-                                        ((k == 0 || k == count.z) ? 0.5 : 1);
-
-                        res[f] += trap_w * 0.5 * (grid_e(real_e, p) * grid_m(real_m, p) + grid_e(imag_e, p) * grid_m(imag_m, p));
-                    }
-
-            res[f] *= w;
-        }
-
-        return res;
     }
 
     double_arr DFT_Hub::get_fields_local(const fVec3 &p1, const fVec3 &p2, Coord_Type ctype, const double_arr &freqs)

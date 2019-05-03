@@ -14,12 +14,12 @@ sc = 0.5
 dt = dx * sc
 lmin = 200e-3/ffip.um_scale
 lmax = 1000e-3/ffip.um_scale
-ls = (lmin + lmax) / 2
+fcen = (1/lmin + 1/lmax)/2
+d = 40e-3/ffip.um_scale
+dpml = 10e-3/ffip.um_scale
+
 l = np.linspace(lmax, lmin, 100)
 ft = 1 / l
-fs = 1 / ls
-d = 40e-3/ffip.um_scale
-
 omega = 2 * pi * ft
 material = ffip.Au
 er = material.get_epsilon(ft)
@@ -36,25 +36,25 @@ T2 = R2 + 1
 Rt = (R1 + R2 * np.exp(-2j * k * d)) / (1 + R1 * R2 * np.exp(-2j * k * d))
 Tt = (T1 * T2 * np.exp(-1j * k * d)) / (1 + R1 * R2 * np.exp(-2j * k * d))
 
-size = ffip.Vector3(10e-3/ffip.um_scale, 10e-3/ffip.um_scale, 80e-3/ffip.um_scale)
+size = ffip.Vector3(12e-3/ffip.um_scale, 12e-3/ffip.um_scale, 80e-3/ffip.um_scale)
 
-src_func = ffip.Gaussian1(frequency=fs)
+src_func = ffip.Gaussian1(frequency=fcen)
 
-pmls = [ffip.PML(thickness=10e-3/ffip.um_scale,direction='z')]
+pmls = [ffip.PML(thickness=dpml,direction='z')]
 
 geometry = [ffip.Block(size=ffip.Vector3(1e9, 1e9, d), material=material)]
 
 sources = [ffip.Source(
     function=src_func, 
-    center=ffip.Vector3(0, 0, -30e-3/ffip.um_scale), 
+    center=ffip.Vector3(0, 0, -size.z/2+dpml), 
     size=ffip.Vector3(size.x, size.y, 0), 
     amplitude=1/dx,
     field_component='Ex') ]
 
 periodic = [1, 1, 0]
 
-output_filename1 = 'output1.h5'
-output_filename2 = 'output2.h5'
+output_filename1 = 'output3.h5'
+output_filename2 = 'output4.h5'
 
 sim1 = ffip.Simulation(
     size=size, 
@@ -75,6 +75,24 @@ sim2 = ffip.Simulation(
     periodic=periodic
 )
 
+mon_region = sim1.add_dft_fields(size=ffip.Vector3(size.x, size.y, size.z), frequency=[fcen], field_component='Ex')
+interval = src_func.end_time
+pt = ffip.Vector3(0, 0, size.z/2-dpml)
+# sim1.run(stop_condition=ffip.run_until_time(interval*4))
+sim1.run(stop_condition=ffip.run_until_fields_decay(position=pt,field_component='Ex', time_interval_examined=interval))
+
+# interp = mon_region.get_interpolant(method='nearest', fill_value=None)
+# fp = fcen
+# xp = np.linspace(-size.x/2, size.x/2, 80)
+# yp = np.linspace(-size.y/2, size.y/2, 80)
+# zp = np.linspace(-size.z/2, size.z/2, 80)
+# pts = np.stack(np.meshgrid(fp, zp, yp, xp, indexing='ij'), axis=-1)
+# val = np.squeeze(interp(pts))
+
+
+input("debug ended")
+
+#%%
 inc_dft = sim1.add_flux_region(
     center=ffip.Vector3(0, 0, -25e-3/ffip.um_scale),
     size=ffip.Vector3(5e-3/ffip.um_scale, 5e-3/ffip.um_scale, 0), 
