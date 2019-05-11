@@ -1,0 +1,39 @@
+The grid spans from -32 -32 -32 to 32 32 32
+after e_curl 0
+after e_gaussian-0.5
+step=1
+after e_curl 0
+after e_gaussian-0.5
+step=2
+after e_curl 0.203704
+after e_gaussian-0.296296
+step=3
+after e_curl -0.00462963
+after e_gaussian-0.50463
+step=4
+after e_curl -0.416667
+after e_gaussian-0.916667
+step=5
+Simulation complete, Total time spent = 0.096689 s
+Last time step = 5
+Program ended with exit code: 0
+
+The grid spans from -32 -32 -32 to 32 32 32
+after e_curl 0
+after e_gaussian-50
+step=1
+after e_curl 0
+after e_gaussian-50
+step=2
+after e_curl 14.7685
+after e_gaussian-35.2315
+step=3
+after e_curl -2.84722
+after e_gaussian-52.8472
+step=4
+after e_curl -35.8333
+after e_gaussian-85.8333
+step=5
+Simulation complete, Total time spent = 0.082011 s
+Last time step = 5
+Program ended with exit code: 0

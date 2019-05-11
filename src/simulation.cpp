@@ -167,6 +167,9 @@ namespace ffip
         else
             set_geometry(json{});
 
+        if (auto itr = config.find("geometry info request"); itr != config.end())
+            geometry_info_request(*itr);
+
         if (auto itr = config.find("sources"); itr != config.end())
             set_source(*itr);
 
@@ -175,6 +178,51 @@ namespace ffip
 
         if (auto itr = config.find("progress interval"); itr != config.end())
             itr->get_to(progress_interval);
+    }
+
+    void Simulation::geometry_info_request(const json &requests)
+    {
+        for(auto itr = requests.begin(); itr != requests.end(); ++itr)
+        {
+            std::string group_name = itr->at("output group").get<std::string>();
+            Coord_Type ctype = json2ctype(itr->at("field component"));
+            int geom_index = itr->at("geometry index").get<int>();
+            auto&geom_map = structure.get_geom_map();
+            auto strides = sVec3((grid_p2 - grid_p1 + 1).to_strides());
+
+            std::vector<int> x, y, z;
+
+            for(auto itr = Yee_Iterator(grid_p1, grid_p2, ctype); !itr.is_end(); itr.next())
+            {
+                auto coord = itr.get_coord();
+                size_t index = strides.dot(coord - grid_p1);
+
+                if (geom_map[index] == geom_index)
+                {
+                    x.push_back(coord.x*dx2);
+                    y.push_back(coord.y*dx2);
+                    z.push_back(coord.z*dx2);
+                }
+            }
+
+            int total_size, size, end;
+            size = x.size();
+
+            MPI_Allreduce(&size, &total_size, 1, MPI_INT, MPI_SUM, cart_comm);
+            MPI_Scan(&size, &end, 1, MPI_INT, MPI_SUM, cart_comm);
+
+            auto group = fields_output_file->createGroup(group_name);
+            auto x_dataset = group.createDataSet<double>("x", HighFive::DataSpace({size_t(total_size)}));
+            auto y_dataset = group.createDataSet<double>("y", HighFive::DataSpace({size_t(total_size)}));
+            auto z_dataset = group.createDataSet<double>("z", HighFive::DataSpace({size_t(total_size)}));
+
+            if (size > 0)
+            {
+                x_dataset.select({size_t(end - size)}, {size_t(size)}).write(x);
+                y_dataset.select({size_t(end - size)}, {size_t(size)}).write(y);
+                z_dataset.select({size_t(end - size)}, {size_t(size)}).write(z);
+            }
+        }
     }
 
     void Simulation::set_volume_source(const json &src)
@@ -226,53 +274,58 @@ namespace ffip
             std::cout << "Source function type not supported\n";
     }
 
-    void Simulation::set_scattered_source(const json &src)
+    void Simulation::set_inhom_source(const json &src)
     {
-        std::string gname = src.at("input data group").get<std::string>();
+        //read information
+        auto center = json2fvec3(src.at("center")) / dx2;
+        auto size = json2fvec3(src.at("size")) / dx2;
+        auto dim = json2ivec3(src.at("dimension"));
+        auto amp_dataset_name = src.at("amplitude dataset").get<std::string>();
+        auto phase_dataset_name = src.at("phase dataset").get<std::string>();
+        auto ctype = json2ctype(src.at("field component"));
+        auto fcen = src.at("frequency").get<double>();
 
-        auto group = input_file->getGroup(gname);
+        auto func_json = src.at("function");
+        auto func_type_str = func_json.at("type").get<std::string>();
+        auto freq = func_json.at("frequency").get<double>();
+        auto cutoff = func_json.at("cutoff").get<double>();
+        auto stime = func_json.at("start time").get<double>();
 
-        double_arr x, y, z, amp, freq, cutoff, stime;
-        std::vector<int> ctype;
+        auto amp_dataset = input_file->getDataSet(amp_dataset_name);
+        auto phase_dataset = input_file->getDataSet(phase_dataset_name);
 
-        auto x_dataset = group.getDataSet("x");
-        x_dataset.read(x);
-
-        auto y_dataset = group.getDataSet("y");
-        y_dataset.read(y);
-
-        auto z_dataset = group.getDataSet("z");
-        z_dataset.read(z);
-
-        auto freq_dataset = group.getDataSet("frequency");
-        freq_dataset.read(freq);
-
-        auto cutoff_dataset = group.getDataSet("cutoff");
-        cutoff_dataset.read(cutoff);
-
-        auto stime_dataset = group.getDataSet("start time");
-        stime_dataset.read(stime);
-
-        auto ctype_dataset = group.getDataSet("field component");
-        ctype_dataset.read(ctype);
-
-        auto amp_dataset = group.getDataSet("amplitidue");
+        std::vector<double> amp, phase;
         amp_dataset.read(amp);
+        phase_dataset.read(phase);
 
-        std::string func_type = src.at("function type").get<std::string>();
+        auto p1 = center - size / 2;
+        fVec3 dlen{};
+        if (dim.x > 1) dlen.x = size.x / (dim.x - 1);
+        if (dim.y > 1) dlen.y = size.y / (dim.y - 1);
+        if (dim.z > 1) dlen.z = size.z / (dim.z - 1);
 
-        if (func_type == "Gaussian1")
-            for (int i = 0; i < x.size(); ++i)
-                fields.add_dipole_source_gaussian1({x[i], y[i], z[i]},
-                                                (Coord_Type)ctype[i], amp[i], stime[i], freq[i], cutoff[i]);
-        else if (func_type == "Gaussian2")
-            for (int i = 0; i < x.size(); ++i)
-                fields.add_dipole_source_gaussian2({x[i], y[i], z[i]},
-                                                (Coord_Type)ctype[i], amp[i], stime[i], freq[i], cutoff[i]);
-        else
+        if (func_type_str == "Gaussian1")
         {
-            std::cout << "Source function type not supported\n";
+            size_t index = 0;
+            for (auto itr = Yee_Iterator({0, 0, 0}, dim - 1); !itr.is_end(); itr.next())
+            {
+                auto p = p1 + itr.get_coord() * dlen;
+                fields.add_dipole_source_gaussian1(p, ctype, amp[index], stime - phase[index] / (2 * pi * fcen), freq, cutoff);
+                ++index;
+            }
         }
+        else if (func_type_str == "Gaussian2")
+        {
+            size_t index = 0;
+            for (auto itr = Yee_Iterator({0, 0, 0}, dim - 1); !itr.is_end(); itr.next())
+            {
+                auto p = p1 + itr.get_coord() * dlen;
+                fields.add_dipole_source_gaussian2(p, ctype, amp[index], stime - phase[index] / (2 * pi * fcen), freq, cutoff);
+                ++index;
+            }
+        }
+        else
+            std::cout << "Source function type not supported\n";
     }
 
     void Simulation::set_source(const json &src)
@@ -284,13 +337,13 @@ namespace ffip
             if (type_str == "volume source")
                 set_volume_source(*itr);
 
-            else if (type_str == "scattered source")
-                set_scattered_source(*itr);
+            else if (type_str == "inhomogeneous source")
+                set_inhom_source(*itr);
             else
                 std::cout << "Unknown souce type\n";
         }
 
-        std::cout << "Process " << rank << " sources initialized\n";
+        // std::cout << "Process " << rank << " sources initialized\n";
     }
 
     void Simulation::set_geometry(const json &geoms)
@@ -306,7 +359,7 @@ namespace ffip
                 std::cout << "Setting up geometry " << type_str << "\n";
             }
 
-            if (type_str != "mixed2")
+            if (type_str != "two medium box")
             {
                 auto medium_json = itr->at("medium");
                 materials.push_back(json2medium(medium_json));
@@ -333,7 +386,7 @@ namespace ffip
 
         structure.set_materials_from_geometry(geom_list, bg_medium, method);
 
-        std::cout << "Rank " << rank << " geometry initialized\n";
+        // std::cout << "Rank " << rank << " geometry initialized\n";
     }
 
     std::reference_wrapper<Geometry> Simulation::build_geometry_from_json(const json &geom_json)
@@ -347,7 +400,7 @@ namespace ffip
             fVec3 center = json2fvec3(geom_json.at("center"));
             fVec3 size = json2fvec3(geom_json.at("size"));
 
-            res = new Block(center / dx2, size / dx2, medium);
+            res = new Box(center / dx2, size / dx2, medium);
         }
         else if (type_str == "sphere")
         {
@@ -357,7 +410,7 @@ namespace ffip
 
             res = new Sphere(center / dx2, radius / dx2, medium);
         }
-        else if (type_str == "mixed2")
+        else if (type_str == "two medium box")
         {
             auto medium1 = build_abstract_medium_from_json(geom_json.at("medium1"));
             auto medium2 = build_abstract_medium_from_json(geom_json.at("medium2"));
@@ -365,14 +418,14 @@ namespace ffip
             auto size = json2fvec3(geom_json.at("size"));
             auto dim = json2ivec3(geom_json.at("dimension"));
 
-            std::string dataset_name = geom_json.at("input dataset").get<std::string>();
+            std::string dataset_name = geom_json.at("density dataset").get<std::string>();
 
             //read rho
             std::vector<double> rho;
             auto dataset = input_file->getDataSet(dataset_name);
             dataset.read(rho);
 
-            res = new Mixed2(center / dx2, size / dx2, dim, medium1, medium2, rho);
+            res = new Two_Medium_Box(center / dx2, size / dx2, dim, medium1, medium2, rho);
         }
 
         return std::ref(*res);
@@ -416,9 +469,9 @@ namespace ffip
         }
 
         std::cout << "Process " << rank << " :the grid spans from " << grid_p1 << " to " << grid_p2 << "\n";
-        std::cout << "Process " << rank << " Direction x boundaries:" << bc_map[bcs[0][0]] << "," << bc_map[bcs[0][1]] << "\n";
-        std::cout << "Process " << rank << " Direction y boundaries:" << bc_map[bcs[1][0]] << "," << bc_map[bcs[1][1]] << "\n";
-        std::cout << "Process " << rank << " Direction z boundaries:" << bc_map[bcs[2][0]] << "," << bc_map[bcs[2][1]] << "\n";
+        // std::cout << "Process " << rank << " Direction x boundaries:" << bc_map[bcs[0][0]] << "," << bc_map[bcs[0][1]] << "\n";
+        // std::cout << "Process " << rank << " Direction y boundaries:" << bc_map[bcs[1][0]] << "," << bc_map[bcs[1][1]] << "\n";
+        // std::cout << "Process " << rank << " Direction z boundaries:" << bc_map[bcs[2][0]] << "," << bc_map[bcs[2][1]] << "\n";
         fields.set_boundary_conditions(bcs);
     }
 
@@ -577,7 +630,7 @@ namespace ffip
         }
 
         fields.init(k, b, c, sim_p1, sim_p2);
-        std::cout << "Process " << rank << " PML initiliazed\n";
+        // std::cout << "Process " << rank << " PML initiliazed\n";
     }
 
     void Simulation::set_fields_output(const json &j)
@@ -594,11 +647,9 @@ namespace ffip
                 std::cout << "Unable to read fields_output configuration\n";
         }
 
-        
-
         dft_hub.init();
 
-        std::cout << "Process " << rank << " Fields output initialized\n";
+        // std::cout << "Process " << rank << " Fields output initialized\n";
     }
 
     void Simulation::step_e()
@@ -740,8 +791,10 @@ namespace ffip
         {
             item.output(cart_comm, dft_hub, *fields_output_file);
         }
-        //need to make sure all I/Os finished before exiting
+
         MPI_Barrier(cart_comm);
+        delete fields_output_file;
+        delete input_file;
     }
 
     void Simulation::report()

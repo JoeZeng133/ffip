@@ -123,11 +123,14 @@ namespace ffip
 
         void set_geometry(const json &geoms);
 
+        //return coordinates of particular points inside a specified geometry
+        void geometry_info_request(const json &requests);
+
         void set_source(const json &src);
 
         void set_volume_source(const json &src);
 
-        void set_scattered_source(const json &src);
+        void set_inhom_source(const json &src);
 
         void set_fields_output(const json &j);
 

@@ -34,3 +34,11 @@ PUBLIC ffip)
 # utility test
 add_executable(utility_test utility_test.cpp)
 set_property(TARGET utility_test PROPERTY CXX_STANDARD 17)
+
+# pybind practice
+pybind11_add_module(pybind_practice pybind_practice)
+target_include_directories(pybind_practice
+PUBLIC
+    ${PROJECT_SOURCE_DIR}/include
+)
+set_property(TARGET pybind_practice PROPERTY CXX_STANDARD 17)

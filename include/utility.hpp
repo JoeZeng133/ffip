@@ -298,6 +298,12 @@ namespace ffip
 			return {x - minus, y - minus, z - minus};
 		}
 
+		//convert a dimension vec3 to strides
+		Vec3<T> to_strides() const
+		{
+			return {1, x, x * y};
+		}
+
 		//to vector container
 		std::vector<T> to_vector() const
 		{
@@ -418,15 +424,11 @@ namespace ffip
 
 		T &operator[](const Direction dir)
 		{
-			switch(dir)
-			{
-				case X:
-					return x;
-				case Y:
-					return y;
-				case Z:
-					return z;
-			}
+			if (dir == X)
+				return x;
+			else if (dir == Y)
+				return y;
+			return z;
 		}
 
 		//[] style access
@@ -709,7 +711,7 @@ namespace ffip
 			//ignore 1 dimension
 			if (dimn == 1)
 			{
-				base_class::transpose(data, args...);
+				base_class::transpose(data, val, args...);
 				return;
 			}
 
@@ -817,7 +819,7 @@ namespace ffip
 			//ignore this dimension if it is 1
 			if (dimn == 1)
 			{
-				data[0] = val;
+				data[0] += val;
 				return;
 			}
 

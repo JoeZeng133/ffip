@@ -52,8 +52,9 @@ namespace ffip
         Yee3 grid;
         double dx, dt;
 
-        //geometry list
-        std::vector<Geometry> geom_list;
+        //grid_p1 to grid_p2 with information for each point
+        //first 4 bits represent cood type, the rest represent geometry
+        std::vector<int> geom_map;
 
         //Susceptibility pool, both abstract and original
         std::vector<Susceptibility> e_sus_pool, m_sus_pool;
@@ -87,6 +88,8 @@ namespace ffip
 
         //set material properties from a list of geometry objects
         void set_materials_from_geometry(const std::vector<std::reference_wrapper<Geometry>> &geom_list, const Medium &default_medium, Average_Method method);
+
+        const std::vector<int>& get_geom_map() const;
 
         //get non-zeros pattern
         size_t get_non_zeros_from_array(const std::valarray<double> &arr, double tol = 1e-4) const;

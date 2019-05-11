@@ -1,5 +1,5 @@
 {
-    "python.pythonPath": "/Users/joez/anaconda/envs/meep/bin/python",
+    "python.pythonPath": "/Users/joez/anaconda/envs/ffip/bin/python",
     "files.associations": {
         "complex": "cpp",
         "__bit_reference": "cpp",
@@ -81,9 +81,12 @@
         "cfenv": "cpp",
         "cinttypes": "cpp",
         "memory_resource": "cpp",
-        "regex": "cpp"
+        "regex": "cpp",
+        "unordered_set": "cpp",
+        "stack": "cpp"
     },
     "C_Cpp.intelliSenseEngineFallback": "Disabled",
     "C_Cpp.configurationWarnings": "Disabled",
-    "python.linting.enabled": true
+    "python.linting.enabled": true,
+    "cmake.cmakePath": "cmake"
 }

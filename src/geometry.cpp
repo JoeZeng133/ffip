@@ -25,20 +25,20 @@ namespace ffip {
     Sphere::Sphere(const fVec3& center, const double radius, const Abstract_Medium& medium):
     geom(vec3_to_point3(center), radius * radius) ,medium(medium), center(center), radius(radius) {}
 
-    //Block
-    bool Block::is_inside(const fVec3& pos) const {
+    //Box
+    bool Box::is_inside(const fVec3& pos) const {
         return geom.has_on_bounded_side({pos.x, pos.y, pos.z});
     }
 
-    bool Block::is_homogeneous() const {
+    bool Box::is_homogeneous() const {
         return 1;
     }
 
-    Abstract_Medium Block::get_medium(const fVec3& pos) const {
+    Abstract_Medium Box::get_medium(const fVec3& pos) const {
         return medium;
     }
 
-    Block::Block(const fVec3& center, const fVec3& size, const Abstract_Medium& medium):
+    Box::Box(const fVec3& center, const fVec3& size, const Abstract_Medium& medium):
     geom(vec3_to_point3(center - size / 2), vec3_to_point3(center + size / 2)), medium(medium)
     {
         p1 = center - size / 2;
@@ -46,7 +46,7 @@ namespace ffip {
     }
 
     //Mixe2
-	Mixed2::Mixed2
+	Two_Medium_Box::Two_Medium_Box
     (const fVec3& center, const fVec3& size, const iVec3& dim, const Abstract_Medium& m1, const Abstract_Medium& m2, const std::vector<double>& rho):
     geom(vec3_to_point3(center - size / 2), vec3_to_point3(center + size / 2)), m1(m1), m2(m2), dim(dim), rho(rho)
     {
@@ -55,15 +55,15 @@ namespace ffip {
         p2 = center + size / 2;
     }
 
-    bool Mixed2::is_inside(const fVec3& pos) const {
+    bool Two_Medium_Box::is_inside(const fVec3& pos) const {
         return geom.has_on_bounded_side({pos.x, pos.y, pos.z});
     }
 
-    bool Mixed2::is_homogeneous() const {
+    bool Two_Medium_Box::is_homogeneous() const {
         return 0;
     }
 
-    Abstract_Medium Mixed2::get_medium(const fVec3& p) const {
+    Abstract_Medium Two_Medium_Box::get_medium(const fVec3& p) const {
         double val = interp(rho, 
         (p.z - p1.z) / (p2.z - p1.z) * (dim.z - 1), 
         (p.y - p1.y) / (p2.y - p1.y) * (dim.y - 1),

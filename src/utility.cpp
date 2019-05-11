@@ -54,20 +54,18 @@ namespace ffip
 
 	Yee_Iterator::Yee_Iterator(const iVec3 &p1, const iVec3 &p2)
 	{
-
 		stride = 1;
 		init(p1, p2);
 	}
 
 	size_t Yee_Iterator::get_size(const iVec3 &p1, const iVec3 &p2, const Coord_Type ctype)
 	{
-		return (((p2.x - p1.x) / 2 + 1) * ((p2.y - p1.y) / 2 + 1) * ((p2.z - p1.z) / 2 + 1));
+		return (size_t)(((p2.x - p1.x) / 2 + 1) * ((p2.y - p1.y) / 2 + 1) * ((p2.z - p1.z) / 2 + 1));
 	}
 
 	size_t Yee_Iterator::get_size(const iVec3 &p1, const iVec3 &p2)
 	{
-
-		return ((p2.x - p1.x + 1) * (p2.y - p1.y + 1) * (p2.z - p1.z + 1));
+		return (size_t)((p2.x - p1.x + 1) * (p2.y - p1.y + 1) * (p2.z - p1.z + 1));
 	}
 
 	void Yee_Iterator::init(const iVec3 &p1, const iVec3 &p2)

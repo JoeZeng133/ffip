@@ -57,8 +57,8 @@ namespace ffip
         double radius;
     };
 
-    //Block geometry
-    class Block : public Geometry
+    //Box geometry
+    class Box : public Geometry
     {
     public:
         bool is_inside(const fVec3 &pos) const override;
@@ -67,7 +67,7 @@ namespace ffip
 
         Abstract_Medium get_medium(const fVec3 &pos) const override;
 
-        Block(const fVec3 &center, const fVec3 &size, const Abstract_Medium &medium);
+        Box(const fVec3 &center, const fVec3 &size, const Abstract_Medium &medium);
 
     private:
         Cuboid_3 geom;
@@ -76,7 +76,7 @@ namespace ffip
     };
 
     //Two material mixing in a block
-    class Mixed2 : public Geometry
+    class Two_Medium_Box : public Geometry
     {
     public:
         bool is_inside(const fVec3 &pos) const override;
@@ -85,7 +85,7 @@ namespace ffip
 
         Abstract_Medium get_medium(const fVec3 &pos) const override;
 
-        Mixed2(const fVec3 &center, const fVec3 &size, const iVec3 &dim, const Abstract_Medium &m1, const Abstract_Medium &m2, const std::vector<double> &rho);
+        Two_Medium_Box(const fVec3 &center, const fVec3 &size, const iVec3 &dim, const Abstract_Medium &m1, const Abstract_Medium &m2, const std::vector<double> &rho);
 
     private:
         Cuboid_3 geom;

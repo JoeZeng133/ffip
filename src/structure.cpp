@@ -199,16 +199,24 @@ namespace ffip
             auto p1 = grid.get_grid_p1();
             auto p2 = grid.get_grid_p2();
 
-            for (auto itr = Yee_Iterator(p1, p2); !itr.is_end(); itr.next())
+            geom_map.resize(Yee_Iterator::get_size(p1, p2), -1);
+            size_t index = 0;
+
+            for (auto itr = Yee_Iterator(p1, p2); !itr.is_end(); itr.next(), ++index)
             {
                 auto grid_p = itr.get_coord();
                 fVec3 phys_p{grid_p};
                 
                 //return if it is not a material point
-                if (!is_eh_point(grid_p.get_type()))
+                Coord_Type ctype = grid_p.get_type();
+                //first 4 bits represent coord ctype
+                // geom_map[index] = ctype;
+
+                if (!is_eh_point(ctype))
                     continue;
 
                 bool found = 0;
+                int num = 0;
                 for (auto item : geom_list)
                 {
                     if (auto &geom = item.get(); geom.is_inside(phys_p))
@@ -216,8 +224,11 @@ namespace ffip
 						found = 1;
                         auto medium = geom.get_medium(phys_p);
 						set_medium(grid_p, medium);
+                        //rest of the bits represent geometry number
+                        geom_map[index] = num;
                         break;
                     }
+                    num++;
                 }
 				
 				//use default medium
@@ -235,6 +246,11 @@ namespace ffip
 		for(auto& item : m_stepping)
 			item.second.set_dt(dt);
 		
+    }
+
+    const std::vector<int>& Structure::get_geom_map() const
+    {
+        return geom_map;
     }
 
     size_t Structure::get_non_zeros_from_array(const std::valarray<double> &arr, double tol) const
