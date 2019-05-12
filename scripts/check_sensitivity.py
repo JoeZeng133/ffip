@@ -15,7 +15,7 @@ def disk(r=30):
     return _disk
 
 def arb(x):
-    return 0.1 + 0.8 * np.abs((np.sin(x[..., 1]/dx/1.5) * np.sin(x[..., 2]/dx/2)))
+    return 0.1 + 0.8 * np.abs((np.sin(x[..., 1]/dx/1.5) * np.sin(x[..., 2]/dx/1.5)))
 
 #%% original simulation
 dx = 2
@@ -119,12 +119,12 @@ adj_vol = ffip.Adjoint_Volume(
 plt.imshow(adj_vol.density[0, :, :])
 plt.show()
 
-sim_forward.run(stop_condition=stop_condition, np=2)
+sim_forward.run(stop_condition=stop_condition, np=10)
 
 f1 =  adj_src.eval_functionals_and_set_sources()
 print('Objective function is evaluated at', f1)
 
-sim_adjoint.run(stop_condition=stop_condition, np=2)
+sim_adjoint.run(stop_condition=stop_condition, np=10)
 
 se1 = adj_vol.get_sensitivity()
 se2 = adj_vol.get_sensitivity2()
@@ -141,7 +141,7 @@ print('exp diff2=', diff2)
 sim_forward.input_file = 'change_input.h5'
 sim_forward.fields_output_file = 'change_output.h5'
 
-sim_forward.run(stop_condition=stop_condition, np=2)
+sim_forward.run(stop_condition=stop_condition, np=10)
 
 f2 =  adj_src.eval_functionals_and_set_sources()
 

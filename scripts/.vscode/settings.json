@@ -1,10 +1,11 @@
 {
     "C_Cpp.default.configurationProvider": "vector-of-bool.cmake-tools",
-    "python.pythonPath": "/Users/joez/anaconda/envs/meep/bin/python",
+    "python.pythonPath": "/home/zhou/anaconda3/envs/ffip/bin/python",
     "python.linting.pylintEnabled": true,
     "python.linting.enabled": true,
     "[python]":{
         "editor.insertSpaces": true,
         "editor.tabSize": 4
-    }
+    },
+    "explorer.sortOrder": "type"
 }

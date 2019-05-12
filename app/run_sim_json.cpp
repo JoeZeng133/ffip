@@ -16,7 +16,7 @@ int main(int argc, char** argv) {
     file >> config;
     Simulation sim;
     sim.init(config);
-    std::cout << "Process " << rank << " start running\n";
+    // std::cout << "Process " << rank << " start running\n";
     // sim.output_details(dbfile);
     sim.run(config.at("stop condition"), dbfile);
     sim.output();

@@ -1,5 +1,5 @@
 {
-    "python.pythonPath": "/Users/joez/anaconda/envs/ffip/bin/python",
+    "python.pythonPath": "/home/zhou/anaconda3/envs/ffip/bin/python",
     "files.associations": {
         "complex": "cpp",
         "__bit_reference": "cpp",
@@ -88,5 +88,6 @@
     "C_Cpp.intelliSenseEngineFallback": "Disabled",
     "C_Cpp.configurationWarnings": "Disabled",
     "python.linting.enabled": true,
-    "cmake.cmakePath": "cmake"
+    "cmake.cmakePath": "cmake",
+    "explorer.sortOrder" : "type"
 }

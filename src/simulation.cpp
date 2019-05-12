@@ -334,6 +334,8 @@ namespace ffip
         {
             auto type_str = itr->at("type").get<std::string>();
 
+            std::cout << "setting up source " << type_str << "\n";
+
             if (type_str == "volume source")
                 set_volume_source(*itr);
 
