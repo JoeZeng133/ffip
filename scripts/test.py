@@ -1,5 +1,9 @@
-import subprocess
+import matplotlib.pyplot as plt
+import numpy as np
 
 
-# subprocess.run('pwd')
-subprocess.run(['mpirun', '-np', '2', '/home/zhou/anaconda3/envs/ffip/bin/run_sim_json'])
+for i in range(3):
+    plt.figure(i)
+    plt.imshow(np.random.random((30, 30)))
+    plt.draw()
+    plt.pause(1)

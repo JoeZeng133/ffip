@@ -357,7 +357,7 @@ class Simulation:
 
         return res
 
-    def run(self, stop_condition, np=1):
+    def run(self, stop_condition, np=1, skip=False):
 
         with h5py.File(self.input_file, 'w') as input_file_h5:
             # dump json configuration file
@@ -367,8 +367,9 @@ class Simulation:
             self.dump(input_file_h5)
 
         # invoking externel bash command
-        subprocess.run(['mpirun', '-np', str(np), 'run_sim_json'], check=True)
-        # input('Press Enter when Simulation finished')
+        if not skip:
+            subprocess.run(['mpirun', '-np', str(np), 'run_sim_json'], check=True)
+        
 
         with h5py.File(self.fields_output_file, 'r') as output_file_h5:
             # read dft fields
@@ -429,6 +430,24 @@ class run_until_time:
     def get_json(self):
         return {'type': 'time',
                 'time': self.time}
+class run_until_dft:
+    def __init__(self, center=ffip.Vector3(), size=ffip.Vector3(), frequency=1, field_component='Ex', time_interval_examined=1, var=1e-2):
+        self.center = center.copy()
+        self.size = size.copy()
+        self.field_component = str(field_component)
+        self.time_interval_examined = float(time_interval_examined)
+        self.var = float(var)
+        self.frequency = float(frequency)
+    
+    def get_json(self):
+        return {'type' : 'dft',
+                'center' : self.center.get_json(),
+                'size'   : self.size.get_json(),
+                'field component' : self.field_component,
+                'time interval examined': self.time_interval_examined,
+                'variation' : self.var,
+                'frequency' : self.frequency
+                }
 
 
 class run_until_fields_decay:
@@ -555,8 +574,8 @@ class Adjoint_Source:
         
         if component in ['|Ex|', '|Ey|', '|Ez|']:
             # absolute value l2 norm
-            val = self.forward_fields[component[1:-2]]
-            self.adjoint_sources[component[1:-2]].amplitude += (1 - obj_val / np.abs(val)) * np.conj(val)
+            val = self.forward_fields[component[1:-1]]
+            self.adjoint_sources[component[1:-1]].amplitude += (1 - obj_val / np.abs(val)) * np.conj(val)
             return np.sum(0.5 * (np.abs(val).ravel() - obj_val.ravel())**2)
         
         if component == '|E|':
@@ -656,7 +675,7 @@ class Adjoint_Volume:
 
             res += self.rho_transposed[i]
         
-        print('the non transposed sensitivity sum=', tmp)
+        # print('the non transposed sensitivity sum=', tmp)
         return np.reshape(res, self.shape)
     
     def get_sensitivity2(self):

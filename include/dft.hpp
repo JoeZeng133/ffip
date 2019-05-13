@@ -50,6 +50,8 @@ namespace ffip
         double_arr select_local_imag(const double_arr &freqs) const;
         double_arr select_local_helper(const double_arr &freqs, const double_arr &data) const;
 
+        double get_local_norm(const double freq) const;
+
         //return selection details to be used on hdf5 partial io
         std::pair<std::vector<size_t>, std::vector<size_t>>
         get_local_selection(size_t freq_dim) const;

@@ -5,7 +5,7 @@ import matplotlib.pyplot as plt
 import h5py
 import ffip
 import json
-import meep as mp
+# import meep as mp
 from math import sqrt, pi
 from mpl_toolkits.mplot3d import Axes3D
 from matplotlib import cm
@@ -118,8 +118,8 @@ interval = src_func.end_time / 2
 pt1 = ffip.Vector3(0, 0, +flux_box_size.z/2)
 pt2 = ffip.Vector3(0, 0, -r)
 
-sim1.run(stop_condition=ffip.run_until_fields_decay(position=pt1, field_component='Ex', time_interval_examined=interval))
-sim2.run(stop_condition=ffip.run_until_fields_decay(position=pt2, field_component='Ex', time_interval_examined=interval))
+sim1.run(stop_condition=ffip.run_until_fields_decay(position=pt1, field_component='Ex', time_interval_examined=interval), np=10)
+sim2.run(stop_condition=ffip.run_until_fields_decay(position=pt2, field_component='Ex', time_interval_examined=interval), np=10)
 
 inc_region = inc_dft.get_flux_region(direction='z', side='negative')
 inc_power = -inc_region.get_values(scale=2) / (flux_box_size.x * flux_box_size.y) * pi * r**2

@@ -96,9 +96,7 @@ adj_src = ffip.Adjoint_Source(
     size=adj_source_size,
     dim=adj_source_dim,
     functionals=[
-        ['Ex', ex_vals],
-        ['Ey', ey_vals],
-        ['Ez', ez_vals]
+        ['|E|', ex_vals]
     ]
 )
 
@@ -109,7 +107,7 @@ adj_vol = ffip.Adjoint_Volume(
     center=ffip.Vector3(),
     size=geom_size,
     dim=geom_dim,
-    density=arb,
+    density=None,
     medium1=m1,
     medium2=m2,
     norm=ref_fft
@@ -129,7 +127,7 @@ sim_adjoint.run(stop_condition=stop_condition, np=10)
 se1 = adj_vol.get_sensitivity()
 se2 = adj_vol.get_sensitivity2()
 
-pert = -np.random.random(adj_vol.density.shape) * 1e-2
+pert = np.random.random(adj_vol.density.shape) * 2e-2
 adj_vol.density = adj_vol.density + pert
 
 diff1 = np.sum((se1 * pert).ravel())

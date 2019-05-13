@@ -24,7 +24,6 @@ def sph2cart(az, el, r):
     z = r * np.sin(el)
     return x, y, z
 
-
 class Vector3(object):
     def __init__(self, x=0.0, y=0.0, z=0.0):
         self.x = float(x) if type(x) is int else x
@@ -211,7 +210,15 @@ class Medium:
             res += item.get_epsilon(frequency)
 
         return res
+    
+    def get_dis_epsilon(self, frequency, dt):
+        z = np.exp(1j * 2 * np.pi * frequency * dt)
+        res = self.epsilon + 2 * dt * z / (z**2 - 1) * self.E_conductivity
 
+        for item in self.E_susceptibilities:
+            res += item.get_dis_epsilon(frequency, dt)
+        
+        return res
 
 class Susceptibility:
 
@@ -235,6 +242,18 @@ class Susceptibility:
     def get_epsilon(self, frequency):
         w = 2 * np.pi * frequency
         return self.sigma * (self.a0 + self.a1 * 1j * w) / (self.b0 + 1j * w * self.b1 - w * w * self.b2)
+
+    def get_dis_epsilon(self, frequency, dt):
+        c0 = 2 * self.b2 + self.b1 * dt
+        c1 = (4 * self.b2 - 2 * self.b0 * dt * dt) / c0
+        c2 = (-2 * self.b2 + self.b1 * dt) / c0
+        c3 = (2 * self.a0 * dt * dt) / c0
+
+        z = np.exp(1j * 2 * np.pi * frequency * dt)
+
+        return self.sigma * c3 * z / (z**2 - c1 * z - c2)
+
+
 
 
 class LorentzianSusceptibility(Susceptibility):
@@ -403,3 +422,11 @@ class Two_Medium_Box:
                 "medium1" : self.medium1.get_json(),
                 "medium2" : self.medium2.get_json()
                 }
+
+def getgrid(center=Vector3(), size=Vector3(), dim=Vector3()):
+    
+    x = np.linspace(center.x - size.x/2, center.x + size.x/2, dim.x)
+    y = np.linspace(center.y - size.y/2, center.y + size.y/2, dim.y)
+    z = np.linspace(center.z - size.z/2, center.z + size.z/2, dim.z)
+
+    return x, y, z

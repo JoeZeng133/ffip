@@ -45,9 +45,10 @@ pmls = [ffip.PML(thickness=dpml,direction='z')]
 geometry = [ffip.Box(size=ffip.Vector3(1e9, 1e9, d), material=material)]
 
 dim = ffip.Vector3(size.x/dx+1, size.y/dx+1,1).round()
+
 inhom_src = ffip.Inhom_Source(
     function=src_func,
-    amplitude=np.ones( (int (dim.prod()),), dtype=float),
+    amplitude=np.ones( (int(dim.z), int(dim.y), int(dim.x)), dtype=float),
     dim=dim,
     center=ffip.Vector3(z=-size.z/2+dpml),
     size=ffip.Vector3(size.x, size.y),

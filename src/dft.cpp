@@ -6,7 +6,13 @@ namespace ffip
 	DFT_Unit::DFT_Unit(const iVec3 &p1, const iVec3 &p2, Coord_Type ctype): p1(p1), p2(p2), ctype(ctype)
     {
         if (p1.get_type() != p2.get_type() || p1.get_type() != (ctype & 0b111))
+        {
+            std::cout << "p1=" << p1 << ",p2=" << p2 << ",ctype=" << ctype << "\n";
+
             throw std::runtime_error("Invalid Coord Type in DFT_Unit constructor");
+            
+        }
+            
 
         if (!leq_vec3(p1, p2))
             throw std::runtime_error("Invali volume in DFT_Unit constructor");
@@ -82,6 +88,21 @@ namespace ffip
     double_arr DFT_Unit::select_local_imag(const double_arr &freqs) const
     {
         return select_local_helper(freqs, imag);
+    }
+
+    double DFT_Unit::get_local_norm(const double freq) const
+    {
+        auto re = select_local_real({freq});
+        auto im = select_local_imag({freq});
+
+        double ans = 0;
+        for(size_t i = 0; i < re.size(); ++i)
+        {
+            double val = re[i]*re[i] + im[i] * im[i];
+            if (val > ans) ans = val;
+        }
+
+        return ans;
     }
 
     double_arr DFT_Unit::select_local_helper(const double_arr &freqs, const double_arr &data) const

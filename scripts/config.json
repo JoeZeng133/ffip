@@ -2,9 +2,9 @@
     "courant number": 0.5,
     "resolution": 0.5,
     "size": [
-        100.0,
-        100.0,
-        100.0
+        132.0,
+        132.0,
+        132.0
     ],
     "default material": {
         "epsilon": 1.0,
@@ -14,12 +14,25 @@
         "electric susceptibility": [],
         "magnetic susceptibility": []
     },
-    "progress interval": 10000000000.0,
-    "input file": "change_input.h5",
-    "fields output file": "change_output.h5",
+    "progress interval": 10.0,
+    "input file": "sim0_input.h5",
+    "fields output file": "sim0_output.h5",
     "stop condition": {
-        "type": "time",
-        "time": 10000.0
+        "type": "dft",
+        "center": [
+            0.0,
+            0.0,
+            0.0
+        ],
+        "size": [
+            70.0,
+            70.0,
+            40.0
+        ],
+        "field component": "Ex",
+        "time interval examined": 800.0,
+        "variation": 0.01,
+        "frequency": 0.00125
     },
     "PML": [
         {
@@ -38,16 +51,16 @@
                 0.0
             ],
             "size": [
-                30.0,
-                30.0,
-                30.0
+                70.0,
+                70.0,
+                40.0
             ],
             "dimension": [
-                16.0,
-                16.0,
-                16.0
+                18.0,
+                18.0,
+                11.0
             ],
-            "density dataset": "two medium box adjoint",
+            "density dataset": "two medium box 0",
             "medium1": {
                 "epsilon": 1.0,
                 "mu": 1.0,
@@ -103,18 +116,18 @@
             "center": [
                 0.0,
                 0.0,
-                -34.0
+                -50.0
             ],
             "size": [
-                100.0,
-                100.0,
+                132.0,
+                132.0,
                 0.0
             ],
             "amplitude": 1.0,
             "field component": "Ex",
             "function": {
                 "type": "Gaussian1",
-                "frequency": 0.002,
+                "frequency": 0.00125,
                 "cutoff": 4.0,
                 "start time": 400.0
             }
@@ -126,11 +139,11 @@
             "center": [
                 0.0,
                 0.0,
-                20.0
+                30.0
             ],
             "size": [
-                40.0,
-                40.0,
+                80.0,
+                80.0,
                 0.0
             ],
             "frequency": [
@@ -144,11 +157,11 @@
             "center": [
                 0.0,
                 0.0,
-                20.0
+                30.0
             ],
             "size": [
-                40.0,
-                40.0,
+                80.0,
+                80.0,
                 0.0
             ],
             "frequency": [
@@ -162,11 +175,11 @@
             "center": [
                 0.0,
                 0.0,
-                20.0
+                30.0
             ],
             "size": [
-                40.0,
-                40.0,
+                80.0,
+                80.0,
                 0.0
             ],
             "frequency": [
@@ -183,68 +196,15 @@
                 0.0
             ],
             "size": [
-                30.0,
-                30.0,
-                30.0
+                70.0,
+                70.0,
+                40.0
             ],
             "frequency": [
                 0.00125
             ],
             "field component": "Ex",
             "output group": "volume fields dft 3"
-        },
-        {
-            "type": "volume fields dft",
-            "center": [
-                0.0,
-                0.0,
-                0.0
-            ],
-            "size": [
-                30.0,
-                30.0,
-                30.0
-            ],
-            "frequency": [
-                0.00125
-            ],
-            "field component": "Ey",
-            "output group": "volume fields dft 4"
-        },
-        {
-            "type": "volume fields dft",
-            "center": [
-                0.0,
-                0.0,
-                0.0
-            ],
-            "size": [
-                30.0,
-                30.0,
-                30.0
-            ],
-            "frequency": [
-                0.00125
-            ],
-            "field component": "Ez",
-            "output group": "volume fields dft 5"
-        }
-    ],
-    "geometry info request": [
-        {
-            "field component": "Ex",
-            "geometry index": 0,
-            "output group": "geometry info request 0 Ex"
-        },
-        {
-            "field component": "Ey",
-            "geometry index": 0,
-            "output group": "geometry info request 0 Ey"
-        },
-        {
-            "field component": "Ez",
-            "geometry index": 0,
-            "output group": "geometry info request 0 Ez"
         }
     ]
 }

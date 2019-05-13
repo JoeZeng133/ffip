@@ -5,24 +5,24 @@
     "version": "0.2.0",
     "configurations": [
         {
-            "name": "(lldb) Launch",
+            "name": "(gdb) Launch",
             "type": "cppdbg",
             "request": "launch",
-            "program": "${workspaceFolder}/build/app/run_sim_json",
+            "program": "${workspaceFolder}/buildinstall/app/run_sim_json",
             "args": [],
             "stopAtEntry": false,
-            "cwd": "${workspaceFolder}/app",
+            "cwd": "${workspaceFolder}/scripts",
             "environment": [],
             "externalConsole": true,
-            "MIMode": "lldb"
+            "MIMode": "gdb"
         },
         {
             "name": "(lldb) Attach",
             "type": "cppdbg",
             "request": "attach",
-            "program": "${workspaceFolder}/build/app/run_sim_json",
+            "program": "${userHome}/anaconda3/envs/ffip/bin/run_sim_json",
             "processId": "${command:pickProcess}",
-            "MIMode": "lldb",
+            "MIMode": "gdb",
         },
         
         {

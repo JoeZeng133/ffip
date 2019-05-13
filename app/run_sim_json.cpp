@@ -18,7 +18,7 @@ int main(int argc, char** argv) {
     sim.init(config);
     // std::cout << "Process " << rank << " start running\n";
     // sim.output_details(dbfile);
-    sim.run(config.at("stop condition"), dbfile);
+    sim.run(config.at("stop condition"), std::cout);
     sim.output();
 
     MPI_Finalize();

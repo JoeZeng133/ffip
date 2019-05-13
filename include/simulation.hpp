@@ -146,6 +146,9 @@ namespace ffip
         //run until the absolute squared value of field at a particular point decays to decay_by
         void run_until_fields_decayed(double interval, const fVec3 &pt, const Coord_Type ctype, double decay_by, std::ostream &os);
 
+        //run until dft is steady
+        void run_until_dft(const fVec3& p1, const fVec3& p2, const Coord_Type ctype, double frequency, double interval, double var, std::ostream &os);
+
         //run the simulation with a stop condition
         void run(const json &stop_cond, std::ostream &os);
 

@@ -126,6 +126,7 @@ namespace ffip
     {
         double sc;
 
+        
         //dx dt
         if (auto itr = config.find("courant number"); itr != config.end())
             itr->get_to(sc);
@@ -333,8 +334,9 @@ namespace ffip
         for (auto itr = src.begin(); itr != src.end(); ++itr)
         {
             auto type_str = itr->at("type").get<std::string>();
-
-            std::cout << "setting up source " << type_str << "\n";
+            
+            if (rank == 0)
+                std::cout << "setting up source " << type_str << "\n";
 
             if (type_str == "volume source")
                 set_volume_source(*itr);
@@ -470,7 +472,10 @@ namespace ffip
                 bcs[dir][1] = Sync;
         }
 
-        std::cout << "Process " << rank << " :the grid spans from " << grid_p1 << " to " << grid_p2 << "\n";
+        if (rank == 0)
+            std::cout << "decomposition=" << num << "\n";
+
+        // std::cout << "Process " << rank << " :the grid spans from " << grid_p1 << " to " << grid_p2 << "\n";
         // std::cout << "Process " << rank << " Direction x boundaries:" << bc_map[bcs[0][0]] << "," << bc_map[bcs[0][1]] << "\n";
         // std::cout << "Process " << rank << " Direction y boundaries:" << bc_map[bcs[1][0]] << "," << bc_map[bcs[1][1]] << "\n";
         // std::cout << "Process " << rank << " Direction z boundaries:" << bc_map[bcs[2][0]] << "," << bc_map[bcs[2][1]] << "\n";
@@ -637,6 +642,7 @@ namespace ffip
 
     void Simulation::set_fields_output(const json &j)
     {
+        // wait_until_attach();
         for (auto itr = j.begin(); itr != j.end(); ++itr)
         {
             std::string type_str = itr->at("type").get<std::string>();
@@ -684,15 +690,69 @@ namespace ffip
             step_m();
             step_e();
             ++time_step;
-
-//            if (time_step < 10)
-//            {
-//				std::cout << "step=" << time_step << "\n";
-//                os << "Reporting at Step=" << time_step << "\n";
-//                fields.output_fields(os);
-//            }
             report();
         }
+    }
+
+    void Simulation::run_until_dft(const fVec3& p1, const fVec3& p2, const Coord_Type ctype, double frequency, double interval, double var, std::ostream &os)
+    {
+        sim_start_time = std::chrono::system_clock::now();
+        sim_prev_time = sim_start_time;
+        double src_turnoff_time = fields.get_source_turnoff_time();
+
+        auto ptr = dft_hub.find_unit(p1, p2, ctype);
+
+        if (ptr == nullptr)
+            throw std::runtime_error("dft is not registered");
+        else
+        {
+            if (!ptr->has_frequencies({frequency}))
+                throw std::runtime_error("frequency is not registered");
+        }
+        
+
+        while (time_step * dt < src_turnoff_time)
+        {
+            step_m();
+            step_e();
+            ++time_step;
+            report();
+        }
+
+        int extension = 1;
+        double max_norm;
+        double min_norm;
+        double cur_var;
+
+        do
+        {
+            max_norm = std::numeric_limits<double>::min();
+            min_norm = std::numeric_limits<double>::max();
+
+            while (time_step * dt < src_turnoff_time + extension * interval)
+            {
+                step_m();
+                step_e();
+                ++time_step;
+                report();
+
+                double local_norm = ptr->get_local_norm(frequency);
+                double glob_norm = 0;
+
+                MPI_Allreduce(&local_norm, &glob_norm, 1, MPI_DOUBLE, MPI_MAX, cart_comm);
+                
+                if (glob_norm > max_norm) max_norm = glob_norm;
+                if (glob_norm < min_norm) min_norm = glob_norm;
+            }
+            extension++;
+
+            cur_var = (max_norm - min_norm) / max_norm;
+
+            if (rank == 0)
+                os << "max norm=" << max_norm << ",min norm=" << min_norm << ",var=" << cur_var << std::endl;
+
+        } while (cur_var > var);
+
     }
 
     void Simulation::run_until_fields_decayed(double interval, const fVec3 &pt, const Coord_Type ctype, double decay_by, std::ostream &os)
@@ -709,16 +769,20 @@ namespace ffip
             ++time_step;
             report();
 
-            double cur_field = fields.get_eh_helper(pt, ctype);
-            MPI_Allreduce(&cur_field, &cur_field, 1, MPI_DOUBLE, MPI_SUM, cart_comm);
-            cur_field *= cur_field;
+            double local_field = fields.get_eh_helper(pt, ctype);
+            double global_field = 0;
 
-            if (cur_field > max_field_sqr)
-                max_field_sqr = cur_field;
+            MPI_Allreduce(&local_field, &global_field, 1, MPI_DOUBLE, MPI_SUM, cart_comm);
+            global_field *= global_field;
+
+
+            if (global_field > max_field_sqr)
+                max_field_sqr = global_field;
         }
 
         int extension = 1;
         double cur_max_field_sqr;
+        double decay;
         do
         {
             cur_max_field_sqr = 0;
@@ -729,22 +793,25 @@ namespace ffip
                 ++time_step;
                 report();
 
-                double cur_field = fields.get_eh_helper(pt, ctype);
-                MPI_Allreduce(&cur_field, &cur_field, 1, MPI_DOUBLE, MPI_SUM, cart_comm);
-                cur_field *= cur_field;
+                double local_field = fields.get_eh_helper(pt, ctype);
+                double global_field = 0;
 
-                if (cur_field > cur_max_field_sqr)
-                    cur_max_field_sqr = cur_field;
+                MPI_Allreduce(&local_field, &global_field, 1, MPI_DOUBLE, MPI_SUM, cart_comm);
+                global_field *= global_field;
+
+                if (global_field > cur_max_field_sqr)
+                    cur_max_field_sqr = global_field;
             }
             extension++;
 
             if (cur_max_field_sqr > max_field_sqr)
                 max_field_sqr = cur_max_field_sqr;
 
+            decay = cur_max_field_sqr / max_field_sqr;
             if (rank == 0)
-                std::cout << "Field Decay = " << cur_max_field_sqr / max_field_sqr << std::endl;
+                os << "Field Decay = " << cur_max_field_sqr  << "/" <<  max_field_sqr << "=" << decay << std::endl;
 
-        } while (cur_max_field_sqr / max_field_sqr > decay_by);
+        } while (decay > decay_by);
     }
 
     void Simulation::run(const json &stop_cond, std::ostream& os)
@@ -756,27 +823,51 @@ namespace ffip
         //run until a certain reaches
         if (cond_str == "time")
         {
-            run_until_time(stop_cond.at("time").get<double>(), os);
+            double stop_time = stop_cond.at("time").get<double>();
+            
+            if (rank == 0)
+                os << "Simulation stops at time=" << stop_time << "\n";
+
+            run_until_time(stop_time, os);
         }
-        else
+        else if (cond_str == "decay")
         {
             //run until the field decays at a particular point
             auto pt = json2fvec3(stop_cond.at("position"));
             Coord_Type ctype = json2ctype(stop_cond.at("field component"));
+            auto ctype_str = stop_cond.at("field component").get<std::string>();
             double time_interval = stop_cond.at("time interval examined").get<double>();
             double decayed_by = stop_cond.at("decayed by").get<double>();
 
+            if (rank == 0)
+                os << "Simulation stops when pt=" << pt << "(" << ctype_str << ")"
+                    << " decalys " << decayed_by << "\n";
+
             run_until_fields_decayed(time_interval, pt / dx2, ctype, decayed_by, os);
         }
+        else
+        {
+            fVec3 center = json2fvec3(stop_cond.at("center"));
+            fVec3 size = json2fvec3(stop_cond.at("size"));
+            Coord_Type ctype = json2ctype(stop_cond.at("field component"));
+            auto ctype_str = stop_cond.at("field component").get<std::string>();
+            double interval = stop_cond.at("time interval examined").get<double>();
+            double var = stop_cond.at("variation").get<double>();
+            double freq = stop_cond.at("frequency").get<double>();
 
-        std::cout << "Process " << rank << " finished\n";
+            if (rank == 0)
+                os << "Simulation stops when region=(center=" << center << ",size=" << size << ",component=" << ctype_str 
+                << ") has steady dft with variation=" << var << "\n"; 
+
+            run_until_dft((center-size/2) / dx2, (center + size/2) / dx2, ctype, freq, interval, var, os);
+        }
 
         if (rank == 0)
         {
             auto end = std::chrono::system_clock::now();
             std::chrono::duration<double> elapsed_seconds = end - sim_start_time;
-            std::cout << "Simulation complete, Total time spent = " << elapsed_seconds.count() << " s\n";
-            std::cout << "Last time step = " << time_step << "\n";
+            os << "Simulation complete, Total time spent = " << elapsed_seconds.count() << " s\n";
+            os << "Last time step = " << time_step << "\n";
         }
     }
 
