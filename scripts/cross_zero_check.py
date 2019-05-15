@@ -61,16 +61,15 @@ adj_source_shape = (int(adj_source_dim.z), int(adj_source_dim.y), int(adj_source
 
 geom_size = ffip.Vector3(30, 30, 30)
 geom_dim = (geom_size/dx+1).round()
+geom_center = ffip.Vector3()
 
-# stop_condition = ffip.run_until_fields_decay(
-#     position=ffip.Vector3(z=15),
-#     field_component='Ex',
-#     time_interval_examined=1/fsrc,
-#     decayed_by=5e-4
-# )
-
-stop_condition = ffip.run_until_time(
-    time=dt*10000
+stop_condition = ffip.run_until_dft(
+    center=geom_center,
+    size=geom_size,
+    field_component='Ex',
+    time_interval_examined=4/fsrc,
+    var=5e-3,
+    frequency=fcen
 )
 
 ex_vals = np.zeros(adj_source_shape)
@@ -114,7 +113,7 @@ adj_vol = ffip.Adjoint_Volume(
     adjoint_simulation=sim_adjoint,
     forward_simulation=sim_forward,
     frequency=fcen,
-    center=ffip.Vector3(),
+    center=geom_center,
     size=geom_size,
     dim=geom_dim,
     density=None,
@@ -123,40 +122,34 @@ adj_vol = ffip.Adjoint_Volume(
     norm=ref_fft
 )
 
-rho_per = np.linspace(0, 1, 20)
+rho_shape = adj_vol.density.shape
+rho_list = np.linspace(0, 0.2, 100)
+f_list = []
+se1s = []
+se2s = []
+
+for rho in rho_list:
+    adj_vol.density = np.ones(rho_shape) * rho
+
+    sim_forward.run(stop_condition=stop_condition, np=16)
+
+    f1 =  adj_src.eval_functionals_and_set_sources()
+    f_list.append(f1)
+
+    plt.plot(rho, f1, '.')
+    plt.pause(1)
+
+    sim_adjoint.run(stop_condition=stop_condition, np=16)
+
+    se1s.append(np.sum(adj_vol.get_sensitivity().ravel()))
+    se2s.append(np.sum(adj_vol.get_sensitivity2().ravel()))
 
 
+with h5py.File('tmp2.h5', 'w') as file:
+    file.create_dataset('rho', data=rho_list)
+    file.create_dataset('se1', data=np.array(se1s))
+    file.create_dataset('se2', data=np.array(se2s))
+    file.create_dataset('f', data=np.array(f_list))
 
-
-adj_vol.density = adj_vol.density + rho_cross * 0.1
-# plt.imshow(adj_vol.density[0, :, :])
-# plt.pause(1)
-
-sim_forward.run(stop_condition=stop_condition, np=12)
-
-f1 =  adj_src.eval_functionals_and_set_sources()
-print('Objective function is evaluated at', f1)
-
-sim_adjoint.run(stop_condition=stop_condition, np=12)
-
-se1 = adj_vol.get_sensitivity()
-se2 = adj_vol.get_sensitivity2()
-
-pert = rho_cross * 0.5
-adj_vol.density = adj_vol.density + pert
-
-diff1 = np.sum((se1 * pert).ravel())
-diff2 = np.sum((se2 * pert).ravel())
-
-print('exp diff1=', diff1)
-print('exp diff2=', diff2)
-
-sim_forward.input_file = 'change_input.h5'
-sim_forward.fields_output_file = 'change_output.h5'
-
-sim_forward.run(stop_condition=stop_condition, np=2)
-
-f2 =  adj_src.eval_functionals_and_set_sources()
-
-print('Changed Objective function is evaluated at', f2)
-print('actual diff=', f2 - f1)
+plt.show()
+input('end')

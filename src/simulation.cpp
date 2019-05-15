@@ -93,6 +93,8 @@ namespace ffip
             return make_Lorentz_susceptibility(sus_json.at("frequency").get<double>(), sus_json.at("gamma").get<double>());
         else if (type_str == "Drude")
             return make_Drude_susceptibility(sus_json.at("frequency").get<double>(), sus_json.at("gamma").get<double>());
+        else if (type_str == "Deybe")
+            return make_Deybe_susceptibility(sus_json.at("tau").get<double>());
 
         throw std::runtime_error("Unknonw susceptibility");
     }
@@ -699,8 +701,9 @@ namespace ffip
         sim_start_time = std::chrono::system_clock::now();
         sim_prev_time = sim_start_time;
         double src_turnoff_time = fields.get_source_turnoff_time();
+        auto closure = get_component_closure(p1, p2, ctype);
 
-        auto ptr = dft_hub.find_unit(p1, p2, ctype);
+        auto ptr = dft_hub.find_unit(closure.first, closure.second, ctype);
 
         if (ptr == nullptr)
             throw std::runtime_error("dft is not registered");
@@ -739,7 +742,7 @@ namespace ffip
                 double local_norm = ptr->get_local_norm(frequency);
                 double glob_norm = 0;
 
-                MPI_Allreduce(&local_norm, &glob_norm, 1, MPI_DOUBLE, MPI_MAX, cart_comm);
+                MPI_Allreduce(&local_norm, &glob_norm, 1, MPI_DOUBLE, MPI_SUM, cart_comm);
                 
                 if (glob_norm > max_norm) max_norm = glob_norm;
                 if (glob_norm < min_norm) min_norm = glob_norm;

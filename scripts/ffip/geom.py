@@ -289,6 +289,19 @@ class DrudeSusceptibility(Susceptibility):
                 "gamma": self.gamma,
                 "amplitude": self.sigma}
 
+class DeybeSusceptibility(Susceptibility):
+
+    def __init__(self, tau=0.0, **kwargs):
+        super().__init__(**kwargs)
+        super().build_eqs(a0=1, b0=1, b1=tau)
+        self.tau = float(tau)
+
+    
+    def get_json(self):
+        return {'type' : 'Deybe',
+                'tau' : self.tau,
+                'amplitude' : self.sigma
+                }
 
 class GeometricObject:
 
@@ -429,4 +442,4 @@ def getgrid(center=Vector3(), size=Vector3(), dim=Vector3()):
     y = np.linspace(center.y - size.y/2, center.y + size.y/2, dim.y)
     z = np.linspace(center.z - size.z/2, center.z + size.z/2, dim.z)
 
-    return x, y, z
+    return z, y, x

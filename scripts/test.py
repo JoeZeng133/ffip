@@ -1,9 +1,5 @@
-import matplotlib.pyplot as plt
-import numpy as np
+import subprocess
 
 
-for i in range(3):
-    plt.figure(i)
-    plt.imshow(np.random.random((30, 30)))
-    plt.draw()
-    plt.pause(1)
+subprocess.run(['ls', '-l'])
+# subprocess.run(['mpirun', '-np', 12, 'run_sim_json'], check=True)

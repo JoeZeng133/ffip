@@ -32,11 +32,9 @@ m2 = ffip.Medium()
 e1 = m1.get_epsilon(fcen)
 e2 = m2.get_epsilon(fcen)
 
-# e1d = m1.get_dis_epsilon(fcen, dt)
-# e2d = m2.get_dis_epsilon(fcen, dt)
+rho_cross = -np.real(e2) / np.real(e1 - e2)
 
-# print('continuous e1=', e1, ',e2=', e2)
-# print('digital e1=', e1d, ',e2=', e2d)
+print('rho_cross=', rho_cross)
 
 src_func = ffip.Gaussian1(fsrc, start_time=0.5/fcen)
 
@@ -198,6 +196,7 @@ adj_vol = ffip.Adjoint_Volume(
 )
 
 rho = np.array(geom0[0].density[0,...])
+rho = np.ones(rho.shape) * (rho_cross + 0.05)
 
 max_itr = 4
 itr = 0
@@ -209,50 +208,7 @@ step = 2e-2
 decay = 0.95
 decay_after_step = 10
 
-with h5py.File('disk_adjoint_infos1.h5', 'r') as file:
-    diff_exp = file['exp diff'][:].tolist()
-    funcs = file['func'][:].tolist()
-
-    itr = len(funcs)
-    max_itr = itr + 4
-
-    for i in range(itr):
-        rhos.append(file['rho %d' % i][:])
-        ses.append(file['se %d' % i][:])
-    
-    # rho = rhos[-1]
-    rho = np.ones(rho.shape) * 0.9
-    
-    file.close()
-
-
-# rho = np.ones(rho.shape) * 0.5
-# rho = rho + np.random.random(rho.shape) * 0.1
-# rho[rho < 0] = 0
-# rho[rho > 1] = 1
-# with h5py.File('disk_adjoint_rho2.h5', 'r') as file:
-#     rho = file['rho 1'][:]
-#     file.close()
-
-#%%
-
-while itr < max_itr:
-    print('##################################################')
-    print('Iteration ', itr)
-
-    plt.figure(itr % 5 + 2)
-    plt.subplot(121)
-    plt.imshow(rho, vmin=0, vmax=1)
-    plt.colorbar()
-    plt.title('rho at iteration %d' % itr)
-    plt.pause(1)
-
-    # broadcast to 3d rho
-    adj_vol.density = np.ones(adj_vol.shape) * rho
-
-    rhos.append(rho)
-
-    sim_forward.run(stop_condition=stop_condition, np=12, skip=True, pop=True)
+sim_forward.run(stop_condition=stop_condition, np=12, skip=True, pop=True)
 
     funcs.append(adj_src.eval_functionals_and_set_sources())
 
@@ -288,18 +244,5 @@ while itr < max_itr:
 
     rho = rho + np.reshape(res.x, rho.shape)
 
-    itr += 1
-    if itr > decay_after_step:
-        step *= decay
-# %%
+#%%
 
-with h5py.File('disk_adjoint_infos.h5', 'w') as file:
-    for i in range(len(rhos)):
-        file.create_dataset('rho %d' % i, data=rhos[i])
-        file.create_dataset('se %d' % i, data=ses[i])
-
-    file.create_dataset('exp diff', data=np.array(diff_exp))
-    file.create_dataset('func', data=np.array(funcs))
-    file.close()
-
-plt.show()

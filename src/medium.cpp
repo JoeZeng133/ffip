@@ -107,6 +107,11 @@ namespace ffip
         return Susceptibility{omega * omega, 0, 0, 2 * pi * gamma, 1};
     }
 
+    Susceptibility make_Deybe_susceptibility(double tau)
+    {
+        return Susceptibility{1, 0, 1, tau, 0};
+    }
+
     Susceptibility make_conductivity_susceptibility()
     {
         return Susceptibility{1, 0, 0, 1, 0};

@@ -98,8 +98,9 @@ namespace ffip
         double ans = 0;
         for(size_t i = 0; i < re.size(); ++i)
         {
-            double val = re[i]*re[i] + im[i] * im[i];
-            if (val > ans) ans = val;
+            ans += re[i]*re[i] + im[i] * im[i];
+            // double val = re[i]*re[i] + im[i] * im[i];
+            // if (val > ans) ans = val;
         }
 
         return ans;

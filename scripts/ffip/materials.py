@@ -1,4 +1,4 @@
-from ffip.geom import DrudeSusceptibility, LorentzianSusceptibility, Medium
+from ffip.geom import DrudeSusceptibility, LorentzianSusceptibility, Medium, DeybeSusceptibility
 from math import sqrt, pi
 # import ffip
 
@@ -140,3 +140,14 @@ Ag_susc = [DrudeSusceptibility(frequency=Ag_frq0, gamma=Ag_gam0, sigma=Ag_sig0),
            LorentzianSusceptibility(frequency=Ag_frq4, gamma=Ag_gam4, sigma=Ag_sig4)]
 
 Ag = Medium(epsilon=1.0, E_susceptibilities=Ag_susc)
+
+#------------------------------------------------------------------
+# Au(800nm)
+
+Au_2D_tau1 = 127.3 * um_scale / 1e-3
+Au_2D_sig1 = -46
+Au_2D_sig2 = 0.196 * um_scale / 1e-3
+
+Au_2D_susc = [DeybeSusceptibility(tau=Au_2D_tau1, sigma=Au_2D_sig1)]
+
+Au_2D = Medium(epsilon=1.0, E_conductivity=Au_2D_sig2, E_susceptibilities=Au_2D_susc)

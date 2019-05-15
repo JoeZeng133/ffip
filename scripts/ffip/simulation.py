@@ -357,7 +357,7 @@ class Simulation:
 
         return res
 
-    def run(self, stop_condition, np=1, skip=False):
+    def run(self, stop_condition, np=1, skip=False, pop=False):
 
         with h5py.File(self.input_file, 'w') as input_file_h5:
             # dump json configuration file
@@ -369,8 +369,11 @@ class Simulation:
         # invoking externel bash command
         if not skip:
             subprocess.run(['mpirun', '-np', str(np), 'run_sim_json'], check=True)
-        
 
+        # run externel command manually
+        if pop:
+            input('press enter when finished')
+        
         with h5py.File(self.fields_output_file, 'r') as output_file_h5:
             # read dft fields
             for item in self.dft_fields:
@@ -643,6 +646,14 @@ class Adjoint_Volume:
             field_component=component
             ) for component in ['Ex', 'Ey', 'Ez']
         ]
+    
+    def forward_dft(self, field_component='Ex'):
+        map = {'Ex' : 0, 'Ey' : 1, 'Ez' : 2}
+        return self.forward_dfts[map[field_component]]
+    
+    def adjoint_dft(self, field_component='Ex'):
+        map = {'Ex' : 0, 'Ey' : 1, 'Ez' : 2}
+        return self.adjoint_dfts[map[field_component]]
 
     def get_sensitivity(self):
         self.pts = [np.stack((self.frequency * np.ones(item.z.shape), item.z, item.y, item.x), axis=-1) for item in self.geom_infos]

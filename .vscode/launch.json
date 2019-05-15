@@ -8,7 +8,7 @@
             "name": "(gdb) Launch",
             "type": "cppdbg",
             "request": "launch",
-            "program": "${workspaceFolder}/buildinstall/app/run_sim_json",
+            "program": "${workspaceFolder}/build/app/run_sim_json",
             "args": [],
             "stopAtEntry": false,
             "cwd": "${workspaceFolder}/scripts",

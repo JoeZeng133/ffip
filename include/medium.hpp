@@ -66,6 +66,8 @@ namespace ffip
 
     Susceptibility make_Drude_susceptibility(double frequeency, double gamma);
 
+    Susceptibility make_Deybe_susceptibility(double tau);
+
     Susceptibility make_conductivity_susceptibility();
 	
 
