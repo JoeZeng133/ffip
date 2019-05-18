@@ -3,8 +3,16 @@
 #include <pybind11/complex.h>
 #include <iostream>
 #include <algorithm>
+#include <CGAL/Exact_predicates_inexact_constructions_kernel.h>
+#include <CGAL/Polygon_2_algorithms.h>
+#include <CGAL/Polygon_2.h>
+#include <iostream>
 
+using K = CGAL::Exact_predicates_inexact_constructions_kernel;
+using Point = K::Point_2;
+using Polygon_2 = CGAL::Polygon_2<K>;
 namespace py = pybind11;
+
 
 template <int N>
 class interpn : public interpn<N - 1>
@@ -253,35 +261,55 @@ py::array transpose(py::array_t<double> gx, py::array_t<double> gy, py::array_t<
         double sz = (pt_ptr(i, 2) - gz_ptr(0)) / dz;
 
         interp.transpose(data, pt_ptr(i, 3), sz, sy, sx);
-
-        // sum += pt_ptr(i, 3);
     }
-
-    // std::cout << "sum=" << sum << "\n";
-
-    // sum = 0;
-
-    // for (ssize_t i = 0; i < res.size(); ++i)
-        // sum += data[i];
-    
-    // std::cout << "transposed sum=" << sum << "\n";
 
     return res;
 }
 
-void view_array(py::array_t<double> v)
+py::array check_inside(py::array_t<double> req_pts, py::array_t<double> poly_pts)
 {
-    auto ptr = v.unchecked<1>();
-    for(ssize_t i = 0; i < 10; ++i)
-        std::cout << ptr(i) << " ";
-    std::cout << "\n";
+    if (req_pts.ndim() < 2 || poly_pts.ndim() < 2)
+        throw py::value_error("ndim is not bigger than 1");
+
+    if (req_pts.shape(req_pts.ndim() - 1) != 2)
+        throw py::value_error("req_pts.shape[-1] is not 2");
+    
+    if (poly_pts.shape(poly_pts.ndim() - 1) != 2)
+        throw py::value_error("poly_pts.shape[-1] is not 2");
+
+    double const *poly_pts_ptr = poly_pts.data();
+    double const *req_ptr_ptr = req_pts.data();
+
+    auto res = py::array_t<bool>();
+
+    res.resize({req_pts.shape(), req_pts.shape() + req_pts.ndim() - 1});
+    bool* res_ptr = res.mutable_data();
+
+    auto poly_pts_vec = std::vector<Point>{};
+    
+    for(ssize_t i = 0; i < poly_pts.size(); i += 2)
+    {
+        poly_pts_vec.push_back({poly_pts_ptr[i], poly_pts_ptr[i + 1]});
+    }
+
+    auto pgn = Polygon_2(poly_pts_vec.begin(), poly_pts_vec.end());
+
+    for(ssize_t i = 0; i < req_pts.size(); i+=2)
+    {
+        res_ptr[i / 2] = (pgn.bounded_side({req_ptr_ptr[i], req_ptr_ptr[i + 1]}) == CGAL::ON_BOUNDED_SIDE);
+    }
+
+    return res;
 }
 
 PYBIND11_MODULE(_ffip, m)
 {
     m.doc() = "ffip c++ libraries";
 
-    m.def("view_array", &view_array);
+    m.def("check_inside", &check_inside,
+        py::arg("req_pts"),
+        py::arg("poly_pts"),
+        "check inside 2 D polygon");
 
     m.def("transpose", &transpose,
         py::arg("gx"),

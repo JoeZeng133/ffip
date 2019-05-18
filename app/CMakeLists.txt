@@ -7,5 +7,9 @@ set_target_properties(_ffip
 PROPERTIES
     CXX_STANDARD 17
 )
+target_link_libraries(_ffip
+PUBLIC
+    CGAL::CGAL
+)
 
 

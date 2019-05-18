@@ -15,8 +15,7 @@ set_property(TARGET ffip PROPERTY CXX_STANDARD 17)
 target_include_directories(ffip
 PUBLIC
     ${HDF5_INCLUDE_DIRS}
-    ${PROJECT_SOURCE_DIR}/include
-    ${PROJECT_SOURCE_DIR} 
+    ${PROJECT_SOURCE_DIR}/include 
     $<TARGET_PROPERTY:HighFive,INTERFACE_INCLUDE_DIRECTORIES>
 )
 

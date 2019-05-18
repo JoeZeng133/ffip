@@ -61,7 +61,7 @@ ez_dft = sim.add_dft_fields(size=ffip.Vector3(20, 20, 20) * dx, frequency=[ft], 
 Erp = 1 * G * dx**3 / (4 * np.pi) * np.exp(-1j * k * Rho) * (2 * eta / Rho**2 + 2 / (1j * omega * er * Rho**3)) * np.cos(Th)
 Ethp = 1 * G * dx**3 / (4 * np.pi) * np.exp(-1j * k * Rho) * (1j * omega * ur / Rho + 1 / (1j * omega * er * Rho**3) + 1 * eta / Rho**2) * np.sin(Th)
 
-sim.run(stop_condition=ffip.run_until_time(src_func.end_time * 5))
+sim.run(stop_condition=ffip.run_until_time(src_func.end_time * 5), np=2)
 
 #%% read fields
 fex = ex_dft.get_interpolant(method='nearest',bounds_error=False, fill_value=None)

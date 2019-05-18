@@ -7,5 +7,5 @@ build*/
 *.h5
 *.so
 __pycache__
-.vscode/ipch/*
-scripts/.vscode/ipch
+.vscode/*
+scripts/.vscode/*

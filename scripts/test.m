@@ -1,7 +1,9 @@
-[x, y, z] = read_geom('forwad_output.h5', '/geometry info request 0 Ey');
+r0 = 30;
+a = 2;
 
+f = @(x) -1/pi * atan(a * (x - r0)) + 0.5;
+fd = @(x) a / pi ./ (1 + (a * (x - r0)).^2);
 
-plot3(x, y, z, '.')
-xlabel('x')
-ylabel('y')
-zlabel('z')
+x = linspace(r0 - 10, r0 + 10, 100);
+
+plot(x, f(x))

@@ -1,3 +1,4 @@
+import subprocess
 import ffip
 import numpy as np
 import json
@@ -8,7 +9,7 @@ from ffip.geom import Medium, Vector3, Two_Medium_Box, cmp_shape
 from math import pi
 from ffip.source import Source, Inhom_Source
 from copy import deepcopy, copy
-import subprocess
+
 
 direction_dict = {'x': 0, 'y': 1, 'z': 2}
 side_dict = {'positive': 1, 'negative': -1}
@@ -368,7 +369,10 @@ class Simulation:
 
         # invoking externel bash command
         if not skip:
-            subprocess.run(['mpirun', '-np', str(np), 'run_sim_json'], check=True)
+            process = subprocess.Popen('mpirun -np %d run_sim_json' % np, shell=True)
+            process.wait()
+            # there is some parsing issues, so it is better to use Popen directly
+            # subprocess.run(['mpirun', '--version'], check=True, shell=True)
 
         # run externel command manually
         if pop:

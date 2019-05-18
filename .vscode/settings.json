@@ -1,5 +1,5 @@
 {
-    "python.pythonPath": "/home/zhou/anaconda3/envs/ffip/bin/python",
+    "python.pythonPath": "/usr/local/bin/python3",
     "files.associations": {
         "complex": "cpp",
         "__bit_reference": "cpp",
@@ -89,5 +89,11 @@
     "C_Cpp.configurationWarnings": "Disabled",
     "python.linting.enabled": true,
     "cmake.cmakePath": "cmake",
-    "explorer.sortOrder" : "type"
+    "explorer.sortOrder" : "type",
+    "cmake.configureSettings": {
+        "PYTHON_EXECUTABLE" : "/usr/local/bin/python3",
+        "Python_STDLIB" : "/usr/local/lib/python3.7/site-packages"
+        // "CMAKE_PREFIX_PATH" : "/Users/joez/anaconda/envs/ffip"
+    },
+    "cmake.installPrefix": "${userHome}"
 }
