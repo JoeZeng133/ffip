@@ -92,7 +92,7 @@
     "explorer.sortOrder" : "type",
     "cmake.configureSettings": {
         "PYTHON_EXECUTABLE" : "/usr/local/bin/python3",
-        "Python_STDLIB" : "/usr/local/lib/python3.7/site-packages"
+        "Python_STDLIB" : "/Users/joez/Library/Python/3.7/lib/python/site-packages"
         // "CMAKE_PREFIX_PATH" : "/Users/joez/anaconda/envs/ffip"
     },
     "cmake.installPrefix": "${userHome}"

@@ -5,7 +5,8 @@ from numbers import Number
 from copy import deepcopy
 import numpy as np
 from abc import ABCMeta, abstractmethod
-
+import ffip
+from shapely.geometry import Point, LineString, Polygon, MultiPolygon, box
 
 def cmp_shape(shape1=(), shape2=()):
     if len(shape1) != len(shape2):
@@ -443,3 +444,40 @@ def getgrid(center=Vector3(), size=Vector3(), dim=Vector3()):
     z = np.linspace(center.z - size.z/2, center.z + size.z/2, dim.z)
 
     return z, y, x
+
+# def planar_polygon(poly_x, poly_y, center=Vector3(), height=1.0):
+
+#     def internal(req_pts):
+#         xy_check = ffip.check_inside(
+#             req_pts=np.stack((req_pts[..., 2] - center.x, req_pts[..., 1] - center.y), axis=-1), 
+#             poly_pts=np.stack((poly_x, poly_y), axis=-1)
+#         )
+
+#         z_check = np.abs(req_pts[..., 0] - center.z) < (height/2)
+
+#         return xy_check * z_check * 1.0
+
+#     return internal
+
+def planar_polygon(polygon, center=Vector3(), height=np.inf):
+
+    def one_geom(g, req_pts):
+        xy_check = ffip.check_inside(
+                req_pts=np.stack((req_pts[..., 2] - center.x, req_pts[..., 1] - center.y), axis=-1), 
+                poly_pts=np.asarray(g.exterior)
+            )
+        z_check = np.abs(req_pts[..., 0] - center.z) < (height/2)
+
+        return xy_check * z_check
+
+    def internal(req_pts):
+        res = False
+        if isinstance(polygon, MultiPolygon):
+            for g in polygon.geoms:
+                res = np.bitwise_or(res, one_geom(g, req_pts)) 
+        else:
+            res = one_geom(polygon, req_pts)
+    
+        return res * 1
+
+    return internal
