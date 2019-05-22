@@ -1,11 +1,12 @@
 {
     "C_Cpp.default.configurationProvider": "vector-of-bool.cmake-tools",
-    "python.linting.pylintEnabled": true,
+    "python.linting.pylintEnabled": false,
     "python.linting.enabled": true,
     "[python]":{
         "editor.insertSpaces": true,
         "editor.tabSize": 4
     },
     "explorer.sortOrder": "type",
-    "python.pythonPath": "/usr/local/bin/python3"
+    "python.pythonPath": "/usr/local/bin/python3",
+    "python.linting.flake8Enabled": true
 }

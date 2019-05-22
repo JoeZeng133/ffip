@@ -21,6 +21,7 @@ def arb1(x):
     return 0.05 * np.ones(x.shape[:-1])
 
 #%% original simulation
+prefix='box_vary_perm_'
 dx = 2
 dt = 0.5 * dx
 sim_size = ffip.Vector3(50, 50, 50) * dx
@@ -96,17 +97,31 @@ sim_adjoint = ffip.Simulation(
     progress_interval=1e10
 )
 
-adj_src = ffip.Adjoint_Source(
+# adj_src = ffip.Adjoint_Source(
+#     adjoint_simulation=sim_adjoint,
+#     forward_simulation=sim_forward,
+#     function=src_func,
+#     frequency=fcen,
+#     center=adj_source_center,
+#     size=adj_source_size,
+#     dim=adj_source_dim,
+#     functionals=[
+#         ['|E|', ex_vals]
+#     ]
+# )
+
+box_flux = sim_forward.add_flux_box(
+    center=ffip.Vector3(),
+    size=geom_size + 10,
+    frequency=[fcen]
+)
+
+adj_src = ffip.Adjoint_Flux(
     adjoint_simulation=sim_adjoint,
     forward_simulation=sim_forward,
     function=src_func,
     frequency=fcen,
-    center=adj_source_center,
-    size=adj_source_size,
-    dim=adj_source_dim,
-    functionals=[
-        ['|E|', ex_vals]
-    ]
+    fluxes=box_flux.flux_regions
 )
 
 adj_vol = ffip.Adjoint_Volume(
@@ -123,7 +138,7 @@ adj_vol = ffip.Adjoint_Volume(
 )
 
 rho_shape = adj_vol.density.shape
-rho_list = np.linspace(0, 0.2, 100)
+rho_list = np.linspace(0.1, 0.2, 10)
 f_list = []
 se1s = []
 se2s = []
@@ -131,21 +146,21 @@ se2s = []
 for rho in rho_list:
     adj_vol.density = np.ones(rho_shape) * rho
 
-    sim_forward.run(stop_condition=stop_condition, np=16)
+    sim_forward.run(stop_condition=stop_condition, np=3)
 
     f1 =  adj_src.eval_functionals_and_set_sources()
     f_list.append(f1)
 
     plt.plot(rho, f1, '.')
-    plt.pause(1)
+    plt.pause(3)
 
-    sim_adjoint.run(stop_condition=stop_condition, np=16)
+    sim_adjoint.run(stop_condition=stop_condition, np=3)
 
     se1s.append(np.sum(adj_vol.get_sensitivity().ravel()))
     se2s.append(np.sum(adj_vol.get_sensitivity2().ravel()))
 
 
-with h5py.File('tmp2.h5', 'w') as file:
+with h5py.File(prefix + 'result.h5', 'w') as file:
     file.create_dataset('rho', data=rho_list)
     file.create_dataset('se1', data=np.array(se1s))
     file.create_dataset('se2', data=np.array(se2s))

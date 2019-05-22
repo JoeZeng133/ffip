@@ -25,6 +25,10 @@ def sph2cart(az, el, r):
     z = r * np.sin(el)
     return x, y, z
 
+def metadata_to_pts(*args):
+    # meshgrid and stack xn, xn-1, ..., x1 together
+    return np.stack(np.meshgrid(*args, indexing='ij'), axis=-1)
+
 class Vector3(object):
     def __init__(self, x=0.0, y=0.0, z=0.0):
         self.x = float(x) if type(x) is int else x
@@ -444,20 +448,6 @@ def getgrid(center=Vector3(), size=Vector3(), dim=Vector3()):
     z = np.linspace(center.z - size.z/2, center.z + size.z/2, dim.z)
 
     return z, y, x
-
-# def planar_polygon(poly_x, poly_y, center=Vector3(), height=1.0):
-
-#     def internal(req_pts):
-#         xy_check = ffip.check_inside(
-#             req_pts=np.stack((req_pts[..., 2] - center.x, req_pts[..., 1] - center.y), axis=-1), 
-#             poly_pts=np.stack((poly_x, poly_y), axis=-1)
-#         )
-
-#         z_check = np.abs(req_pts[..., 0] - center.z) < (height/2)
-
-#         return xy_check * z_check * 1.0
-
-#     return internal
 
 def planar_polygon(polygon, center=Vector3(), height=np.inf):
 

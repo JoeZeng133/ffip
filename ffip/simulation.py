@@ -5,7 +5,7 @@ import json
 import h5py
 from scipy.interpolate import RegularGridInterpolator
 from scipy.integrate import trapz
-from ffip.geom import Medium, Vector3, Two_Medium_Box, cmp_shape
+from ffip.geom import Medium, Vector3, Two_Medium_Box, cmp_shape, metadata_to_pts
 from math import pi
 from ffip.source import Source, Inhom_Source
 from copy import deepcopy, copy
@@ -53,7 +53,7 @@ class Fields_DFT:
         self.v = group['real'][:] + 1j * group['imag'][:]
 
         if not self.degenerate:
-            # this is to copy with interpolation not working with dimension size 1
+            # this is to cope with interpolation not working with dimension size 1
             # expanding frequency is different from expanding coordinates
             if self.frequency.size == 1:
                 self.frequency = self.frequency * np.array([0.9, 1.1])
@@ -104,13 +104,20 @@ class Flux_Region:
         self.frequency = np.sort(np.asarray(frequency))
         self.dx = sim.dx
 
-        dict = {0: 'x', 1: 'y', 2: 'z'}
-        e1 = 'E' + dict[(self.direction + 1) % 3]
-        h2 = 'H' + dict[(self.direction + 2) % 3]
         self._e1_dft = sim.add_dft_fields(
-            center=center, size=size, frequency=frequency, field_component=e1)
+            center=center, size=size, frequency=frequency, field_component=self.e1_str)
         self._h2_dft = sim.add_dft_fields(
-            center=center, size=size, frequency=frequency, field_component=h2)
+            center=center, size=size, frequency=frequency, field_component=self.h2_str)
+    
+    @property
+    def e1_str(self):
+        dict = {0: 'x', 1: 'y', 2: 'z'}
+        return 'E' + dict[(self.direction + 1) % 3]
+    
+    @property
+    def h2_str(self):
+        dict = {0: 'x', 1: 'y', 2: 'z'}
+        return 'H' + dict[(self.direction + 2) % 3]
 
     @property
     def e1_dft(self):
@@ -120,55 +127,87 @@ class Flux_Region:
     def h2_dft(self):
         return self._h2_dft
 
-    def get_values(self, scale=1, substract=None):
+    def get_fields(self, scale=1, substract=None, **kwargs):
+        # return e1, h2
         if substract is not None and not isinstance(substract, Flux_Region):
             raise TypeError('Substract is not an instance of Flux_Region')
 
-        len = (self.size / self.dx * scale).round() + ffip.Vector3(1, 1, 1)
-        p1 = self.center - self.size / 2
-        p2 = self.center + self.size / 2
-
-        x, dx = np.linspace(p1.x, p2.x, len.x, retstep=True)
-        y, dy = np.linspace(p1.y, p2.y, len.y, retstep=True)
-        z, dz = np.linspace(p1.z, p2.z, len.z, retstep=True)
-        pts = np.stack(np.meshgrid(self.frequency, z,
-                                   y, x, indexing='ij'), axis=-1)
-
-        # consider degenerating geometry
-        meas = 1
-        if not np.isnan(dx):
-            meas *= dx
-        if not np.isnan(dy):
-            meas *= dy
-        if not np.isnan(dz):
-            meas *= dz
-
         e1_interp = self.e1_dft.get_interpolant(
             substract=substract.e1_dft if substract is not None else None,
-            method='nearest', fill_value=None)
+            **kwargs)
 
         h2_interp = self.h2_dft.get_interpolant(
             substract=substract.h2_dft if substract is not None else None,
-            method='nearest', fill_value=None)
-
+            **kwargs)
+        
+        pts = self.get_pts(scale=scale)
         e1 = e1_interp(pts)
         h2 = h2_interp(pts)
-        flux = np.real(e1 * np.conj(h2)) * meas
+
+        return e1, h2
+    
+    def get_len(self, scale=1):
+        return (self.size / self.dx * scale).round() + ffip.Vector3(1, 1, 1)
+    
+    def get_metadata(self, scale=1):
+        len = self.get_len(scale=scale)
+        p1 = self.center - self.size / 2
+        p2 = self.center + self.size / 2
+
+        x = np.linspace(p1.x, p2.x, len.x)
+        y = np.linspace(p1.y, p2.y, len.y)
+        z = np.linspace(p1.z, p2.z, len.z)
+
+        return self.frequency, z, y, x
+
+    def get_pts(self, scale=1):
+        # return integration points
+
+        return np.stack(np.meshgrid(*self.get_metadata(scale=scale), indexing='ij'), axis=-1)
+    
+    def get_int_weights(self, scale=1):
+        # return integration weights
+
+        len = self.get_len(scale=scale)
+
+        x = np.ones((int(len.x),))
+        y = np.ones((int(len.y),))
+        z = np.ones((int(len.z),))
+
+        meas = 1
+        if len.x > 1:
+            meas *= self.size.x / (len.x - 1)
+        if len.y > 1:
+            meas *= self.size.y / (len.y - 1)
+        if len.z > 1:
+            meas *= self.size.z / (len.z - 1)
+
+        for item in [x, y, z]:
+            if item.size > 1:
+                item[0] = 0.5
+                item[-1] = 0.5
+        
+        Z, Y, X = np.meshgrid(z, y, x, indexing='ij')
+        return X * Y * Z * meas
+        
+    def get_values(self, scale=1, substract=None, **kwargs):
+        # return fluxes
+
+        e1, h2 = self.get_fields(scale=scale, substract=substract, **kwargs)
+        int_weights = self.get_int_weights(scale=scale)
+        
+        flux = np.real(e1 * np.conj(h2)) * int_weights
 
         # integration along dimensions (1, 2, 3) = (dz, dy, dx)
-        flux = trapz(flux, axis=1) if flux.shape[1] > 1 else np.squeeze(
-            flux, axis=1)
-        flux = trapz(flux, axis=1) if flux.shape[1] > 1 else np.squeeze(
-            flux, axis=1)
-        flux = trapz(flux, axis=1) if flux.shape[1] > 1 else np.squeeze(
-            flux, axis=1)
+        flux = np.sum(flux, axis=(1, 2, 3))
 
         return flux * self.weight
 
     def get_interpolant(self, scale=1, substract=None):
+        # return fluxes as an interpolant
+
         flux = self.get_values(scale=scale, substract=substract)
         return RegularGridInterpolator((self.frequency,), flux)
-
 
 class Flux_Box:
     def __init__(self, sim, center, size, frequency):
@@ -193,7 +232,7 @@ class Flux_Box:
     def get_flux_region(self, direction='x', side='negative'):
         return self.flux_regions[direction_dict[direction] * 2 + (0 if side_dict[side] == -1 else 1)]
 
-    def get_values(self, scale=1, substract=None):
+    def get_values(self, scale=1, substract=None, **kwargs):
         if substract is not None and not isinstance(substract, Flux_Box):
             raise TypeError('Substract is not an instance of Flux_Box')
 
@@ -201,12 +240,13 @@ class Flux_Box:
         for i in range(6):
             flux += self.flux_regions[i].get_values(
                 scale=scale,
-                substract=substract.flux_regions[i] if substract is not None else None)
+                substract=substract.flux_regions[i] if substract is not None else None,
+                **kwargs)
 
         return flux
 
-    def get_interpolant(self, scale=1, substract=None):
-        flux = self.get_values(scale=scale, substract=substract)
+    def get_interpolant(self, scale=1, substract=None, **kwargs):
+        flux = self.get_values(scale=scale, substract=substract, **kwargs)
         return RegularGridInterpolator((self.frequency), flux)
 
 
@@ -358,7 +398,7 @@ class Simulation:
 
         return res
 
-    def run(self, stop_condition, np=1, skip=False, pop=False):
+    def run(self, stop_condition, np=1, skip=False, pop=False, **kwargs):
 
         with h5py.File(self.input_file, 'w') as input_file_h5:
             # dump json configuration file
@@ -369,10 +409,8 @@ class Simulation:
 
         # invoking externel bash command
         if not skip:
-            process = subprocess.Popen('mpirun -np %d run_sim_json' % np, shell=True)
+            process = subprocess.Popen('mpirun -np %d run_sim_json' % np, shell=True, **kwargs)
             process.wait()
-            # there is some parsing issues, so it is better to use Popen directly
-            # subprocess.run(['mpirun', '--version'], check=True, shell=True)
 
         # run externel command manually
         if pop:
@@ -497,13 +535,75 @@ class PML:
 
         return res
 
+class Adjoint_Flux:
+    def __init__(self, adjoint_simulation, forward_simulation, function, fluxes=[], frequency=1.0, scale=1):
+        self.adjoint_simulation = adjoint_simulation
+        self.forward_simulation = forward_simulation
+        self.frequency = float(frequency)
+        self.scale = float(scale)
+        self.fluxes = fluxes
+        self.e_adjoint_sources = []
+        self.m_adjoint_sources = []
+
+
+        for i in range(len(fluxes)):    
+            flux = fluxes[i]
+
+            if flux.frequency.size > 1:
+                raise ValueError('Fluxes used in Adjoint_Flux cannot have more than 1 frequency')
+
+            # j1 source
+            self.e_adjoint_sources.append(
+                Inhom_Source(
+                        function=function,
+                        frequency=frequency,
+                        amplitude=None,
+                        center=flux.center,
+                        size=flux.size,
+                        dim=flux.get_len(scale=scale),
+                        field_component=flux.e1_str,
+                        suffix='flux %d %s adjoint' % (i, flux.e1_str)
+                    )
+                )
+            
+            # m2 source
+            self.m_adjoint_sources.append(
+                Inhom_Source(
+                        function=function,
+                        frequency=frequency,
+                        amplitude=None,
+                        center=flux.center,
+                        size=flux.size,
+                        dim=flux.get_len(scale=scale),
+                        field_component=flux.h2_str,
+                        suffix='flux %d %s adjoint' % (i, flux.h2_str)
+                    )
+                )
+            
+            adjoint_simulation.add_source(self.e_adjoint_sources[-1])
+            adjoint_simulation.add_source(self.m_adjoint_sources[-1])
+    
+    def eval_functionals_and_set_sources(self):
+        res = 0
+
+        for i in range(len(self.fluxes)):
+            flux = self.fluxes[i]
+            res += flux.get_values(scale=self.scale)
+            e1, h2 = flux.get_fields(scale=self.scale)
+            int_weights = flux.get_int_weights(scale=self.scale)
+
+            self.e_adjoint_sources[i].amplitude = np.conj(h2[0, ...]) * int_weights * flux.weight
+            self.m_adjoint_sources[i].amplitude = - np.conj(e1[0, ...]) * int_weights * flux.weight
+        
+        return res
+
 
 class Adjoint_Source:
     comp_map = {'Ex': ['Ex'], 'Ey': ['Ey'], 'Ez': ['Ez'],
                 '|Ex|': ['Ex'], '|Ey|': ['Ey'], '|Ez|': ['Ez'],
                 '|E|': ['Ex', 'Ey', 'Ez']}
 
-    def __init__(self, adjoint_simulation, forward_simulation, function, frequency=1.0, center=Vector3(), size=Vector3(), dim=Vector3(), functionals=[], norm=1):
+    def __init__(self, adjoint_simulation, forward_simulation, function, frequency=1.0, center=Vector3(), size=Vector3(), dim=Vector3(), functionals=[]):
         # list of functionals = [['ex', obj_val], ['|ey|', obj_val], ...]
 
         self.adjoint_simulation = adjoint_simulation
@@ -513,7 +613,6 @@ class Adjoint_Source:
         self.size = size.copy()
         self.dim = dim.round()
         self.functionals = deepcopy(functionals)
-        self.norm = complex(norm)
 
         self.forward_dfts = {}
         self.adjoint_sources = {}

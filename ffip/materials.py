@@ -14,7 +14,7 @@ hz_scale = 1e-6 / 3e8 * um_scale
 # gold (Au) L4 model
 Au_plasma_frq = 9.03*eV_um_scale
 Au_f0 = 0.760
-Au_frq0 = 1e-10
+Au_frq0 = 1e-10*eV_um_scale*sqrt(6.1971084e+21)
 Au_gam0 = 0.053*eV_um_scale
 Au_sig0 = Au_f0*Au_plasma_frq**2/Au_frq0**2
 Au_f1 = 0.024

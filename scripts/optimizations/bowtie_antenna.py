@@ -1,6 +1,7 @@
 import ffip
 import matplotlib.pyplot as plt
 import numpy as np
+import h5py
 from scipy.optimize import minimize, Bounds
 
 #%% setting up geometry
@@ -36,12 +37,12 @@ def get_bowtie_den():
 density = get_bowtie_den()
 
 #%% run target geometry
-dx = 2
+dx = 4
 dt = 0.5 * dx
 dpml = 8 * dx
 sim_size = ffip.Vector3(300, 300, 100) + dpml * 2
 fsrc = 1 / 500
-fcen = 1 / 500
+fcen = 1 / 800
 
 m1 = ffip.Au
 m2 = ffip.Medium()
@@ -142,7 +143,9 @@ def get_bowtie_fields():
     sim0.run(
         stop_condition=stop_condition,
         np=2,
-        skip=True)
+        skip=True,
+        pop=True
+    )
 
     #%%
     adj_z, adj_y, adj_x = ffip.getgrid(adj_source_center, adj_source_size, adj_source_dim)
@@ -150,15 +153,15 @@ def get_bowtie_fields():
     ex_vals = ex_dft(fcen, adj_z, adj_y, adj_x).reshape(adj_source_shape)
     ey_vals = ey_dft(fcen, adj_z, adj_y, adj_x).reshape(adj_source_shape)
     ez_vals = ez_dft(fcen, adj_z, adj_y, adj_x).reshape(adj_source_shape)
+    e_vals = np.sqrt(np.abs(ex_vals)**2 + np.abs(ey_vals)**2 + np.abs(ez_vals)**2)
+    
+    plt.imshow(np.squeeze(e_vals), origin='lower')
+    plt.colorbar()
+    plt.show()
 
-    return ex_vals, ey_vals, ez_vals
+    return e_vals
 
-ex_vals, ey_vals, ez_vals = get_bowtie_fields()
-e_vals = np.sqrt(np.abs(ex_vals)**2 + np.abs(ey_vals)**2 + np.abs(ez_vals)**2)
-
-plt.imshow(np.squeeze(e_vals), origin='lower')
-plt.colorbar()
-plt.show()
+e_vals = get_bowtie_fields()
 
 #%% adjoint setups
 sim_forward = ffip.Simulation(
@@ -206,44 +209,114 @@ adj_vol = ffip.Adjoint_Volume(
     norm=ref_fft
 )
 
-rho0 = np.zeros(adj_vol.shape[1:])
+# rho in [0, scale] to control step size
 scale = 1
 
-def func(rho):
-    adj_vol.density = np.ones(adj_vol.shape) * np.reshape(rho, adj_vol.shape[1:]) / scale
+def fun(rho):
+    adj_vol.density = np.ones(adj_vol.shape) * np.reshape(rho / scale, adj_vol.shape[1:])
     print('running forward calculation')
     sim_forward.run(
         stop_condition=stop_condition, 
-        np=2,
-        skip=True,
-        pop=True
+        np=2
+        # skip=True,
+        # pop=True
     )
     
-    return adj_src.eval_functionals_and_set_sources()
+    return adj_src.eval_tionals_and_set_sources()
 
 def fprime(rho):
     print('running adjoint calculation')
     sim_adjoint.run(
         stop_condition=stop_condition,
-        np=2,
-        skip=True,
-        pop=True
+        np=2
+        # skip=True,
+        # pop=True
     )
 
-    se = np.sum(adj_vol.get_sensitivity(), axis=0) / scale
+    se = np.sum(adj_vol.get_sensitivity() / scale, axis=0)
     return se.ravel()
 
 def show(rho):
-    se = np.sum(adj_vol.get_sensitivity(), axis=0)
-    plt.imshow(se, origin='lower')
-    plt.show()
+    rho_t = np.reshape(rho / scale, adj_vol.shape[1:])
+
+    with h5py.File('bowtie_rho.h5', 'a') as file:
+        tmp = len(file.keys())
+        file.create_dataset('rho %d' % tmp, data=rho_t)
+        file.close()
+    
+    plt.figure(1)
+    plt.imshow(rho_t, origin='lower')
+    plt.pause(3)
+
+#%% sensitivity test
+def sensitivity_test():
+    rho0 = np.zeros(adj_vol.shape[1:]).flatten() + 0.5
+    f1 = fun(rho0)
+    print('f1=', f1)
+    print('exp(f2 - f1)=', np.sum(fprime(rho0) * 0.01))
+    sim_forward.fields_output_file = 'bowtie_forward_output1.h5'
+    sim_forward.input_file = 'bowtie_forward_input1.h5'
+    f2 = fun(rho0 + 0.01)
+    print('f2=', f2)
+    print('f2-f1=', f2 - f1)
+    print("end")
 
 #%%
-minimize(
-    func,
-    rho0,
-    method='L-BFGS-B',
-    jac=fprime,
-    bounds=Bounds(0, scale),
-    callback=show
-)
+def optimize():
+    rho0 = np.zeros(adj_vol.shape[1:]).flatten() + 0.5
+    res = minimize(
+        fun,
+        rho0,
+        method='L-BFGS-B',
+        jac=fprime,
+        bounds=Bounds(0, scale),
+        callback=show,
+        options={'maxiter' : 10, 'disp' : True}
+    )
+
+def level_set_optimize(fun, x0, jac, bounds):
+    x_list = [x0]
+    f_list = []
+    fp_list = []
+    itr = 0
+    maxiter = 10
+    ds = 1
+
+    while 1:
+        x = x_list[-1]
+        # get functions and gradients
+        f = fun(x)
+        fp = np.reshape(jac(x), adj_vol.shape[1:])
+
+        f_list.append(f)
+        fp_list.append(fp)
+
+        # get gradient of rho
+        g0 = np.gradient(x, axis=0)
+        g1 = np.gradient(x, axis=1)
+        g = np.sqrt(g0**2 + g1**2)
+
+        dx = g * fp
+        tmp = np.max(np.abs(dx.ravel()))
+        if tmp > ds:
+            dx = ds / tmp  * dx
+        
+        x += dx
+        x[x > bounds[1]] = bounds[1]
+        x[x < bounds[0]] = bounds[0]
+
+        x_list.append(x)
+        plt.imshow(x, vmin=bounds[0], vmax=bounds[1], origin='lower')
+        plt.show()
+
+        itr += 1
+
+        if itr > maxiter:
+            break
+
+        
+
+
+
+
+
