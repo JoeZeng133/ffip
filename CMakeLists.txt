@@ -17,8 +17,8 @@ find_package(nlohmann_json REQUIRED)
 find_package(HighFive REQUIRED)
 
 # get python package location from PYBIND11 generated PYTHON_EXECUTABLE
-# set(cmd "from distutils.sysconfig import get_python_lib; print(get_python_lib(plat_specific=False,standard_lib=True))")
-set(cmd "import sys; print(sys.path[-1])")
+set(cmd "from distutils.sysconfig import get_python_lib; print(get_python_lib(plat_specific=False,standard_lib=False))")
+# set(cmd "import sys; print(sys.path[-1])")
 
 if(NOT Python_STDLIB)
 execute_process(
@@ -26,6 +26,7 @@ execute_process(
     OUTPUT_VARIABLE Python_STDLIB)
 endif(NOT Python_STDLIB)
 
+string(STRIP ${Python_STDLIB} Python_STDLIB)
 message("Python Library Location=" ${Python_STDLIB})
 message("Python Executable="${PYTHON_EXECUTABLE})
 
