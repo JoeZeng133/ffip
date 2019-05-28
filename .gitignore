@@ -7,6 +7,6 @@ build*/
 *.h5
 *.so
 *.json
-__pycache__
-.vscode/*
-scripts/.vscode/*
+*.pyc
+# .vscode
+# scripts/.vscode

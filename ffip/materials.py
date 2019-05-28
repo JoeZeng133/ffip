@@ -1,5 +1,6 @@
 from ffip.geom import DrudeSusceptibility, LorentzianSusceptibility, Medium, DeybeSusceptibility
 from math import sqrt, pi
+from numpy import real, imag
 # import ffip
 
 # default unit length is 1 um
@@ -9,6 +10,20 @@ um_scale = 1.0e-3
 eV_um_scale = um_scale/1.23984193
 # conversion factor for hz to c/um
 hz_scale = 1e-6 / 3e8 * um_scale
+
+
+#------------------------------------------------------------------
+# FePt (single frequency model using Lorentz Pole)
+def FePt(frequency=1.0):
+
+    eps2 = 2.16
+    sus2 = LorentzianSusceptibility(
+        frequency=frequency,
+        gamma=frequency,
+        sigma=14.5
+    )
+
+    return Medium(epsilon=eps2, E_susceptibilities=[sus2])
 
 #------------------------------------------------------------------
 # gold (Au) L4 model
@@ -140,14 +155,3 @@ Ag_susc = [DrudeSusceptibility(frequency=Ag_frq0, gamma=Ag_gam0, sigma=Ag_sig0),
            LorentzianSusceptibility(frequency=Ag_frq4, gamma=Ag_gam4, sigma=Ag_sig4)]
 
 Ag = Medium(epsilon=1.0, E_susceptibilities=Ag_susc)
-
-#------------------------------------------------------------------
-# Au(800nm)
-
-Au_2D_tau1 = 127.3 * um_scale / 1e-3
-Au_2D_sig1 = -46
-Au_2D_sig2 = 0.196 * um_scale / 1e-3
-
-Au_2D_susc = [DeybeSusceptibility(tau=Au_2D_tau1, sigma=Au_2D_sig1)]
-
-Au_2D = Medium(epsilon=1.0, E_conductivity=Au_2D_sig2, E_susceptibilities=Au_2D_susc)

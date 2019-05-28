@@ -2,449 +2,60 @@
     "courant number": 0.5,
     "resolution": 0.5,
     "size": [
-        100.0,
-        100.0,
-        100.0
+        64.0,
+        64.0,
+        64.0
     ],
     "default material": {
-        "epsilon": 1.0,
+        "epsilon": 2.16,
         "mu": 1.0,
         "electric conductivity": 0.0,
         "magnetic conductivity": 0.0,
-        "electric susceptibility": [],
+        "electric susceptibility": [
+            {
+                "type": "Lorentz",
+                "frequency": 0.002,
+                "gamma": 0.002,
+                "amplitude": 14.5
+            }
+        ],
         "magnetic susceptibility": []
     },
-    "progress interval": 10000000000.0,
-    "input file": "adjoint_input.h5",
-    "fields output file": "adjoint_output.h5",
+    "progress interval": 4.0,
+    "input file": "empty.h5",
+    "fields output file": "output.h5",
     "stop condition": {
-        "type": "dft",
-        "center": [
-            0.0,
-            0.0,
-            0.0
-        ],
-        "size": [
-            30.0,
-            30.0,
-            30.0
-        ],
-        "field component": "Ex",
-        "time interval examined": 2000.0,
-        "variation": 0.005,
-        "frequency": 0.00125
+        "type": "time",
+        "time": 4120.598861837906
     },
     "PML": [
         {
-            "thickness": 16.0,
+            "thickness": 12.0,
             "k max": 1.0,
             "order": 3,
             "sigma max": 1.6
         }
     ],
-    "geometry": [
-        {
-            "type": "two medium box",
-            "center": [
-                0.0,
-                0.0,
-                0.0
-            ],
-            "size": [
-                30.0,
-                30.0,
-                30.0
-            ],
-            "dimension": [
-                16.0,
-                16.0,
-                16.0
-            ],
-            "density dataset": "two medium box adjoint",
-            "medium1": {
-                "epsilon": 1.0,
-                "mu": 1.0,
-                "electric conductivity": 0.0,
-                "magnetic conductivity": 0.0,
-                "electric susceptibility": [
-                    {
-                        "type": "Drude",
-                        "frequency": 0.006349334783373923,
-                        "gamma": 4.2747384741214544e-05,
-                        "amplitude": 0.9999999999999998
-                    },
-                    {
-                        "type": "Lorentz",
-                        "frequency": 0.0003347200880680007,
-                        "gamma": 0.00019437961740816426,
-                        "amplitude": 11.362935694585572
-                    },
-                    {
-                        "type": "Lorentz",
-                        "frequency": 0.0006694401761360014,
-                        "gamma": 0.0002782612780324343,
-                        "amplitude": 1.1836391348526636
-                    },
-                    {
-                        "type": "Lorentz",
-                        "frequency": 0.002394660099937094,
-                        "gamma": 0.0007017023532991822,
-                        "amplitude": 0.6567702228064309
-                    },
-                    {
-                        "type": "Lorentz",
-                        "frequency": 0.0034714102627582534,
-                        "gamma": 0.0020115467461243224,
-                        "amplitude": 2.645485876585798
-                    }
-                ],
-                "magnetic susceptibility": []
-            },
-            "medium2": {
-                "epsilon": 1.0,
-                "mu": 1.0,
-                "electric conductivity": 0.0,
-                "magnetic conductivity": 0.0,
-                "electric susceptibility": [],
-                "magnetic susceptibility": []
-            }
-        }
-    ],
     "sources": [
         {
-            "type": "inhomogeneous source",
+            "type": "volume source",
             "center": [
                 0.0,
                 0.0,
-                20.0
-            ],
-            "size": [
-                40.0,
-                40.0,
-                0.0
-            ],
-            "dimension": [
-                21.0,
-                21.0,
-                1.0
-            ],
-            "field component": "Hy",
-            "amplitude dataset": "inhom source amplitude flux 5 Hy adjoint",
-            "phase dataset": "inhom source phase flux 5 Hy adjoint",
-            "frequency": 0.00125,
-            "function": {
-                "type": "Gaussian1",
-                "frequency": 0.002,
-                "cutoff": 4.0,
-                "start time": 400.0
-            }
-        },
-        {
-            "type": "inhomogeneous source",
-            "center": [
-                0.0,
-                0.0,
-                20.0
-            ],
-            "size": [
-                40.0,
-                40.0,
-                0.0
-            ],
-            "dimension": [
-                21.0,
-                21.0,
-                1.0
-            ],
-            "field component": "Ex",
-            "amplitude dataset": "inhom source amplitude flux 5 Ex adjoint",
-            "phase dataset": "inhom source phase flux 5 Ex adjoint",
-            "frequency": 0.00125,
-            "function": {
-                "type": "Gaussian1",
-                "frequency": 0.002,
-                "cutoff": 4.0,
-                "start time": 400.0
-            }
-        },
-        {
-            "type": "inhomogeneous source",
-            "center": [
-                0.0,
-                0.0,
-                -20.0
-            ],
-            "size": [
-                40.0,
-                40.0,
-                0.0
-            ],
-            "dimension": [
-                21.0,
-                21.0,
-                1.0
-            ],
-            "field component": "Hy",
-            "amplitude dataset": "inhom source amplitude flux 4 Hy adjoint",
-            "phase dataset": "inhom source phase flux 4 Hy adjoint",
-            "frequency": 0.00125,
-            "function": {
-                "type": "Gaussian1",
-                "frequency": 0.002,
-                "cutoff": 4.0,
-                "start time": 400.0
-            }
-        },
-        {
-            "type": "inhomogeneous source",
-            "center": [
-                0.0,
-                0.0,
-                -20.0
-            ],
-            "size": [
-                40.0,
-                40.0,
-                0.0
-            ],
-            "dimension": [
-                21.0,
-                21.0,
-                1.0
-            ],
-            "field component": "Ex",
-            "amplitude dataset": "inhom source amplitude flux 4 Ex adjoint",
-            "phase dataset": "inhom source phase flux 4 Ex adjoint",
-            "frequency": 0.00125,
-            "function": {
-                "type": "Gaussian1",
-                "frequency": 0.002,
-                "cutoff": 4.0,
-                "start time": 400.0
-            }
-        },
-        {
-            "type": "inhomogeneous source",
-            "center": [
-                0.0,
-                20.0,
                 0.0
             ],
             "size": [
-                40.0,
                 0.0,
-                40.0
-            ],
-            "dimension": [
-                21.0,
-                1.0,
-                21.0
-            ],
-            "field component": "Hx",
-            "amplitude dataset": "inhom source amplitude flux 3 Hx adjoint",
-            "phase dataset": "inhom source phase flux 3 Hx adjoint",
-            "frequency": 0.00125,
-            "function": {
-                "type": "Gaussian1",
-                "frequency": 0.002,
-                "cutoff": 4.0,
-                "start time": 400.0
-            }
-        },
-        {
-            "type": "inhomogeneous source",
-            "center": [
                 0.0,
-                20.0,
                 0.0
             ],
-            "size": [
-                40.0,
-                0.0,
-                40.0
-            ],
-            "dimension": [
-                21.0,
-                1.0,
-                21.0
-            ],
+            "amplitude": 1.4142135623730951,
             "field component": "Ez",
-            "amplitude dataset": "inhom source amplitude flux 3 Ez adjoint",
-            "phase dataset": "inhom source phase flux 3 Ez adjoint",
-            "frequency": 0.00125,
             "function": {
                 "type": "Gaussian1",
                 "frequency": 0.002,
                 "cutoff": 4.0,
-                "start time": 400.0
-            }
-        },
-        {
-            "type": "inhomogeneous source",
-            "center": [
-                0.0,
-                -20.0,
-                0.0
-            ],
-            "size": [
-                40.0,
-                0.0,
-                40.0
-            ],
-            "dimension": [
-                21.0,
-                1.0,
-                21.0
-            ],
-            "field component": "Hx",
-            "amplitude dataset": "inhom source amplitude flux 2 Hx adjoint",
-            "phase dataset": "inhom source phase flux 2 Hx adjoint",
-            "frequency": 0.00125,
-            "function": {
-                "type": "Gaussian1",
-                "frequency": 0.002,
-                "cutoff": 4.0,
-                "start time": 400.0
-            }
-        },
-        {
-            "type": "inhomogeneous source",
-            "center": [
-                0.0,
-                -20.0,
-                0.0
-            ],
-            "size": [
-                40.0,
-                0.0,
-                40.0
-            ],
-            "dimension": [
-                21.0,
-                1.0,
-                21.0
-            ],
-            "field component": "Ez",
-            "amplitude dataset": "inhom source amplitude flux 2 Ez adjoint",
-            "phase dataset": "inhom source phase flux 2 Ez adjoint",
-            "frequency": 0.00125,
-            "function": {
-                "type": "Gaussian1",
-                "frequency": 0.002,
-                "cutoff": 4.0,
-                "start time": 400.0
-            }
-        },
-        {
-            "type": "inhomogeneous source",
-            "center": [
-                20.0,
-                0.0,
-                0.0
-            ],
-            "size": [
-                0.0,
-                40.0,
-                40.0
-            ],
-            "dimension": [
-                1.0,
-                21.0,
-                21.0
-            ],
-            "field component": "Hz",
-            "amplitude dataset": "inhom source amplitude flux 1 Hz adjoint",
-            "phase dataset": "inhom source phase flux 1 Hz adjoint",
-            "frequency": 0.00125,
-            "function": {
-                "type": "Gaussian1",
-                "frequency": 0.002,
-                "cutoff": 4.0,
-                "start time": 400.0
-            }
-        },
-        {
-            "type": "inhomogeneous source",
-            "center": [
-                20.0,
-                0.0,
-                0.0
-            ],
-            "size": [
-                0.0,
-                40.0,
-                40.0
-            ],
-            "dimension": [
-                1.0,
-                21.0,
-                21.0
-            ],
-            "field component": "Ey",
-            "amplitude dataset": "inhom source amplitude flux 1 Ey adjoint",
-            "phase dataset": "inhom source phase flux 1 Ey adjoint",
-            "frequency": 0.00125,
-            "function": {
-                "type": "Gaussian1",
-                "frequency": 0.002,
-                "cutoff": 4.0,
-                "start time": 400.0
-            }
-        },
-        {
-            "type": "inhomogeneous source",
-            "center": [
-                -20.0,
-                0.0,
-                0.0
-            ],
-            "size": [
-                0.0,
-                40.0,
-                40.0
-            ],
-            "dimension": [
-                1.0,
-                21.0,
-                21.0
-            ],
-            "field component": "Hz",
-            "amplitude dataset": "inhom source amplitude flux 0 Hz adjoint",
-            "phase dataset": "inhom source phase flux 0 Hz adjoint",
-            "frequency": 0.00125,
-            "function": {
-                "type": "Gaussian1",
-                "frequency": 0.002,
-                "cutoff": 4.0,
-                "start time": 400.0
-            }
-        },
-        {
-            "type": "inhomogeneous source",
-            "center": [
-                -20.0,
-                0.0,
-                0.0
-            ],
-            "size": [
-                0.0,
-                40.0,
-                40.0
-            ],
-            "dimension": [
-                1.0,
-                21.0,
-                21.0
-            ],
-            "field component": "Ey",
-            "amplitude dataset": "inhom source amplitude flux 0 Ey adjoint",
-            "phase dataset": "inhom source phase flux 0 Ey adjoint",
-            "frequency": 0.00125,
-            "function": {
-                "type": "Gaussian1",
-                "frequency": 0.002,
-                "cutoff": 4.0,
-                "start time": 400.0
+                "start time": 187.5
             }
         }
     ],
@@ -457,12 +68,12 @@
                 0.0
             ],
             "size": [
-                30.0,
-                30.0,
-                30.0
+                40.0,
+                40.0,
+                40.0
             ],
             "frequency": [
-                0.00125
+                0.002
             ],
             "field component": "Ex",
             "output group": "volume fields dft 0"
@@ -475,12 +86,12 @@
                 0.0
             ],
             "size": [
-                30.0,
-                30.0,
-                30.0
+                40.0,
+                40.0,
+                40.0
             ],
             "frequency": [
-                0.00125
+                0.002
             ],
             "field component": "Ey",
             "output group": "volume fields dft 1"
@@ -493,12 +104,12 @@
                 0.0
             ],
             "size": [
-                30.0,
-                30.0,
-                30.0
+                40.0,
+                40.0,
+                40.0
             ],
             "frequency": [
-                0.00125
+                0.002
             ],
             "field component": "Ez",
             "output group": "volume fields dft 2"

@@ -98,7 +98,7 @@ class Flux_Region:
             raise NameError('Flux region dimension %d is invalid' % dim)
 
         self.direction = 0 if size.x == 0 else 1 if size.y == 0 else 2
-        self.weight = float(weight)
+        self.weight = np.array(weight, copy=True)
         self.center = center.copy()
         self.size = size.copy()
         self.frequency = np.sort(np.asarray(frequency))
@@ -188,7 +188,7 @@ class Flux_Region:
                 item[-1] = 0.5
         
         Z, Y, X = np.meshgrid(z, y, x, indexing='ij')
-        return X * Y * Z * meas
+        return X * Y * Z * meas * self.weight
         
     def get_values(self, scale=1, substract=None, **kwargs):
         # return fluxes
@@ -201,7 +201,7 @@ class Flux_Region:
         # integration along dimensions (1, 2, 3) = (dz, dy, dx)
         flux = np.sum(flux, axis=(1, 2, 3))
 
-        return flux * self.weight
+        return flux
 
     def get_interpolant(self, scale=1, substract=None):
         # return fluxes as an interpolant
@@ -535,6 +535,52 @@ class PML:
 
         return res
 
+def field_match_objective(obj_val, component='Ex', weight=1):
+    # return triplets (list of components, list of fprimes, objective function)
+    # for adjoint source calculations
+
+    if component in ['Ex', 'Ey', 'Ez']:
+        # original complex component l2 norm
+        def fun1(val):
+            return np.sum(0.5 * np.ravel(weight) * np.abs(val.ravel() - obj_val.ravel())**2)
+        
+        def fpconj1(val):
+            return np.conj(val - obj_val) * weight
+        
+        return [component], [fpconj1], fun1
+        
+    if component in ['|Ex|', '|Ey|', '|Ez|']:
+        # absolute value l2 norm
+        def fun2(val):
+            return np.sum(0.5 * np.ravel(weight) * (np.abs(val).ravel() - obj_val.ravel())**2)
+        
+        def fpconj2(val):
+            return (1 - obj_val / np.abs(val)) * np.conj(val) * weight
+        
+        return [component[1:-1]], [fpconj2], fun2
+    
+    if component == '|E|':
+        # absolute value of vector l2 norm
+
+        def fun3(ex, ey, ez):
+            val = np.sqrt(np.abs(ex)**2 + np.abs(ey)**2 + np.abs(ez)**2)
+            return np.sum(0.5 * (np.ravel(val) - np.ravel(obj_val))**2 * np.ravel(weight))
+        
+        def fpconj_ex(ex, ey, ez):
+            val = np.sqrt(np.abs(ex)**2 + np.abs(ey)**2 + np.abs(ez)**2)
+            return (1 - obj_val / val) * np.conj(ex) * weight
+
+        def fpconj_ey(ex, ey, ez):
+            val = np.sqrt(np.abs(ex)**2 + np.abs(ey)**2 + np.abs(ez)**2)
+            return (1 - obj_val / val) * np.conj(ey) * weight
+
+        def fpconj_ez(ex, ey, ez):
+            val = np.sqrt(np.abs(ex)**2 + np.abs(ey)**2 + np.abs(ez)**2)
+            return (1 - obj_val / val) * np.conj(ez) * weight
+
+        return ['Ex', 'Ey', 'Ez'], [fpconj_ex, fpconj_ey, fpconj_ez], fun3
+
+
 class Adjoint_Flux:
     def __init__(self, adjoint_simulation, forward_simulation, function, fluxes=[], frequency=1.0, scale=1):
         self.adjoint_simulation = adjoint_simulation
@@ -592,8 +638,8 @@ class Adjoint_Flux:
             e1, h2 = flux.get_fields(scale=self.scale)
             int_weights = flux.get_int_weights(scale=self.scale)
 
-            self.e_adjoint_sources[i].amplitude = np.conj(h2[0, ...]) * int_weights * flux.weight
-            self.m_adjoint_sources[i].amplitude = - np.conj(e1[0, ...]) * int_weights * flux.weight
+            self.e_adjoint_sources[i].amplitude = np.conj(h2[0, ...]) * int_weights
+            self.m_adjoint_sources[i].amplitude = - np.conj(e1[0, ...]) * int_weights
         
         return res
 
@@ -603,7 +649,7 @@ class Adjoint_Source:
                 '|Ex|': ['Ex'], '|Ey|': ['Ey'], '|Ez|': ['Ez'],
                 '|E|': ['Ex', 'Ey', 'Ez']}
 
-    def __init__(self, adjoint_simulation, forward_simulation, function, frequency=1.0, center=Vector3(), size=Vector3(), dim=Vector3(), functionals=[]):
+    def __init__(self, adjoint_simulation, forward_simulation, function, frequency=1.0, center=Vector3(), size=Vector3(), dim=Vector3(), functionals=[], udfs=[]):
         # list of functionals = [['ex', obj_val], ['|ey|', obj_val], ...]
 
         self.adjoint_simulation = adjoint_simulation
@@ -613,6 +659,8 @@ class Adjoint_Source:
         self.size = size.copy()
         self.dim = dim.round()
         self.functionals = deepcopy(functionals)
+        self.udfs = deepcopy(udfs)
+        self.function = deepcopy(function)
 
         self.forward_dfts = {}
         self.adjoint_sources = {}
@@ -623,79 +671,81 @@ class Adjoint_Source:
         self.y = np.linspace(p1.y, p1.y + self.size.y, dim.y)
         self.z = np.linspace(p1.z, p1.z + self.size.z, dim.z)
 
+        # legacy support
         for func in functionals:
-            components = self.comp_map[func[0]]
-            obj_val = func[1]
-
-            if not cmp_shape(self.shape, obj_val.shape):
+            if not cmp_shape(self.shape, func[1].shape):
                 raise ValueError('objective values does not match the shape')
             
+            self.udfs.append(field_match_objective(func[1], func[0], weight=1))
+
+        for udf in self.udfs:
+            components = udf[0]
+            fprimes = udf[1]
+            fun = udf[2]
+
+            if len(components) != len(fprimes):
+                raise ValueError('The number of components does not match number of fprimes')
+            
+            if not callable(fun):
+                raise ValueError('The objective function is not callable')
+
             for component in components:
-                if component not in self.forward_dfts:
-                    self.forward_dfts[component] = forward_simulation.add_dft_fields(
-                        center=center,
-                        size=size,
-                        frequency=[frequency],
-                        field_component=component
-                    )
+                self.add_component(component)
 
-                    self.adjoint_sources[component] = Inhom_Source(
-                        function=function,
-                        frequency=frequency,
-                        amplitude=None,
-                        center=center,
-                        size=size,
-                        dim=dim,
-                        field_component=component,
-                        suffix=component + ' adjoint'
-                    )
-
-                    adjoint_simulation.add_source(self.adjoint_sources[component])
     
+    def add_component(self, component='Ex'):
+        # add a field component into adjoint source and forward dfts
+        
+        if component not in self.forward_dfts:
+            self.forward_dfts[component] = self.forward_simulation.add_dft_fields(
+                center=self.center,
+                size=self.size,
+                frequency=[self.frequency],
+                field_component=component
+            )
+
+            self.adjoint_sources[component] = Inhom_Source(
+                function=self.function,
+                frequency=self.frequency,
+                amplitude=None,
+                center=self.center,
+                size=self.size,
+                dim=self.dim,
+                field_component=component,
+                suffix=component + ' adjoint'
+            )
+
+            self.adjoint_simulation.add_source(self.adjoint_sources[component])
+
     @property
     def shape(self):
         return (int(self.dim.z), int(self.dim.y), int(self.dim.x))
 
     def eval_functionals_and_set_sources(self):
-        for component in ['Ex', 'Ey', 'Ez']:
-            if component in self.forward_dfts:
-                self.adjoint_sources[component].amplitude = np.zeros(self.shape, dtype=complex)
-                self.forward_fields[component] = self.forward_dfts[component](
-                        self.frequency, self.z, self.y, self.x).reshape(self.shape)
+
+        # get forward fields
+        for component in self.forward_dfts.keys():
+
+            self.adjoint_sources[component].amplitude = np.zeros(self.shape, dtype=complex)
+            self.forward_fields[component] = self.forward_dfts[component](
+                    self.frequency, self.z, self.y, self.x).reshape(self.shape)
 
         res = 0
-        for func in self.functionals:
-            res =  res + self.process_single_functional(func[0], func[1])
+        for udf in self.udfs:
+            components = udf[0]
+            fprimes = udf[1]
+            fun = udf[2]
+
+            args = []
+            for component in components:
+                args.append(self.forward_fields[component])
+            
+            res =  res + fun(*args)
+
+            for i in range(len(components)):
+                self.adjoint_sources[components[i]].amplitude += fprimes[i](*args)
         
         return res
-
-    def process_single_functional(self, component='Ex', obj_val=0):
-        # process each functional, derive adjoint sources
-
-        if component in ['Ex', 'Ey', 'Ez']:
-            # original complex component l2 norm
-            val = self.forward_fields[component]
-            self.adjoint_sources[component].amplitude += np.conj(val - obj_val)
-            return np.sum(0.5 * np.abs(val.ravel() - obj_val.ravel())**2)
-        
-        if component in ['|Ex|', '|Ey|', '|Ez|']:
-            # absolute value l2 norm
-            val = self.forward_fields[component[1:-1]]
-            self.adjoint_sources[component[1:-1]].amplitude += (1 - obj_val / np.abs(val)) * np.conj(val)
-            return np.sum(0.5 * (np.abs(val).ravel() - obj_val.ravel())**2)
-        
-        if component == '|E|':
-            # absolute value of vector l2 norm
-            val = np.sqrt(
-                np.abs(self.forward_fields['Ex'])**2 + 
-                np.abs(self.forward_fields['Ey'])**2 + 
-                np.abs(self.forward_fields['Ez'])**2)
-
-            self.adjoint_sources['Ex'].amplitude += (1 - obj_val / val) * np.conj(self.forward_fields['Ex'])
-            self.adjoint_sources['Ey'].amplitude += (1 - obj_val / val) * np.conj(self.forward_fields['Ey'])
-            self.adjoint_sources['Ez'].amplitude += (1 - obj_val / val) * np.conj(self.forward_fields['Ez'])
-            
-            return np.sum(0.5 * (val.ravel() - obj_val.ravel())**2)
 
     @property
     def numel(self):

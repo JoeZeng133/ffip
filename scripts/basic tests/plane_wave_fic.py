@@ -26,7 +26,7 @@ fs = 1 / ls
 d = 400e-3/ffip.um_scale
 
 omega = 2 * pi * ft
-material = ffip.fic
+material = ffip.FePt(fs)
 er = material.get_epsilon(ft)
 ur = 1
 eta = np.sqrt(ur / er)
