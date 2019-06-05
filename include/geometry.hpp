@@ -97,4 +97,29 @@ namespace ffip
         interpn<3> interp;
     };
 
+    //independent pole intesnity and epsilon
+    class General_Medium_Box : public Geometry
+    {
+    public:
+        bool is_inside(const fVec3 &pos) const override;
+
+        bool is_homogeneous() const override;
+
+        Abstract_Medium get_medium(const fVec3 &pos) const override;
+
+        General_Medium_Box(const fVec3 &center, const fVec3 &size, const iVec3 &dim, const std::vector<double> &rho, const std::vector<double> &rho_fun, const std::vector<Abstract_Medium> &medium_fun);
+
+    private:
+        Cuboid_3 geom;
+
+        fVec3 p1, p2;
+        iVec3 dim;
+        std::vector<double> rho;
+        interpn<3> interp;
+
+        //nonlinear dependence material properties
+        interpn<1> medium_interp;
+        std::vector<double> rho_fun;
+        std::vector<Abstract_Medium> medium_fun;
+    };
 } // namespace ffip

@@ -433,6 +433,82 @@ namespace ffip
 
             res = new Two_Medium_Box(center / dx2, size / dx2, dim, medium1, medium2, rho);
         }
+        else if (type_str == "general medium box")
+        {
+            auto medium = json2medium(geom_json.at("medium"));
+            auto center = json2fvec3(geom_json.at("center"));
+            auto size = json2fvec3(geom_json.at("size"));
+            auto dim = json2ivec3(geom_json.at("dimension"));
+
+            std::vector<double> rho;
+            std::vector<double> epsilon;
+            std::vector<double> mu;
+            std::vector<double> e_sus_amp;
+            std::vector<double> m_sus_amp;
+
+            std::vector<double> rho_fun;
+            std::vector<Abstract_Medium> medium_fun;
+
+            //read rho
+            {
+                std::string dataset_name = geom_json.at("density dataset").get<std::string>();
+                auto dataset = input_file->getDataSet(dataset_name);
+                dataset.read(rho);
+            }
+
+            //read rho fun
+            {
+                std::string dataset_name = geom_json.at("density function dataset").get<std::string>();
+                auto dataset = input_file->getDataSet(dataset_name);
+                dataset.read(rho_fun);
+            }
+
+            //read epsilon
+            {
+                std::string dataset_name = geom_json.at("epsilon dataset").get<std::string>();
+                auto dataset = input_file->getDataSet(dataset_name);
+                dataset.read(epsilon);
+            }
+
+            //read mu
+            {
+                std::string dataset_name = geom_json.at("mu dataset").get<std::string>();
+                auto dataset = input_file->getDataSet(dataset_name);
+                dataset.read(mu);
+            }
+
+            //read e_sus amplitudes
+            {
+                std::string dataset_name = geom_json.at("electric susceptibility amplitudes dataset").get<std::string>();
+                auto dataset = input_file->getDataSet(dataset_name);
+                dataset.read(e_sus_amp);
+            }
+
+            //read m_sus amplitudes
+            {
+                std::string dataset_name = geom_json.at("magnetic susceptibility amplitudes dataset").get<std::string>();
+                auto dataset = input_file->getDataSet(dataset_name);
+                dataset.read(m_sus_amp);
+            }
+
+            for(size_t i = 0; i < epsilon.size(); ++i)
+            {
+                medium.epsilon = epsilon[i];
+                medium.mu = mu[i];
+                size_t m_sus_idx = i * medium.m_sus_amp.size();
+                size_t e_sus_idx = i * medium.e_sus_amp.size();
+
+                for(size_t j = 0; j < medium.e_sus_amp.size(); ++j)
+                    medium.e_sus_amp[j] = e_sus_amp[e_sus_idx + j];
+                
+                for(size_t j = 0; j < medium.m_sus_amp.size(); ++j)
+                    medium.m_sus_amp[j] = m_sus_amp[m_sus_idx + j];
+                
+                medium_fun.push_back(structure.get_abstract_medium(medium));
+            }
+
+            res = new General_Medium_Box(center / dx2, size / dx2, dim, rho, rho_fun, medium_fun);
+        }
 
         return std::ref(*res);
     }

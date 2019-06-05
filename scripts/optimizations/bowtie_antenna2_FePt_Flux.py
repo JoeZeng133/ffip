@@ -7,10 +7,10 @@ import subprocess
 
 #%% setting up target geometry
 def get_bowtie_den():
-    a = 30
-    b = 60
-    c = 400
-    d = 400
+    a = 20
+    b = 40
+    c = 200
+    d = 200
 
     tri1 = ffip.Polygon([(a/2, b/2), (c/2, d/2), (c/2, -d/2), (a/2, -b/2)])
     tri2 = ffip.Polygon([(-a/2, b/2), (-c/2, d/2), (-c/2, -d/2), (-a/2, -b/2)])
@@ -23,11 +23,11 @@ def get_bowtie_den():
 density_fun = get_bowtie_den()
 
 #%% setting up basic configurations
-prefix = 'bowtie_antenna_peaks_'
-dx = 5
+prefix = 'bowtie_antenna2_FePt_Flux_'
+dx = 4
 dt = 0.5 * dx
 dpml = 8 * dx
-sim_size = ffip.Vector3(500, 500, 150) + dpml * 2
+sim_size = ffip.Vector3(300, 300, 120) + dpml * 2
 fsrc = 1 / 500
 fcen = 1 / 800
 
@@ -50,12 +50,12 @@ sources = [ffip.Source(
     field_component='Ex')
 ]
 
-adj_source_size = ffip.Vector3(x=200, y=200)
-adj_source_center = ffip.Vector3(z=50)
+adj_source_size = ffip.Vector3(x=50, y=50, z=10)
+adj_source_center = ffip.Vector3(z=35)
 adj_source_dim = (adj_source_size/dx+1).round()
 adj_source_shape = (int(adj_source_dim.z), int(adj_source_dim.y), int(adj_source_dim.x))
 
-geom_size = ffip.Vector3(400, 400, 90)
+geom_size = ffip.Vector3(200, 200, 60)
 geom_dim = (geom_size/dx+1).round()
 geom_center = ffip.Vector3(z=-10)
 
@@ -79,11 +79,11 @@ plt.show()
 
 medium_layer = ffip.Box(
     size=ffip.Vector3(sim_size.x, sim_size.y, 10),
-    center=ffip.Vector3(z=50),
+    center=ffip.Vector3(z=35),
     material=fept
 )
 
-geometry = [bowtie, medium_layer]
+geometry = [bowtie]
 
 stop_condition = ffip.run_until_dft(
     center=geom_center,
@@ -94,73 +94,6 @@ stop_condition = ffip.run_until_dft(
     frequency=fcen
 )
 
-#%% run and get target fields
-def get_target_fields():
-    sim0 = ffip.Simulation(
-        size=sim_size,
-        resolution=1/dx,
-        pmls=pmls,
-        geometry=geometry,
-        sources=sources,
-        progress_interval=20,
-        input_file=prefix+'input.h5',
-        fields_output_file=prefix+'output.h5'
-    )
-
-    ex_dft = sim0.add_dft_fields(
-        center=adj_source_center,
-        size=adj_source_size,
-        frequency=[fcen],
-        field_component='Ex'
-    )
-
-    ey_dft = sim0.add_dft_fields(
-        center=adj_source_center,
-        size=adj_source_size,
-        frequency=[fcen],
-        field_component='Ey'
-    )
-
-    ez_dft = sim0.add_dft_fields(
-        center=adj_source_center,
-        size=adj_source_size,
-        frequency=[fcen],
-        field_component='Ez'
-    )
-
-    # register stop condition dft fields
-    sim0.add_dft_fields(
-        center=geom_center,
-        size=geom_size,
-        frequency=[fcen],
-        field_component='Ex'
-    )
-
-    sim0.run(
-        stop_condition=stop_condition,
-        np=20,
-        skip=True,
-        pop=True
-    )
-
-    #%%
-    adj_z, adj_y, adj_x = ffip.getgrid(adj_source_center, adj_source_size, adj_source_dim)
-
-    ex_vals = ex_dft(fcen, adj_z, adj_y, adj_x).reshape(adj_source_shape)
-    ey_vals = ey_dft(fcen, adj_z, adj_y, adj_x).reshape(adj_source_shape)
-    ez_vals = ez_dft(fcen, adj_z, adj_y, adj_x).reshape(adj_source_shape)
-    e_vals = np.sqrt(np.abs(ex_vals)**2 + np.abs(ey_vals)**2 + np.abs(ez_vals)**2)
-
-    adj_dx = adj_x[1] - adj_x[0]
-    adj_dy = adj_y[1] - adj_y[0]
-    extent = (adj_x[0] - adj_dx/2, adj_x[-1] - adj_dx/2, adj_y[0] - adj_dy/2, adj_y[-1] - adj_dy/2)
-    plt.imshow(np.squeeze(e_vals), origin='lower', extent=extent)
-    plt.colorbar()
-    plt.show()
-
-    return e_vals, adj_x, adj_y, adj_z
-
-e_vals_target, adj_x, adj_y, adj_z = get_target_fields()
 #%% adjoint setups
 sim_forward = ffip.Simulation(
     size=sim_size,
@@ -181,17 +114,18 @@ sim_adjoint = ffip.Simulation(
     progress_interval=20
 )
 
-adj_src = ffip.Adjoint_Source(
+box_flux = sim_forward.add_flux_box(
+    center=adj_source_center,
+    size=adj_source_size,
+    frequency=[fcen]
+)
+
+adj_src = ffip.Adjoint_Flux(
     adjoint_simulation=sim_adjoint,
     forward_simulation=sim_forward,
     function=src_func,
     frequency=fcen,
-    center=adj_source_center,
-    size=adj_source_size,
-    dim=adj_source_dim,
-    functionals=[
-        ('|E|', e_vals_target)
-    ]
+    fluxes=box_flux.flux_regions
 )
 
 adj_vol = ffip.Adjoint_Volume(
@@ -210,14 +144,13 @@ adj_vol = ffip.Adjoint_Volume(
 scale = 1
 rho_list = []
 f_list = []
-e_list = []
 
 def fun(rho):
     adj_vol.density = np.ones(adj_vol.shape) * np.reshape(rho / scale, adj_vol.shape[1:])
     print('running forward calculation')
     sim_forward.run(
         stop_condition=stop_condition, 
-        np=20,
+        np=3,
         stdout=subprocess.DEVNULL
         # skip=True,
         # pop=True
@@ -229,7 +162,7 @@ def fprime(rho):
     print('running adjoint calculation')
     sim_adjoint.run(
         stop_condition=stop_condition,
-        np=20,
+        np=3,
         stdout=subprocess.DEVNULL
         # skip=True,
         # pop=True
@@ -244,14 +177,6 @@ def show(rho):
     rho_list.append(np.array(rho_t))
 
     f_list.append(adj_src.eval_functionals_and_set_sources())
-
-    e_list.append(
-        np.sqrt(
-            np.abs(adj_src.forward_fields['Ex'])**2 + 
-            np.abs(adj_src.forward_fields['Ey'])**2 + 
-            np.abs(adj_src.forward_fields['Ez'])**2
-            )
-    )
 
     plt.figure(1)
     plt.imshow(rho_t, origin='lower', vmin=0, vmax=1)
@@ -270,6 +195,8 @@ def sensitivity_test():
     print('f2-f1=', f2 - f1)
     print("end")
 
+sensitivity_test()
+
 #%%
 def optimize():
     rho0 = np.zeros(adj_vol.shape[1:]).flatten()
@@ -280,7 +207,7 @@ def optimize():
         jac=fprime,
         bounds=Bounds(0, scale),
         callback=show,
-        options={'maxiter' : 10, 'disp' : True}
+        options={'maxiter' : 20, 'disp' : True}
     )
 
     print(res)
@@ -291,18 +218,11 @@ def optimize():
         file.attrs['rho target x'] = bowtie_x
         file.attrs['rho target y'] = bowtie_y
 
-        # save target e
-        file.create_dataset('e target', data=e_vals_target)
-        file.attrs['e target x'] = adj_src.x
-        file.attrs['e target y'] = adj_src.y
-
         # save funs
         file.create_dataset('fun', data=np.array(f_list))
 
         # save rhos and es
         for i in range(len(rho_list)):
              file.create_dataset('rho %d' % i, data=rho_list[i])
-             file.create_dataset('e %d' % i, data=e_list[i])
-        
 
-sensitivity_test()
+# optimize()

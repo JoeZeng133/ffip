@@ -5,7 +5,7 @@ import json
 import h5py
 from scipy.interpolate import RegularGridInterpolator
 from scipy.integrate import trapz
-from ffip.geom import Medium, Vector3, Two_Medium_Box, cmp_shape, metadata_to_pts
+from ffip.geom import Medium, Vector3, Two_Medium_Box, General_Medium_Box,cmp_shape, metadata_to_pts
 from math import pi
 from ffip.source import Source, Inhom_Source
 from copy import deepcopy, copy
@@ -752,8 +752,11 @@ class Adjoint_Source:
         return int(self.dim.prod())
 
 class Adjoint_Volume:
-    def __init__(self, adjoint_simulation, forward_simulation, frequency=1.0, center=Vector3(), size=Vector3(), dim=Vector3(), density=None, medium1=Medium(), medium2=Medium(), norm=1):
-        #e = e1 * density + (1 - density) * e2
+    def __init__(self, adjoint_simulation, forward_simulation, frequency=1.0, center=Vector3(), size=Vector3(), dim=Vector3(), 
+        density=None, medium1=Medium(), medium2=Medium(), 
+        epsilon_fun=None, epsilon_der=None, e_sus = [], norm=1):
+        # legacy support: e = e1 * density + (1 - density) * e2
+        # general e = e(rho) = eps_inf + rho1 * e_sus1 + rho2 * e_sus2, de/drho provided
 
         self.adjoint_simulation = adjoint_simulation
         self.forward_simulation = forward_simulation
@@ -761,19 +764,41 @@ class Adjoint_Volume:
         self.center = center.copy()
         self.size = size.copy()
         self.dim = dim.round()
-        self.medium1 = deepcopy(medium1)
-        self.medium2 = deepcopy(medium2)
         self.norm = complex(norm)
 
         # use suffix adjoint to avoid dataset name conflicts
-        self.geom = Two_Medium_Box(
-            size=size, 
-            center=center, 
-            dim=dim,
-            density=density, 
-            medium1=medium1, 
-            medium2=medium2, 
-            suffix='adjoint')
+        if epsilon_fun is None:
+            e1 = medium1.get_epsilon(self.frequency)
+            e2 = medium2.get_epsilon(self.frequency)
+            self.epsilon_fun = lambda rho : e1 * rho + (1 - rho) * e2
+            self.epsilon_der = lambda rho : e1 - e2
+            self.medium1 = deepcopy(medium1)
+            self.medium2 = deepcopy(medium2)
+
+            self.geom = Two_Medium_Box(
+                size=size, 
+                center=center, 
+                dim=dim,
+                density=density, 
+                medium1=medium1, 
+                medium2=medium2, 
+                suffix='adjoint'
+            )
+            
+        else:
+            self.epsilon_der = deepcopy(epsilon_der)
+            self.epsilon_fun = deepcopy(epsilon_fun)
+
+            self.geom = General_Medium_Box(
+                size=size,
+                center=center,
+                dim=dim,
+                frequency=frequency,
+                density=density,
+                epsilon_fun=epsilon_fun,
+                e_sus=e_sus,
+                suffix='adjoint'
+            )
         
         adjoint_simulation.add_geometry(self.geom)
         forward_simulation.add_geometry(self.geom)
@@ -811,50 +836,46 @@ class Adjoint_Volume:
     def get_sensitivity(self):
         self.pts = [np.stack((self.frequency * np.ones(item.z.shape), item.z, item.y, item.x), axis=-1) for item in self.geom_infos]
 
+        rho_interp = RegularGridInterpolator(
+            (self.z, self.y, self.x),
+            self.density,
+            bounds_error=True)
+        
+        self.rho = [rho_interp(np.stack((item.z, item.y, item.x), axis=-1)) for item in self.geom_infos]
         self.forward_fields = [self.forward_dfts[i].get_interpolant(method='linear', bounds_error=True)(self.pts[i]) for i in range(3)]
         self.adjoint_fields = [self.adjoint_dfts[i].get_interpolant(method='linear', bounds_error=True)(self.pts[i]) for i in range(3)]
-        self.rho = []
-        self.rho_transposed = []
+        self.se = []
+        self.se_transposed = []
 
-        res = np.zeros(self.geom.shape, dtype=float)
-        tmp = 0
-
-
-        e1 = self.medium1.get_epsilon(self.frequency)
-        e2 = self.medium2.get_epsilon(self.frequency)
+        res = 0
 
         for i in range(3):
-            self.rho.append(np.real(2j * pi * self.frequency * self.forward_fields[i] * self.adjoint_fields[i] * (e1 - e2) / self.norm))
-            self.rho_transposed.append(
+            self.se.append(np.real(2j * pi * self.frequency * self.forward_fields[i] * self.adjoint_fields[i] * self.epsilon_der(self.rho[i]) / self.norm))
+
+            self.se_transposed.append(
                 ffip.transpose(
-                    self.x, 
-                    self.y, 
-                    self.z, 
-                    np.stack((self.geom_infos[i].x, self.geom_infos[i].y, self.geom_infos[i].z,  self.rho[i]), axis=-1)
+                    self.x, self.y, self.z, 
+                    np.stack((self.geom_infos[i].x, self.geom_infos[i].y, self.geom_infos[i].z,  self.se[i]), axis=-1)
                     )
             )
 
-            # ffip.view_array(self.rho[i])
-            tmp += np.sum(self.rho[i])
+            res += self.se_transposed[i]
 
-            res += self.rho_transposed[i]
-        
-        # print('the non transposed sensitivity sum=', tmp)
         return np.reshape(res, self.shape)
     
     def get_sensitivity2(self):
-        self.pts = np.stack(np.meshgrid(self.frequency, self.z, self.y, self.x), axis=-1)
-        self.forward_fields = [self.forward_dfts[i].get_interpolant(method='linear', bounds_error=True)(self.pts) for i in range(3)]
-        self.adjoint_fields = [self.adjoint_dfts[i].get_interpolant(method='linear', bounds_error=True)(self.pts) for i in range(3)]
-
-        e1 = self.medium1.get_epsilon(self.frequency)
-        e2 = self.medium2.get_epsilon(self.frequency)
-
+        pts = np.stack(np.meshgrid(self.frequency, self.z, self.y, self.x, indexing='ij'), axis=-1)
+        forward_fields = [self.forward_dfts[i].get_interpolant(method='linear', bounds_error=True)(pts) for i in range(3)]
+        adjoint_fields = [self.adjoint_dfts[i].get_interpolant(method='linear', bounds_error=True)(pts) for i in range(3)]
         res = 0
+
         for i in range(3):
-            res = res + np.real(2j * pi * self.frequency * self.forward_fields[i] * self.adjoint_fields[i] * (e1 - e2) / self.norm)
+            res = res + 2j * pi * self.frequency * forward_fields[i] * adjoint_fields[i] / self.norm
         
-        return np.reshape(res, self.shape)
+        res = np.reshape(res, self.shape)
+        res = np.real(res * self.epsilon_der(self.density))
+        
+        return res
 
     @property
     def x(self):
@@ -875,11 +896,11 @@ class Adjoint_Volume:
     @property
     def density(self):
         return self.geom.density
-
+        
     @density.setter
     def density(self, val):
         self.geom.density = val
-
+    
     @property
     def numel(self):
         return int(self.dim.prod())

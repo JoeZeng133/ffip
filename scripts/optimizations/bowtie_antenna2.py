@@ -3,50 +3,37 @@ import matplotlib.pyplot as plt
 import numpy as np
 import h5py
 from scipy.optimize import minimize, Bounds
+import subprocess
 
-#%% setting up geometry
-
+#%% setting up target geometry
 def get_bowtie_den():
-    a = 30
+    a = 20
     b = 40
-    c = 50
-    d = 50
+    c = 200
+    d = 200
 
-    tri1 = ffip.Polygon([(0, b), (c, b + d), (-c, b + d)])
-    tri2 = ffip.Polygon([(0, -b), (c, -b-d), (-c, -b-d)])
-    rect = ffip.box(-a/2, -b-d, a/2, b+d)
+    tri1 = ffip.Polygon([(a/2, b/2), (c/2, d/2), (c/2, -d/2), (a/2, -b/2)])
+    tri2 = ffip.Polygon([(-a/2, b/2), (-c/2, d/2), (-c/2, -d/2), (-a/2, -b/2)])
 
-    res = tri1.union(tri2).union(rect)
-
-    x, dx = np.linspace(-100, 100, 50, retstep=True)
-    y, dy = np.linspace(-100, 100, 50, retstep=True)
-    z = 0
-    pts = np.stack(np.meshgrid(z, y, x, indexing='ij'), axis=-1)
-
+    res = tri1.union(tri2)
     density = ffip.planar_polygon(res)
-    rho = density(pts)
 
-    extent = (x[0] - dx/2, x[-1] - dx/2, y[0] - dy/2, y[-1] - dy/2)
-    plt.imshow(np.squeeze(rho), origin='lower', extent=extent)
-    plt.colorbar()
-    plt.xlabel('x [nm]')
-    plt.ylabel('y [nm]')
-    plt.show()
-    return density, np.squeeze(rho), extent
+    return density
 
-density_fun, rho_target, rho_target_extent = get_bowtie_den()
+density_fun = get_bowtie_den()
 
-#%% run target geometry
-prefix = 'bowtie_500_'
+#%% setting up basic configurations
+prefix = 'bowtie_antenna_peaks_'
 dx = 4
 dt = 0.5 * dx
 dpml = 8 * dx
 sim_size = ffip.Vector3(300, 300, 100) + dpml * 2
 fsrc = 1 / 500
-fcen = 1 / 500
+fcen = 1 / 800
 
 m1 = ffip.Au
 m2 = ffip.Medium()
+fept = ffip.FePt(fcen)
 
 src_func = ffip.Gaussian1(fsrc, start_time=0.5/fcen)
 ref_t = np.arange(src_func.start_time, src_func.end_time, dt)
@@ -63,14 +50,14 @@ sources = [ffip.Source(
     field_component='Ex')
 ]
 
-adj_source_size = ffip.Vector3(x=100, y=100)
+adj_source_size = ffip.Vector3(x=200, y=200)
 adj_source_center = ffip.Vector3(z=30)
 adj_source_dim = (adj_source_size/dx+1).round()
 adj_source_shape = (int(adj_source_dim.z), int(adj_source_dim.y), int(adj_source_dim.x))
 
 geom_size = ffip.Vector3(200, 200, 60)
 geom_dim = (geom_size/dx+1).round()
-geom_center = ffip.Vector3()
+geom_center = ffip.Vector3(z=0)
 
 bowtie = ffip.Two_Medium_Box(
     size=geom_size,
@@ -79,6 +66,21 @@ bowtie = ffip.Two_Medium_Box(
     density=density_fun,
     medium1=m1,
     medium2=m2
+)
+
+bowtie_x = bowtie.x
+bowtie_y = bowtie.y
+bowtie_dx = bowtie_x[1] - bowtie_x[0]
+bowtie_dy = bowtie_y[1] - bowtie_y[0]
+extent = (bowtie_x[0] - bowtie_dx/2, bowtie_x[-1] - bowtie_dx/2, bowtie_y[0] - bowtie_dy/2, bowtie_y[-1] - bowtie_dy/2)
+bowtie_density = bowtie.density[0, ...]
+plt.imshow(bowtie_density, origin='lower', extent=extent)
+plt.show()
+
+medium_layer = ffip.Box(
+    size=ffip.Vector3(sim_size.x, sim_size.y, 10),
+    center=ffip.Vector3(z=50),
+    material=fept
 )
 
 geometry = [bowtie]
@@ -92,14 +94,8 @@ stop_condition = ffip.run_until_dft(
     frequency=fcen
 )
 
-sources = [ffip.Source(
-    function=src_func,
-    center=ffip.Vector3(z=-sim_size.z/2+dpml),
-    size=ffip.Vector3(sim_size.x, sim_size.y, 0),
-    field_component='Ex')
-]
-
-def get_bowtie_fields():
+#%% run and get target fields
+def get_target_fields():
     sim0 = ffip.Simulation(
         size=sim_size,
         resolution=1/dx,
@@ -108,7 +104,7 @@ def get_bowtie_fields():
         sources=sources,
         progress_interval=20,
         input_file=prefix+'input.h5',
-        fields_output_file=prefix+'bowtie_output.h5'
+        fields_output_file=prefix+'output.h5'
     )
 
     ex_dft = sim0.add_dft_fields(
@@ -140,12 +136,11 @@ def get_bowtie_fields():
         field_component='Ex'
     )
 
-    #%%
     sim0.run(
         stop_condition=stop_condition,
-        np=20
-        # skip=True,
-        # pop=True
+        np=20,
+        skip=True,
+        pop=True
     )
 
     #%%
@@ -155,7 +150,7 @@ def get_bowtie_fields():
     ey_vals = ey_dft(fcen, adj_z, adj_y, adj_x).reshape(adj_source_shape)
     ez_vals = ez_dft(fcen, adj_z, adj_y, adj_x).reshape(adj_source_shape)
     e_vals = np.sqrt(np.abs(ex_vals)**2 + np.abs(ey_vals)**2 + np.abs(ez_vals)**2)
-    
+
     adj_dx = adj_x[1] - adj_x[0]
     adj_dy = adj_y[1] - adj_y[0]
     extent = (adj_x[0] - adj_dx/2, adj_x[-1] - adj_dx/2, adj_y[0] - adj_dy/2, adj_y[-1] - adj_dy/2)
@@ -163,10 +158,9 @@ def get_bowtie_fields():
     plt.colorbar()
     plt.show()
 
-    return e_vals, extent
+    return e_vals, adj_x, adj_y, adj_z
 
-e_vals_target, e_vals_extend_target  = get_bowtie_fields()
-
+e_vals_target, adj_x, adj_y, adj_z = get_target_fields()
 #%% adjoint setups
 sim_forward = ffip.Simulation(
     size=sim_size,
@@ -213,7 +207,6 @@ adj_vol = ffip.Adjoint_Volume(
     norm=ref_fft
 )
 
-# rho in [0, scale] to control step size
 scale = 1
 rho_list = []
 f_list = []
@@ -224,7 +217,8 @@ def fun(rho):
     print('running forward calculation')
     sim_forward.run(
         stop_condition=stop_condition, 
-        np=20
+        np=20,
+        stdout=subprocess.DEVNULL
         # skip=True,
         # pop=True
     )
@@ -235,7 +229,8 @@ def fprime(rho):
     print('running adjoint calculation')
     sim_adjoint.run(
         stop_condition=stop_condition,
-        np=20
+        np=20,
+        stdout=subprocess.DEVNULL
         # skip=True,
         # pop=True
     )
@@ -275,9 +270,11 @@ def sensitivity_test():
     print('f2-f1=', f2 - f1)
     print("end")
 
+sensitivity_test()
+
 #%%
 def optimize():
-    rho0 = np.zeros(adj_vol.shape[1:]).flatten() + 1
+    rho0 = np.zeros(adj_vol.shape[1:]).flatten()
     res = minimize(
         fun,
         rho0,
@@ -292,12 +289,14 @@ def optimize():
 
     with h5py.File(prefix + 'result.h5', 'w') as file:
         # save e rho
-        file.create_dataset('rho target', data=rho_target)
-        file.attrs['rho target extent'] = rho_target_extent
+        file.create_dataset('rho target', data=bowtie_density)
+        file.attrs['rho target x'] = bowtie_x
+        file.attrs['rho target y'] = bowtie_y
 
         # save target e
         file.create_dataset('e target', data=e_vals_target)
-        file.attrs['e target extent'] = e_vals_extend_target
+        file.attrs['e target x'] = adj_src.x
+        file.attrs['e target y'] = adj_src.y
 
         # save funs
         file.create_dataset('fun', data=np.array(f_list))
@@ -306,6 +305,5 @@ def optimize():
         for i in range(len(rho_list)):
              file.create_dataset('rho %d' % i, data=rho_list[i])
              file.create_dataset('e %d' % i, data=e_list[i])
-        
 
-optimize()
+# sensitivity_test()

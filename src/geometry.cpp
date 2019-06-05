@@ -55,20 +55,54 @@ namespace ffip {
         p2 = center + size / 2;
     }
 
-    bool Two_Medium_Box::is_inside(const fVec3& pos) const {
+    bool Two_Medium_Box::is_inside(const fVec3& pos) const 
+    {
         return geom.has_on_bounded_side({pos.x, pos.y, pos.z});
     }
 
-    bool Two_Medium_Box::is_homogeneous() const {
+    bool Two_Medium_Box::is_homogeneous() const 
+    {
         return 0;
     }
 
-    Abstract_Medium Two_Medium_Box::get_medium(const fVec3& p) const {
+    Abstract_Medium Two_Medium_Box::get_medium(const fVec3& p) const 
+    {
         double val = interp(rho, 
         (p.z - p1.z) / (p2.z - p1.z) * (dim.z - 1), 
         (p.y - p1.y) / (p2.y - p1.y) * (dim.y - 1),
         (p.x - p1.x) / (p2.x - p1.x) * (dim.x - 1));
 
         return m1 * val + m2 * (1 - val);
+    }
+
+    //general
+    General_Medium_Box::General_Medium_Box
+    (const fVec3 &center, const fVec3 &size, const iVec3 &dim, const std::vector<double> &rho, const std::vector<double> &rho_fun, const std::vector<Abstract_Medium> &medium_fun):
+    geom(vec3_to_point3(center - size / 2), vec3_to_point3(center + size / 2)), dim(dim), rho(rho), rho_fun(rho_fun), medium_fun(medium_fun)
+    {
+        interp = interpn<3>{(size_t)dim.z, (size_t)dim.y, (size_t)dim.x};
+        medium_interp = interpn<1>{rho_fun.size()};
+        p1 = center - size / 2;
+        p2 = center + size / 2;
+    }
+
+    bool General_Medium_Box::is_inside(const fVec3& pos) const {
+        return geom.has_on_bounded_side({pos.x, pos.y, pos.z});
+    }
+
+    bool General_Medium_Box::is_homogeneous() const 
+    {
+        return 0;
+    }
+
+    Abstract_Medium General_Medium_Box::get_medium(const fVec3 &p) const
+    {
+        double val = interp(rho, 
+        (p.z - p1.z) / (p2.z - p1.z) * (dim.z - 1), 
+        (p.y - p1.y) / (p2.y - p1.y) * (dim.y - 1),
+        (p.x - p1.x) / (p2.x - p1.x) * (dim.x - 1));
+        val = (val - rho_fun.front()) / (rho_fun.back() - rho_fun.front()) * (rho_fun.size() - 1);
+
+        return medium_interp(medium_fun, val);
     }
 }

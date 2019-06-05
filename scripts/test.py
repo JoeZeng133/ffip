@@ -1,8 +1,17 @@
 import ffip
+import matplotlib.pyplot as plt
+import numpy as np
+import nlopt
+import h5py
+import subprocess
+from scipy.signal import convolve
 
-dx = 5
-dt = 5 * 0.5
-m = ffip.FePt(frequency=1/800)
 
+m1 = ffip.Au_susc
+m2 = ffip.Au_LD_susc
 
-print(m.get_dis_epsilon(frequency=1/800, dt=dt))
+for sus in m1:
+    print("gamma/omega=", sus.gamma / sus.frequency, ",e=", sus.get_epsilon(1/800) / sus.sigma, ",sigma=", sus.sigma)
+
+for sus in m2:
+    print("gamma/omega=", sus.gamma/sus.frequency, ",e=", sus.get_epsilon(1/800) / sus.sigma, ",sigma=", sus.sigma)

@@ -4,6 +4,7 @@ from math import cos, sin, sqrt, ceil, floor
 from numbers import Number
 from copy import deepcopy
 import numpy as np
+from numpy.linalg import inv
 from abc import ABCMeta, abstractmethod
 import ffip
 from shapely.geometry import Point, LineString, Polygon, MultiPolygon, box
@@ -439,6 +440,122 @@ class Two_Medium_Box:
                 "density dataset" : self.dataset_name,
                 "medium1" : self.medium1.get_json(),
                 "medium2" : self.medium2.get_json()
+                }
+
+
+class General_Medium_Box:
+
+    def __init__(self, size=Vector3(), center=Vector3(), dim=Vector3(), frequency=1.0, density=None, epsilon_fun=None, e_sus=[], suffix='0'):
+
+        self.size = size.copy()
+        self.center = center.copy()
+        self.dim = dim.round()
+        self.frequency = float(frequency)
+
+        if len(e_sus) != 2:
+            raise ValueError("Currently only support two poles")
+
+        self.e_sus = deepcopy(e_sus)
+        self.medium = Medium(epsilon=1, E_susceptibilities=self.e_sus)
+        self.epsilon_fun = deepcopy(epsilon_fun)
+        # sigma is included in get_epsilon routine which needs to be taken out
+        self.e1 = self.e_sus[0].get_epsilon(frequency) / self.e_sus[0].sigma
+        self.e2 = self.e_sus[1].get_epsilon(frequency) / self.e_sus[1].sigma
+
+        self.mat = np.array(
+            [[np.real(self.e1), np.real(self.e2)], 
+            [np.imag(self.e1), np.imag(self.e2)]]
+        )
+
+        self.invmat = inv(self.mat)
+
+        if callable(density):
+            self.density = density(np.stack(np.meshgrid(self.z, self.y, self.x, indexing='ij'), axis=-1))
+
+        elif isinstance(density, np.ndarray):
+            self.density = density
+
+        elif density is None:
+            self.density = np.zeros(self.shape, dtype=float)
+        else:
+            raise ValueError('amplitude input is not numpy array or a function')
+        
+        prefix = "general medium box %s " % suffix
+
+        self.density_dataset = prefix + "density"
+        self.density_fun_dataset = prefix + "density function"
+
+        self.epsilon_dataset = prefix + "epsilon"
+        self.mu_dataset = prefix + "mu"
+        self.e_sus_amp_dataset = prefix + "e sus amp"
+        self.m_sus_amp_dataset = prefix + "m sus amp"
+    
+    @property
+    def density(self):
+        return self._density
+    
+    @density.setter
+    def density(self, val):
+        if not cmp_shape(self.shape, val.shape):
+            raise ValueError("density size is not compatible with the box dimension")
+
+        self._density = np.array(val, copy=True)
+    
+    @property
+    def x(self):
+        return np.linspace(self.center.x - self.size.x/2, self.center.x + self.size.x/2, self.dim.x)
+    
+    @property
+    def y(self):
+        return np.linspace(self.center.y - self.size.y/2, self.center.y + self.size.y/2, self.dim.y)
+
+    @property
+    def z(self):
+        return np.linspace(self.center.z - self.size.z/2, self.center.z + self.size.z/2, self.dim.z)
+
+    @property
+    def dimension(self):
+        return self.dim
+    
+    @property
+    def shape(self):
+        return (int(self.dim.z), int(self.dim.y), int(self.dim.x))
+
+    @property
+    def numel(self):
+        return int(self.dim.prod())
+    
+    def dump(self, file):
+        # create interpolation sequence
+        rho = np.linspace(0, 1, 1000)
+        epsilon = self.epsilon_fun(rho)
+
+        epsilon_arr = np.stack((np.real(epsilon) - 1, np.imag(epsilon)), axis=0)
+        rho_arr = self.invmat @ epsilon_arr
+        rho_arr = np.transpose(rho_arr)
+
+        file.create_dataset(self.density_dataset, data=self.density.ravel())
+        file.create_dataset(self.density_fun_dataset, data=rho.ravel())
+
+        # einf = muinf = 1
+        file.create_dataset(self.epsilon_dataset, data=np.ones(rho.size))
+        file.create_dataset(self.mu_dataset, data=np.ones(rho.size))
+
+        file.create_dataset(self.e_sus_amp_dataset, data=rho_arr.flatten())
+        file.create_dataset(self.m_sus_amp_dataset, data=np.ones(0))
+
+    def get_json(self):
+        return {"type" : "general medium box",
+                "center" : self.center.get_json(),
+                "size" : self.size.get_json(),
+                "dimension" : self.dim.get_json(),
+                "density dataset" : self.density_dataset,
+                "density function dataset" : self.density_fun_dataset,
+                "epsilon dataset" : self.epsilon_dataset,
+                "mu dataset" : self.mu_dataset,
+                "electric susceptibility amplitudes dataset" : self.e_sus_amp_dataset,
+                "magnetic susceptibility amplitudes dataset" : self.m_sus_amp_dataset,
+                "medium" : self.medium.get_json()
                 }
 
 def getgrid(center=Vector3(), size=Vector3(), dim=Vector3()):

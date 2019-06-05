@@ -6,7 +6,6 @@ build*/
 *.o
 *.h5
 *.so
-*.json
 *.pyc
-# .vscode
-# scripts/.vscode
+.vscode
+temp/

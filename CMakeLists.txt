@@ -62,4 +62,5 @@ set(FFIP_LIB_FILES
 
 # install python module into site-packages folder
 install(TARGETS _ffip DESTINATION ${Python_STDLIB}/ffip)
+install(TARGETS _ffip DESTINATION ${PROJECT_SOURCE_DIR}/ffip)
 install(FILES ${FFIP_LIB_FILES} DESTINATION ${Python_STDLIB}/ffip)

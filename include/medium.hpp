@@ -27,7 +27,7 @@ namespace ffip
     //Medium
     struct Medium
     {
-        double epsilon, mu;
+        double epsilon{0}, mu{0};
         std::vector<Susceptibility> e_sus, m_sus;
         std::vector<double> e_sus_amp, m_sus_amp;
 
@@ -42,7 +42,7 @@ namespace ffip
     //stores only amplitudes of each susceptibility
     struct Abstract_Medium
     {
-        double epsilon, mu;
+        double epsilon{0}, mu{0};
         std::valarray<double> e_sus_amp, m_sus_amp;
 
         // Abstract_Medium& operator=(const Abstract_Medium& other) = default;
