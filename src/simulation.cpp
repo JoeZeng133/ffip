@@ -142,7 +142,11 @@ namespace ffip
 
         set_size(config);
         read_boundary_conditions(config);
-        set_grid();
+
+        if (auto itr = config.find("decomposition"); itr != config.end())
+            set_grid(json2ivec3(*itr));
+        else    
+            set_grid(iVec3{});
 
         input_file = new File(config.at("input file").get<std::string>(),
                             File::ReadOnly | File::Create,
@@ -518,12 +522,15 @@ namespace ffip
         return structure.get_abstract_medium(json2medium(medium_json));
     }
 
-    void Simulation::set_grid()
+    void Simulation::set_grid(iVec3 num)
     {
         MPI_Comm_size(MPI_COMM_WORLD, &np);
         sim_dim = sim_p2 - sim_p1 + 1;
 
-        auto num = decompose_domain(sim_dim, np);
+        // reassign decomposition if not assigned
+        if (num.x == 0)
+            num = decompose_domain(sim_dim, np);
+        
         int periods[3] = {bcs[0][0] == Period, bcs[1][0] == Period, bcs[2][0] == Period};
 
         MPI_Cart_create(MPI_COMM_WORLD, 3, num.to_array().data(), periods, 1, &cart_comm);

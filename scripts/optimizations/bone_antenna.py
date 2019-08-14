@@ -25,7 +25,7 @@ def get_bowtie_den():
 density_fun = get_bowtie_den()
 
 #%% run target geometry
-prefix = 'bowtie1_'
+prefix = 'bone_antenna_'
 dx = 4
 dt = 0.5 * dx
 dpml = 8 * dx
@@ -35,6 +35,18 @@ fcen = 1 / 800
 
 m1 = ffip.Au
 m2 = ffip.Medium()
+
+sus1 = ffip.Au_susc[0]
+sus2 = ffip.Au_susc[3]
+
+e1 = m1.get_epsilon(fcen)
+e2 = m2.get_epsilon(fcen)
+
+def epsilon_fun(rho):
+    return (np.sqrt(e1) * rho + np.sqrt(e2) * (1 - rho))**2
+
+def epsilon_der(rho):
+    return 2 * (np.sqrt(e1) * rho + np.sqrt(e2) * (1 - rho)) * (np.sqrt(e1) - np.sqrt(e2))
 
 src_func = ffip.Gaussian1(fsrc, start_time=0.5/fcen)
 ref_t = np.arange(src_func.start_time, src_func.end_time, dt)
@@ -55,27 +67,37 @@ adj_source_size = ffip.Vector3(x=100, y=100)
 adj_source_center = ffip.Vector3(z=30)
 adj_source_dim = (adj_source_size/dx+1).round()
 adj_source_shape = (int(adj_source_dim.z), int(adj_source_dim.y), int(adj_source_dim.x))
+adj_z, adj_y, adj_x = ffip.getgrid(adj_source_center, adj_source_size, adj_source_dim)
 
 geom_size = ffip.Vector3(200, 200, 60)
 geom_dim = (geom_size/dx+1).round()
 geom_center = ffip.Vector3()
 
-bowtie = ffip.Two_Medium_Box(
+bowtie_linear = ffip.Two_Medium_Box(
     size=geom_size,
     center=geom_center,
     dim=geom_dim,
     density=density_fun,
-    medium1=m1,
-    medium2=m2
+    medium1 = m1,
+    medium2 = m2
 )
 
-geometry = [bowtie]
+bowtie_nonlinear = ffip.General_Medium_Box(
+    size=geom_size,
+    center=geom_center,
+    dim=geom_dim,
+    density=density_fun,
+    epsilon_fun=epsilon_fun,
+    frequency=fcen,
+    e_sus=[sus1, sus2],
+    suffix='0'
+)
 
-rho_target = bowtie.density[0, ...]
-bowtie_x = bowtie.x
-bowtie_y = bowtie.y
-bowtie_dx = bowtie.x[1] - bowtie.x[0]
-bowtie_dy = bowtie.y[1] - bowtie.y[0]
+rho_target = bowtie_linear.density[0, ...]
+bowtie_x = bowtie_linear.x
+bowtie_y = bowtie_linear.y
+bowtie_dx = bowtie_linear.x[1] - bowtie_linear.x[0]
+bowtie_dy = bowtie_linear.y[1] - bowtie_linear.y[0]
 
 extent = (
     bowtie_x[0] - bowtie_dx/2, bowtie_x[-1] - bowtie_dx/2, 
@@ -109,9 +131,9 @@ def get_bowtie_fields():
         size=sim_size,
         resolution=1/dx,
         pmls=pmls,
-        geometry=geometry,
+        geometry=[bowtie_nonlinear],
         sources=sources,
-        progress_interval=20,
+        progress_interval=1e10,
         input_file=prefix+'input.h5',
         fields_output_file=prefix+'output.h5'
     )
@@ -150,10 +172,8 @@ def get_bowtie_fields():
         skip=True,
         # pop=True,
         stop_condition=stop_condition,
-        np=20
+        np=30
     )
-
-    adj_z, adj_y, adj_x = ffip.getgrid(adj_source_center, adj_source_size, adj_source_dim)
 
     ex_vals = ex_dft(fcen, adj_z, adj_y, adj_x).reshape(adj_source_shape)
     ey_vals = ey_dft(fcen, adj_z, adj_y, adj_x).reshape(adj_source_shape)
@@ -167,9 +187,9 @@ def get_bowtie_fields():
     plt.colorbar()
     plt.show()
 
-    return e_vals, adj_x, adj_y
+    return e_vals
 
-e_vals_target, adj_x, adj_y  = get_bowtie_fields()
+e_vals_target  = get_bowtie_fields()
 
 #%% adjoint setups
 sim_forward = ffip.Simulation(
@@ -189,7 +209,7 @@ sim_adjoint = ffip.Simulation(
     input_file=prefix+'adjoint_input.h5',
     fields_output_file=prefix+'adjoint_output.h5',
     progress_interval=20
-)
+) 
 
 adj_src = ffip.Adjoint_Source(
     adjoint_simulation=sim_adjoint,
@@ -212,9 +232,10 @@ adj_vol = ffip.Adjoint_Volume(
     size=geom_size,
     dim=geom_dim,
     density=None,
-    medium1=m1,
-    medium2=m2,
-    norm=ref_fft
+    norm=ref_fft,
+    epsilon_fun=epsilon_fun,
+    epsilon_der=epsilon_der,
+    e_sus=[sus1, sus2]
 )
 
 def get_gaussian_filter(r = 5):
@@ -228,11 +249,10 @@ def get_gaussian_filter(r = 5):
     return filter
 
 def filt(x, filter):
-    return convolve(x, filter, mode='valid')
+    return ffip.TO_convolve(x, filter)
 
 def filt_transpose(xp, filter):
-    tp = np.flip(filter, axis=None)
-    return convolve(xp, tp, mode='full')
+    return ffip.TO_convolve_transpose(xp, filter)
 
 def thresh(x, beta, eta):
     return (np.tanh(beta * eta) + np.tanh(beta * (x - eta))) / (np.tanh(beta * eta) + np.tanh(beta * (1 - eta)))
@@ -249,10 +269,9 @@ se_list = []
 
 filter = get_gaussian_filter(3)
 rho0 = np.zeros(adj_vol.shape[1:]) + 0.5
-rho0 = np.pad(rho0, (3, 3), 'edge')
 
-# with h5py.File(prefix + 'previous.h5', 'r') as file:
-#     rho0 = np.array(file['rho 44'])
+with h5py.File(prefix + 'previous.h5', 'r') as file:
+    rho0 = np.array(file['rho thresh 102'])
 
 with h5py.File(prefix + 'result.h5', 'w') as file:
     # save e rho
@@ -264,6 +283,44 @@ with h5py.File(prefix + 'result.h5', 'w') as file:
     file.create_dataset('e target', data=e_vals_target)
     file.create_dataset('e x', data=adj_x)
     file.create_dataset('e y', data=adj_y)
+
+def run_design():
+    with h5py.File(prefix + 'previous.h5', 'r') as file:
+        rho = np.array(file['rho thresh 102'])
+    
+    rho_bin = np.array(rho)
+    rho_bin[rho_bin > 0.5] = 1
+    rho_bin[rho_bin <= 0.5] = 0
+
+    plt.figure(1)
+    plt.subplot(121)
+    plt.imshow(rho, origin='lower', vmin=0, vmax=1)
+    plt.subplot(122)
+    plt.imshow(rho_bin, origin='lower', vmin=0, vmax=1)
+    plt.show()
+
+    adj_vol.density = np.ones(adj_vol.shape) * rho_bin
+    print("running final design")
+    sim_forward.run(
+        stop_condition=stop_condition,
+        np=30
+    )
+
+    obj = adj_src.eval_functionals_and_set_sources()
+
+    e = np.sqrt(
+            np.abs(adj_src.forward_fields['Ex'])**2 + 
+            np.abs(adj_src.forward_fields['Ey'])**2 + 
+            np.abs(adj_src.forward_fields['Ez'])**2
+        )
+    
+    with h5py.File(prefix + 'design_result.h5', 'a') as file:
+
+        file.create_dataset('fun', data=obj)
+        file.create_dataset('e', data=e)
+        file.create_dataset('rho', data=rho_bin)
+    
+
 
 
 def get_fun(filter, beta=1, alpha=0.01, nsc=10, eta=0.5, maxiter = 15, save=False):
@@ -284,7 +341,7 @@ def get_fun(filter, beta=1, alpha=0.01, nsc=10, eta=0.5, maxiter = 15, save=Fals
         sim_forward.run(
             stdout=subprocess.DEVNULL,
             stop_condition=stop_condition, 
-            np=3
+            np=30
         )
 
         res = adj_src.eval_functionals_and_set_sources()
@@ -293,7 +350,7 @@ def get_fun(filter, beta=1, alpha=0.01, nsc=10, eta=0.5, maxiter = 15, save=Fals
         sim_adjoint.run(
             stdout=subprocess.DEVNULL,
             stop_condition=stop_condition,
-            np=3
+            np=30
         )
 
         if grad.size > 0:
@@ -358,9 +415,9 @@ def sensitivity_test():
 
 #%%
 def optimize():
-    beta = 1
+    beta = 30
 
-    for i in range(10):
+    for i in range(1):
         lastiter = len(rho_list)
         try:
             print("#################### current beta=", beta)
@@ -394,6 +451,7 @@ def optimize():
         # save funs
         file.create_dataset('fun', data=np.array(f_list))
 
-sensitivity_test()
-# optimize()
+# sensitivity_test()
+optimize()
+# run_design()
 plt.show()

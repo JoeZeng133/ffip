@@ -111,8 +111,8 @@ trn_dft = sim2.add_flux_region(
 
 #%%
 interval = src_func.end_time / 2
-sim1.run(stop_condition=ffip.run_until_time(time=1e3*dt))
-sim2.run(stop_condition=ffip.run_until_fields_decay(field_component='Ex', time_interval_examined=interval))
+sim1.run(stop_condition=ffip.run_until_time(time=1e3*dt), decomposition=(2,2,1))
+sim2.run(stop_condition=ffip.run_until_fields_decay(field_component='Ex', time_interval_examined=interval), decomposition=(2,2,1))
 
 # #%%
 pts = np.stack(np.meshgrid(ft, 0, 0, 0, indexing='ij'), axis=-1)

@@ -16,11 +16,13 @@ hz_scale = 1e-6 / 3e8 * um_scale
 # FePt (single frequency model using Lorentz Pole)
 def FePt(frequency=1.0):
 
-    eps2 = 2.16
+    e = (3.2 + 2.6j)**2
+
+    eps2 = real(e)
     sus2 = LorentzianSusceptibility(
         frequency=frequency,
         gamma=frequency,
-        sigma=14.5
+        sigma=imag(e)
     )
 
     return Medium(epsilon=eps2, E_susceptibilities=[sus2])

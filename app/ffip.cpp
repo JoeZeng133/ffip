@@ -13,7 +13,6 @@ using Point = K::Point_2;
 using Polygon_2 = CGAL::Polygon_2<K>;
 namespace py = pybind11;
 
-
 template <int N>
 class interpn : public interpn<N - 1>
 {
@@ -220,6 +219,92 @@ public:
     }
 };
 
+py::array TO_convolve(py::array_t<double> in1, py::array_t<double> in2)
+{
+    if (in1.ndim() != 2 || in2.ndim() != 2)
+        throw py::key_error("dimensions are not 2");
+    
+    if (in2.shape(0) % 2 == 0 || in2.shape(1) % 2 == 0)
+        throw py::key_error("filter shape is not odd");
+    
+    auto p1 = in1.unchecked<2>();
+    auto p2 = in2.unchecked<2>();
+
+    auto res = py::array_t<double>();
+    res.resize({p1.shape(0), p1.shape(1)});
+
+    auto pr = res.mutable_unchecked<2>();
+
+    int r0 = in2.shape(0) / 2;
+    int r1 = in2.shape(1) / 2;
+
+    for(ssize_t i = 0; i < in1.shape(0); ++i)
+        for(ssize_t j = 0; j < in1.shape(1); ++j)
+        {
+            double w = 0;
+            pr(i, j) = 0;
+            ssize_t l0 = std::max(i - r0, 0L);
+            ssize_t l1 = std::max(j - r1, 0L);
+            ssize_t u0 = std::min(i + r0 + 1, in1.shape(0));
+            ssize_t u1 = std::min(j + r1 + 1, in1.shape(1)); 
+
+            for(ssize_t m = l0; m < u0; ++m)
+                for(ssize_t n =l1; n < u1; ++n)
+                {
+                    w += p2(m - i + r0, n - j + r0);
+                    pr(i, j) += p1(m, n) * p2(m - i + r0, n - j + r0);
+                }
+            
+            pr(i, j) /= w;
+        }
+
+    return res;
+}
+
+py::array TO_convolve_transpose(py::array_t<double> in1, py::array_t<double> in2)
+{
+    if (in1.ndim() != 2 || in2.ndim() != 2)
+        throw py::key_error("dimensions are not 2");
+    
+    if (in2.shape(0) % 2 == 0 || in2.shape(1) % 2 == 0)
+        throw py::key_error("filter shape is not odd");
+    
+    auto p1 = in1.unchecked<2>();
+    auto p2 = in2.unchecked<2>();
+
+    auto res = py::array_t<double>();
+    res.resize({p1.shape(0), p1.shape(1)});
+
+    auto pr = res.mutable_unchecked<2>();
+
+    int r0 = in2.shape(0) / 2;
+    int r1 = in2.shape(1) / 2;
+
+    for(ssize_t i = 0; i < in1.shape(0); ++i)
+        for(ssize_t j = 0; j < in1.shape(1); ++j)
+        {
+            double w = 0;
+            ssize_t l0 = std::max(i - r0, 0L);
+            ssize_t l1 = std::max(j - r1, 0L);
+            ssize_t u0 = std::min(i + r0 + 1, in1.shape(0));
+            ssize_t u1 = std::min(j + r1 + 1, in1.shape(1)); 
+
+            for(ssize_t m = l0; m < u0; ++m)
+                for(ssize_t n =l1; n < u1; ++n)
+                {
+                    w += p2(m - i + r0, n - j + r0);
+                }
+            
+            for(ssize_t m = l0; m < u0; ++m)
+                for(ssize_t n =l1; n < u1; ++n)
+                {
+                    pr(m, n) += p1(i, j) * p2(m - i + r0, n - j + r0) / w;
+                }
+        }
+
+    return res;
+}
+
 py::array transpose(py::array_t<double> gx, py::array_t<double> gy, py::array_t<double> gz,
                     py::array_t<double> pt)
 {
@@ -318,4 +403,14 @@ PYBIND11_MODULE(_ffip, m)
         py::arg("pt"),
         "shape(pt) = ... x 4"
         );
+    
+    m.def("TO_convolve", &TO_convolve,
+        py::arg("in1"),
+        py::arg("in2"),
+        "convolution in topology optimization");
+    
+    m.def("TO_convolve_transpose", &TO_convolve_transpose,
+        py::arg("in1"),
+        py::arg("in2"),
+        "transpose of convoluation in topology optimization");
 }

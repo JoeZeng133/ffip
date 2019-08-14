@@ -1,43 +1,44 @@
 import ffip
 import matplotlib.pyplot as plt
 import numpy as np
-import nlopt
 import h5py
+from scipy.optimize import minimize, Bounds
 import subprocess
+import nlopt
 from scipy.signal import convolve
 
-#%% setting up geometry
+#%% setting up target geometry
 def get_bowtie_den():
-    a = 30
-    b = 40
-    c = 50
-    d = 50
+    a = 10
+    b = 10
+    c = 220
+    d = 220
 
-    tri1 = ffip.Polygon([(0, b), (c, b + d), (-c, b + d)])
-    tri2 = ffip.Polygon([(0, -b), (c, -b-d), (-c, -b-d)])
-    rect = ffip.box(-a/2, -b-d, a/2, b+d)
+    tri1 = ffip.Polygon([(a/2, b/2), (c/2, d/2), (c/2, -d/2), (a/2, -b/2)])
+    tri2 = ffip.Polygon([(-a/2, b/2), (-c/2, d/2), (-c/2, -d/2), (-a/2, -b/2)])
 
-    geom = tri1.union(tri2).union(rect)
-    density = ffip.planar_polygon(geom)
-    
+    res = tri1.union(tri2)
+    density = ffip.planar_polygon(res)
+
     return density
 
 density_fun = get_bowtie_den()
 
+#%% setting up basic configurations
 #%% run target geometry
-prefix = 'bowtie_antenna1_nonlinear_'
+prefix = 'bowtie_aperture_fieldsrecov_'
 dx = 4
 dt = 0.5 * dx
 dpml = 8 * dx
-sim_size = ffip.Vector3(300, 300, 100) + dpml * 2
+sim_size = ffip.Vector3(400, 400, 100) + dpml * 2
 fsrc = 1 / 500
 fcen = 1 / 800
 
-m1 = ffip.Au_LD
+m1 = ffip.Au
 m2 = ffip.Medium()
 
-sus1 = ffip.Au_LD_susc[0]
-sus2 = ffip.Au_LD_susc[1]
+sus1 = ffip.Au_susc[0]
+sus2 = ffip.Au_susc[3]
 
 e1 = m1.get_epsilon(fcen)
 e2 = m2.get_epsilon(fcen)
@@ -47,7 +48,6 @@ def epsilon_fun(rho):
 
 def epsilon_der(rho):
     return 2 * (np.sqrt(e1) * rho + np.sqrt(e2) * (1 - rho)) * (np.sqrt(e1) - np.sqrt(e2))
-
 
 src_func = ffip.Gaussian1(fsrc, start_time=0.5/fcen)
 ref_t = np.arange(src_func.start_time, src_func.end_time, dt)
@@ -64,38 +64,30 @@ sources = [ffip.Source(
     field_component='Ex')
 ]
 
-adj_source_size = ffip.Vector3(x=100, y=100)
+adj_source_size = ffip.Vector3(x=160, y=160)
 adj_source_center = ffip.Vector3(z=30)
 adj_source_dim = (adj_source_size/dx+1).round()
 adj_source_shape = (int(adj_source_dim.z), int(adj_source_dim.y), int(adj_source_dim.x))
+adj_z, adj_y, adj_x = ffip.getgrid(adj_source_center, adj_source_size, adj_source_dim)
 
 geom_size = ffip.Vector3(200, 200, 60)
 geom_dim = (geom_size/dx+1).round()
 geom_center = ffip.Vector3()
+geom_z, geom_y, geom_x = ffip.getgrid(geom_center, geom_size, geom_dim)
 
-bowtie = ffip.Two_Medium_Box(
+bowtie = ffip.General_Medium_Box(
     size=geom_size,
     center=geom_center,
     dim=geom_dim,
     density=density_fun,
-    medium1=m1,
-    medium2=m2
+    epsilon_fun=epsilon_fun,
+    frequency=fcen,
+    e_sus=[sus1, sus2],
+    suffix='0'
 )
-
-geometry = [bowtie]
 
 rho_target = bowtie.density[0, ...]
-bowtie_x = bowtie.x
-bowtie_y = bowtie.y
-bowtie_dx = bowtie.x[1] - bowtie.x[0]
-bowtie_dy = bowtie.y[1] - bowtie.y[0]
-
-extent = (
-    bowtie_x[0] - bowtie_dx/2, bowtie_x[-1] - bowtie_dx/2, 
-    bowtie_y[0] - bowtie_dy/2, bowtie_y[-1] - bowtie_dy/2
-)
-
-plt.imshow(rho_target, origin='lower', extent=extent)
+plt.imshow(rho_target, origin='lower', extent=(geom_x[0], geom_x[-1], geom_y[0], geom_y[-1]))
 plt.colorbar()
 plt.xlabel('x [nm]')
 plt.ylabel('y [nm]')
@@ -122,7 +114,7 @@ def get_bowtie_fields():
         size=sim_size,
         resolution=1/dx,
         pmls=pmls,
-        geometry=geometry,
+        geometry=[bowtie],
         sources=sources,
         progress_interval=20,
         input_file=prefix+'input.h5',
@@ -163,26 +155,21 @@ def get_bowtie_fields():
         skip=True,
         # pop=True,
         stop_condition=stop_condition,
-        np=20
+        np=30
     )
-
-    adj_z, adj_y, adj_x = ffip.getgrid(adj_source_center, adj_source_size, adj_source_dim)
 
     ex_vals = ex_dft(fcen, adj_z, adj_y, adj_x).reshape(adj_source_shape)
     ey_vals = ey_dft(fcen, adj_z, adj_y, adj_x).reshape(adj_source_shape)
     ez_vals = ez_dft(fcen, adj_z, adj_y, adj_x).reshape(adj_source_shape)
     e_vals = np.sqrt(np.abs(ex_vals)**2 + np.abs(ey_vals)**2 + np.abs(ez_vals)**2)
     
-    adj_dx = adj_x[1] - adj_x[0]
-    adj_dy = adj_y[1] - adj_y[0]
-    extent = (adj_x[0] - adj_dx/2, adj_x[-1] - adj_dx/2, adj_y[0] - adj_dy/2, adj_y[-1] - adj_dy/2)
-    plt.imshow(np.squeeze(e_vals), origin='lower', extent=extent)
+    plt.imshow(np.squeeze(e_vals), origin='lower', extent=(adj_x[0], adj_x[-1], adj_y[0], adj_y[-1]))
     plt.colorbar()
     plt.show()
 
-    return e_vals, adj_x, adj_y
+    return e_vals
 
-e_vals_target, adj_x, adj_y  = get_bowtie_fields()
+e_vals_target  = get_bowtie_fields()
 
 #%% adjoint setups
 sim_forward = ffip.Simulation(
@@ -225,15 +212,13 @@ adj_vol = ffip.Adjoint_Volume(
     size=geom_size,
     dim=geom_dim,
     density=None,
-    # medium1=m1,
-    # medium2=m2,
     norm=ref_fft,
     epsilon_fun=epsilon_fun,
     epsilon_der=epsilon_der,
     e_sus=[sus1, sus2]
 )
 
-def get_gaussian_filter(r = 5):
+def get_gaussian_filter(r = 3):
 
     filter_sigma = r / 2
     filter_x = np.arange(-r, r+1)
@@ -244,11 +229,10 @@ def get_gaussian_filter(r = 5):
     return filter
 
 def filt(x, filter):
-    return convolve(x, filter, mode='valid')
+    return ffip.TO_convolve(x, filter)
 
 def filt_transpose(xp, filter):
-    tp = np.flip(filter, axis=None)
-    return convolve(xp, tp, mode='full')
+    return ffip.TO_convolve_transpose(xp, filter)
 
 def thresh(x, beta, eta):
     return (np.tanh(beta * eta) + np.tanh(beta * (x - eta))) / (np.tanh(beta * eta) + np.tanh(beta * (1 - eta)))
@@ -263,26 +247,44 @@ f_list = []
 e_list = []
 se_list = []
 
-filter = get_gaussian_filter(3)
-rho0 = np.zeros(adj_vol.shape[1:]) + 0.5
-rho0 = np.pad(rho0, (3, 3), 'edge')
+def run_design():
+    with h5py.File(prefix + 'previous.h5', 'r') as file:
+        rho = np.array(file['rho thresh 102'])
+    
+    rho_bin = np.array(rho)
+    rho_bin[rho_bin > 0.5] = 1
+    rho_bin[rho_bin <= 0.5] = 0
 
-# with h5py.File(prefix + 'previous.h5', 'r') as file:
-#     rho0 = np.array(file['rho 44'])
+    plt.figure(1)
+    plt.subplot(121)
+    plt.imshow(rho, origin='lower', vmin=0, vmax=1)
+    plt.subplot(122)
+    plt.imshow(rho_bin, origin='lower', vmin=0, vmax=1)
+    plt.show()
 
-with h5py.File(prefix + 'result.h5', 'w') as file:
-    # save e rho
-    file.create_dataset('rho target', data=rho_target)
-    file.create_dataset('rho x', data=bowtie_x)
-    file.create_dataset('rho y', data=bowtie_y)
+    adj_vol.density = np.ones(adj_vol.shape) * rho_bin
+    print("running final design")
+    sim_forward.run(
+        stop_condition=stop_condition,
+        np=30
+    )
 
-    # save target e
-    file.create_dataset('e target', data=e_vals_target)
-    file.create_dataset('e x', data=adj_x)
-    file.create_dataset('e y', data=adj_y)
+    obj = adj_src.eval_functionals_and_set_sources()
 
+    e = np.sqrt(
+            np.abs(adj_src.forward_fields['Ex'])**2 + 
+            np.abs(adj_src.forward_fields['Ey'])**2 + 
+            np.abs(adj_src.forward_fields['Ez'])**2
+        )
+    
+    with h5py.File(prefix + 'design_result.h5', 'a') as file:
 
+        file.create_dataset('fun', data=obj)
+        file.create_dataset('e', data=e)
+        file.create_dataset('rho', data=rho_bin)
+    
 def get_fun(filter, beta=1, alpha=0.01, nsc=10, eta=0.5, maxiter = 15, save=False):
+
     iter = 0
     cur_f = np.inf
 
@@ -291,7 +293,7 @@ def get_fun(filter, beta=1, alpha=0.01, nsc=10, eta=0.5, maxiter = 15, save=Fals
         nonlocal cur_f
 
         # standard method
-        rho = np.reshape(x, rho0.shape)
+        rho = np.reshape(x, adj_vol.shape[1:])
         rho_filt = filt(rho, filter)
         rho_thresh = thresh(rho_filt, beta=beta, eta=eta)
 
@@ -300,7 +302,7 @@ def get_fun(filter, beta=1, alpha=0.01, nsc=10, eta=0.5, maxiter = 15, save=Fals
         sim_forward.run(
             stdout=subprocess.DEVNULL,
             stop_condition=stop_condition, 
-            np=3
+            np=30
         )
 
         res = adj_src.eval_functionals_and_set_sources()
@@ -309,7 +311,7 @@ def get_fun(filter, beta=1, alpha=0.01, nsc=10, eta=0.5, maxiter = 15, save=Fals
         sim_adjoint.run(
             stdout=subprocess.DEVNULL,
             stop_condition=stop_condition,
-            np=3
+            np=30
         )
 
         if grad.size > 0:
@@ -357,7 +359,6 @@ def get_fun(filter, beta=1, alpha=0.01, nsc=10, eta=0.5, maxiter = 15, save=Fals
 def sensitivity_test():
     fun = get_fun(filter=get_gaussian_filter(r=3), beta=3)
     rho0 = np.zeros(adj_vol.shape[1:]) + 0.5
-    rho0 = np.pad(rho0, (3, 3), 'edge')
 
     grad = np.zeros(rho0.size)
     f1 = fun(rho0, grad)
@@ -373,43 +374,63 @@ def sensitivity_test():
     print("end")
 
 #%%
-def optimize():
-    beta = 1
+def optimize(rho0, filename, beta = 1, r = 3):
 
-    for i in range(8):
-        lastiter = len(rho_list)
-        try:
-            print("#################### current beta=", beta)
-            opt = nlopt.opt(nlopt.LD_MMA, rho0.size)
-            opt.set_lower_bounds(0)
-            opt.set_upper_bounds(1)
-            opt.set_min_objective(get_fun(filter=filter, beta=beta, alpha=0.02, nsc=10, eta=0.5, save=True))
-            opt.set_maxeval(30)
-            if len(f_list) > 0:
-                opt.optimize(rho_list[-1].flatten())
-            else:
-                opt.optimize(rho0.flatten())    
+    global rho_list
+    global rho_filt_list
+    global rho_thresh_list
+    global f_list
+    global e_list
+    global se_list
 
-        except ValueError:
-            pass
+    filter = get_gaussian_filter(r)
+    rho_list = []
+    rho_filt_list = []
+    rho_thresh_list = []
+    f_list = []
+    e_list = []
+    se_list = []
+    
+    try:
+        print("#################### current beta=", beta)
+        opt = nlopt.opt(nlopt.LD_MMA, rho0.size)
+        opt.set_lower_bounds(0)
+        opt.set_upper_bounds(1)
+        opt.set_min_objective(get_fun(filter=filter, beta=beta, alpha=0.02, nsc=100, eta=0.5, save=True))
+        opt.set_maxeval(11)
+        opt.optimize(rho0.flatten())
+
+    except ValueError:
+        pass
         
-        beta = beta * 1.5
+    with h5py.File(filename, 'w') as file:
+        # save target rho
+        file.create_dataset('rho target', data=rho_target)
+        file.create_dataset('rho x', data=geom_x)
+        file.create_dataset('rho y', data=geom_y)
 
-        with h5py.File(prefix + 'result.h5', 'a') as file:
-            # save rhos and es
-            for i in range(lastiter, len(rho_list)):
-                file.create_dataset('rho %d' % i, data=rho_list[i])
-                file.create_dataset('rho thresh %d' % i, data=rho_thresh_list[i])
-                file.create_dataset('rho filt %d' % i, data=rho_filt_list[i])
-                file.create_dataset('e %d' % i, data=e_list[i])
-                file.create_dataset('se %d' % i, data=se_list[i])
-        
-        lastiter = len(f_list)
+        # save target e
+        file.create_dataset('e target', data=e_vals_target)
+        file.create_dataset('e x', data=adj_x)
+        file.create_dataset('e y', data=adj_y)
 
-    with h5py.File(prefix + 'result.h5', 'a') as file:
-        # save funs
+        # save objective functions
         file.create_dataset('fun', data=np.array(f_list))
 
-sensitivity_test()
-# optimize()
+        # save rhos and es
+        for i in range(len(rho_list)):
+            file.create_dataset('rho %d' % i, data=rho_list[i])
+            file.create_dataset('rho thresh %d' % i, data=rho_thresh_list[i])
+            file.create_dataset('rho filt %d' % i, data=rho_filt_list[i])
+            file.create_dataset('e %d' % i, data=e_list[i])
+            file.create_dataset('se %d' % i, data=se_list[i])
+
+# with h5py.File(prefix + 'previous.h5', 'r') as file:
+#     rho0 = np.array(file['rho '])
+    # rho0 = np.pad(rho0, (3, 3), 'edge')
+
+# sensitivity_test()
+rho0 = np.ones(adj_vol.shape[1:])
+optimize(rho0, filename=prefix+'result.h5', beta=1, r=3)
+# run_design()
 plt.show()

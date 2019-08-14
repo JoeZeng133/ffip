@@ -119,7 +119,7 @@ namespace ffip
         void set_pmls(const json &pmls);
 
         //decompose grid into chunks, and set up boundary conditions
-        void set_grid();
+        void set_grid(iVec3 num);
 
         void set_geometry(const json &geoms);
 

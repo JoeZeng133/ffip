@@ -359,7 +359,7 @@ class Simulation:
             for src in self.sources:
                 src.dump(file)
 
-    def get_json(self, stop_condition):
+    def get_json(self, stop_condition, decomposition=None):
         # get configuration json strings
         res = {}
         # required parameters
@@ -373,6 +373,9 @@ class Simulation:
         res['stop condition'] = stop_condition.get_json()
 
         # optional parameters
+        if decomposition is not None:
+            res['decomposition'] = decomposition
+
         if self.symmetry:
             res['symmetry'] = [item.get_json() for item in self.periodic]
 
@@ -398,11 +401,14 @@ class Simulation:
 
         return res
 
-    def run(self, stop_condition, np=1, skip=False, pop=False, **kwargs):
+    def run(self, stop_condition, decomposition=None, np=1, skip=False, pop=False, **kwargs):
+
+        if decomposition is not None:
+            np = int(decomposition[0] * decomposition[1] * decomposition[2])
 
         with h5py.File(self.input_file, 'w') as input_file_h5:
             # dump json configuration file
-            json.dump(self.get_json(stop_condition),
+            json.dump(self.get_json(stop_condition=stop_condition, decomposition=decomposition),
                     open('config.json', 'w'), indent=4)
             # dump input data
             self.dump(input_file_h5)
@@ -545,9 +551,9 @@ def field_match_objective(obj_val, component='Ex', weight=1):
             return np.sum(0.5 * np.ravel(weight) * np.abs(val.ravel() - obj_val.ravel())**2)
         
         def fpconj1(val):
-            return np.conj(val - obj_val) * weight
+            return (np.conj(val - obj_val) * weight,)
         
-        return [component], [fpconj1], fun1
+        return [component], fpconj1, fun1
         
     if component in ['|Ex|', '|Ey|', '|Ez|']:
         # absolute value l2 norm
@@ -555,9 +561,9 @@ def field_match_objective(obj_val, component='Ex', weight=1):
             return np.sum(0.5 * np.ravel(weight) * (np.abs(val).ravel() - obj_val.ravel())**2)
         
         def fpconj2(val):
-            return (1 - obj_val / np.abs(val)) * np.conj(val) * weight
+            return ((1 - obj_val / np.abs(val)) * np.conj(val) * weight,)
         
-        return [component[1:-1]], [fpconj2], fun2
+        return [component[1:-1]], fpconj2, fun2
     
     if component == '|E|':
         # absolute value of vector l2 norm
@@ -566,19 +572,14 @@ def field_match_objective(obj_val, component='Ex', weight=1):
             val = np.sqrt(np.abs(ex)**2 + np.abs(ey)**2 + np.abs(ez)**2)
             return np.sum(0.5 * (np.ravel(val) - np.ravel(obj_val))**2 * np.ravel(weight))
         
-        def fpconj_ex(ex, ey, ez):
+        def fpconj3(ex, ey, ez):
             val = np.sqrt(np.abs(ex)**2 + np.abs(ey)**2 + np.abs(ez)**2)
-            return (1 - obj_val / val) * np.conj(ex) * weight
+            return ((1 - obj_val / val) * np.conj(ex) * weight, 
+                    (1 - obj_val / val) * np.conj(ey) * weight,
+                    (1 - obj_val / val) * np.conj(ez) * weight
+            )
 
-        def fpconj_ey(ex, ey, ez):
-            val = np.sqrt(np.abs(ex)**2 + np.abs(ey)**2 + np.abs(ez)**2)
-            return (1 - obj_val / val) * np.conj(ey) * weight
-
-        def fpconj_ez(ex, ey, ez):
-            val = np.sqrt(np.abs(ex)**2 + np.abs(ey)**2 + np.abs(ez)**2)
-            return (1 - obj_val / val) * np.conj(ez) * weight
-
-        return ['Ex', 'Ey', 'Ez'], [fpconj_ex, fpconj_ey, fpconj_ez], fun3
+        return ['Ex', 'Ey', 'Ez'], fpconj3, fun3
 
 
 class Adjoint_Flux:
@@ -680,11 +681,14 @@ class Adjoint_Source:
 
         for udf in self.udfs:
             components = udf[0]
-            fprimes = udf[1]
+            fprime = udf[1]
             fun = udf[2]
 
-            if len(components) != len(fprimes):
-                raise ValueError('The number of components does not match number of fprimes')
+            if not callable(fprime):
+                raise ValueError('The derivative function is not callable')
+
+            # if len(components) != len(fprimes):
+            #     raise ValueError('The number of components does not match number of fprimes')
             
             if not callable(fun):
                 raise ValueError('The objective function is not callable')
@@ -733,7 +737,7 @@ class Adjoint_Source:
         res = 0
         for udf in self.udfs:
             components = udf[0]
-            fprimes = udf[1]
+            fprime = udf[1]
             fun = udf[2]
 
             args = []
@@ -741,9 +745,10 @@ class Adjoint_Source:
                 args.append(self.forward_fields[component])
             
             res =  res + fun(*args)
+            derivatives = fprime(*args)
 
             for i in range(len(components)):
-                self.adjoint_sources[components[i]].amplitude += fprimes[i](*args)
+                self.adjoint_sources[components[i]].amplitude += derivatives[i]
         
         return res
 

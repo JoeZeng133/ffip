@@ -8,4 +8,4 @@ build*/
 *.so
 *.pyc
 .vscode
-temp/
+temp*/
