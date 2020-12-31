@@ -1,0 +1,19 @@
+build*/
+*.in
+*.out
+*.mat
+*.exe
+*.o
+*.h5
+*.so
+*.json
+*.pyc
+bone antenna/
+bowtie antenna/
+bowtie aperture/
+coupling efficiency/
+rec_temp/
+sensitivity test/
+scripts/
+# .vscode
+# scripts/.vscode
