@@ -8,13 +8,14 @@ SET(CMAKE_INSTALL_RPATH_USE_LINK_PATH TRUE)
 SET(CMAKE_INSTALL_RPATH "${CMAKE_INSTALL_PREFIX}/lib")
 
 set(HDF5_PREFER_PARALLEL TRUE)
+SET(HIGHFIVE_USE_INSTALL_DEPS TRUE)
 
-find_package(CGAL 4.11 REQUIRED)
+find_package(CGAL 4 REQUIRED)
 find_package(pybind11 REQUIRED)
 find_package(MPI 2 REQUIRED)
 find_package(HDF5 1.10 REQUIRED)
 find_package(nlohmann_json REQUIRED)
-find_package(HighFive REQUIRED)
+find_package(HighFive 2.0 REQUIRED)
 
 # get python package location from PYBIND11 generated PYTHON_EXECUTABLE
 set(cmd "from distutils.sysconfig import get_python_lib; print(get_python_lib(plat_specific=False,standard_lib=False))")
@@ -43,7 +44,6 @@ set(HEADER_FILES
 message(HDF5_VERSION is ${HDF5_VERSION})
 
 add_subdirectory(src)
-add_subdirectory(test)
 add_subdirectory(app)
 
 install(TARGETS ffip run_sim_json
