@@ -1,4 +1,5 @@
-build*/
+build/
+*.txt
 *.in
 *.out
 *.mat
@@ -8,12 +9,4 @@ build*/
 *.so
 *.json
 *.pyc
-bone antenna/
-bowtie antenna/
-bowtie aperture/
-coupling efficiency/
-rec_temp/
-sensitivity test/
-scripts/
-# .vscode
-# scripts/.vscode
+.vscode
