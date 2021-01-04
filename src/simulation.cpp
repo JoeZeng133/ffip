@@ -95,6 +95,15 @@ namespace ffip
             return make_Drude_susceptibility(sus_json.at("frequency").get<double>(), sus_json.at("gamma").get<double>());
         else if (type_str == "Deybe")
             return make_Deybe_susceptibility(sus_json.at("tau").get<double>());
+        else if (type_str == "IIR")
+        {
+            return Susceptibility{
+                sus_json.at("b0").get<double>(),
+                sus_json.at("b1").get<double>(),
+                sus_json.at("a0").get<double>(),
+                sus_json.at("a1").get<double>(),
+                sus_json.at("a2").get<double>()}
+        }
 
         throw std::runtime_error("Unknonw susceptibility");
     }

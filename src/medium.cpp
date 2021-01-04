@@ -4,30 +4,37 @@
 namespace ffip
 {
     //Susceptibility
-	Susceptibility::Susceptibility(double a0, double a1, double b0, double b1, double b2):
-	a0(a0), a1(a1), b0(b0), b1(b1), b2(b2) {}
+	Susceptibility::Susceptibility(double b0, double b1, double a0, double a1, double a2):
+	b0(b0), b1(b1), a0(a0), a1(a1), a2(a2) {}
 	
     std::complex<double> Susceptibility::get_val(double frequency) const
     {
         double omega = 2 * pi * frequency;
 		auto jw = std::complex<double>{0, omega};
 		
-        return (a0 + a1 * jw) / (b0 + b1 * jw - b2 * omega * omega);
+        return (b0 + b1 * jw) / (a0 + a1 * jw - a2 * omega * omega);
     }
 
     bool operator==(const Susceptibility &x, const Susceptibility &y)
     {
-		return x.a0 == y.a0 && x.b0 == y.b0 && x.b1 == y.b1 && x.b2 == y.b2 && x.a1 == y.a1;
+		return x.b0 == y.b0 && x.a0 == y.a0 && x.a1 == y.a1 && x.a2 == y.a2 && x.b1 == y.b1;
     }
 
     //Abstract Susceptibility
     Abstract_Susceptibility::Abstract_Susceptibility(const Susceptibility &sus, double dt)
     {
-        double c0 = 2 * sus.b2 + sus.b1 * dt;
-
-        c1 = (4 * sus.b2 - 2 * sus.b0 * dt * dt) / c0;
-        c2 = (-2 * sus.b2 + sus.b1 * dt) / c0;
-        c3 = (2 * sus.a0 * dt * dt) / c0;
+        double a0 = sus.a0 + 2 * sus.a1 / dt + 4 * sus.a2 / dt / dt;
+        a1 = 2 * sus.a0 - 8 * sus.a2 / dt / dt;
+        a2 = sus.a0 - 2 * sus.a1 / dt + 4 * sus.a2 / dt / dt;
+        b0 = sus.b0 + 2 * sus.b1 / dt;
+        b1 = 2 * sus.b0;
+        b2 = sus.b0 - 2 * sus.b1 / dt;
+        //normalize to a0=1
+        a1 /= a0;
+        a2 /= a0;
+        b0 /= a0;
+        b1 /= a0;
+        b2 /= a0;
     }
 
     //Medium

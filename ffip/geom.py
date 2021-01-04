@@ -173,12 +173,12 @@ class Vector3(object):
 class Medium:
 
     def __init__(self,
-                 epsilon=1,
-                 mu=1,
-                 E_conductivity=0,
-                 M_conductivity=0,
-                 E_susceptibilities=[],
-                 M_susceptibilities=[]):
+                 epsilon=1:float,
+                 mu=1:float,
+                 E_conductivity=0:float,
+                 M_conductivity=0:float,
+                 E_susceptibilities=[]:list[Susceptibility],
+                 M_susceptibilities=[]:list[Susceptibility]):
 
         self.epsilon = float(epsilon)
         self.mu = float(mu)
@@ -231,36 +231,57 @@ class Susceptibility:
     def __init__(self, sigma=1.0):
         self.sigma = sigma
 
-    def build_eqs(self, a0=0.0, a1=0.0, b0=0.0, b1=0.0, b2=0.0):
-        self.a0 = float(a0)
-        self.a1 = float(a1)
+    def build_eqs(self, b0=0.0, b1=0.0, a0=0.0, a1=0.0, a2=0.0):
         self.b0 = float(b0)
         self.b1 = float(b1)
-        self.b2 = float(b2)
+        self.a0 = float(a0)
+        self.a1 = float(a1)
+        self.a2 = float(a2)
 
     def __eq__(self, other):
-        return (self.a0 == other.a0 and
-                self.a1 == other.a1 and
-                self.b0 == other.b0 and
+        return (self.b0 == other.b0 and
                 self.b1 == other.b1 and
-                self.b2 == other.b2)
+                self.a0 == other.a0 and
+                self.a1 == other.a1 and
+                self.a2 == other.a2)
 
     def get_epsilon(self, frequency):
-        w = 2 * np.pi * frequency
-        return self.sigma * (self.a0 + self.a1 * 1j * w) / (self.b0 + 1j * w * self.b1 - w * w * self.b2)
+        s = 2j * np.pi * frequency
+        return self.sigma * (self.b0 + self.b1 * s) / (self.a0 + self.a1 * s + self.a2 * s**2)
 
     def get_dis_epsilon(self, frequency, dt):
-        c0 = 2 * self.b2 + self.b1 * dt
-        c1 = (4 * self.b2 - 2 * self.b0 * dt * dt) / c0
-        c2 = (-2 * self.b2 + self.b1 * dt) / c0
-        c3 = (2 * self.a0 * dt * dt) / c0
+        a0 = self.a0 + 2 * self.a1 / dt + 4 * self.a2 / dt / dt
+        a1 = 2 * sus.a0 - 8 * self.a2 / dt / dt
+        a2 = self.a0 - 2 * self.a1 / dt + 4 * self.a2 / dt / dt
+        b0 = self.b0 + 2 * self.b1 / dt
+        b1 = 2 * self.b0
+        b2 = self.b0 - 2 * self.b1 / dt
 
         z = np.exp(1j * 2 * np.pi * frequency * dt)
 
-        return self.sigma * c3 * z / (z**2 - c1 * z - c2)
+        return self.sigma * (b0 + b1 * z**-1 + b2 * z**-2) / (a0 + a1 * z**-1 + a2 * z**-2)
 
+class IIR_Susceptibility(Susceptibility):
 
+    def __init__(self, a:complex, c:complex, **kwargs):
+        self.a = complex(a)
+        self.c = complex(c)
+        super().__init__(**kwargs)
+        super().build_eqs(
+            -2 * np.real(a * np.conj(c)),
+            2 * np.real(c),
+            abs(a)**2,
+            -2 * np.real(a),
+            1)
 
+    def get_json(self):
+        return {"type": "IIR",
+                "b0":self.b0,
+                "b1":self.b1,
+                "a0":self.a0,
+                "a1":self.a1,
+                "a2":self.a2,
+                "amplitude": self.sigma}
 
 class LorentzianSusceptibility(Susceptibility):
 
@@ -442,6 +463,147 @@ class Two_Medium_Box:
                 "medium2" : self.medium2.get_json()
                 }
 
+class General_Medium:
+
+    def __init__(
+        self,
+        medium:Medium,
+        e_inf_fun,
+        esus_amp_fun
+    ):
+        self.medium = deepcopy(medium)
+        self.e_inf_fun = deepcopy(e_inf_fun)
+        self.esus_amp_fun = deepcopy(esus_amp_fun)
+        # force only e_inf and e_sus
+        self.medium.mu = float(1)
+        self.medium.E_conductivity = float(0)
+        self.medium.M_conductivity = float(0)
+        self.medium.M_susceptibilities = []
+    
+    def get_medium(self, rho:float) -> Medium:
+        esus_amp = self.esus_amp_fun(rho)
+        self.medium.epsilon = float(self.e_inf_fun(rho))
+
+        for i in range(len(self.medium.E_susceptibilities)):
+            self.medium.E_susceptibilities[i].sigma = esus_amp[i]
+        
+        return deepcopy(self.medium)
+    
+    def e_inf(self, rho:np.ndarray) -> np.ndarray:
+        return self.e_inf_fun(rho)
+    
+    def m_inf(self, rho:np.ndarray) -> np.ndarray:
+        return np.ones(rho.shape)
+    
+    def esus_amp(self, rho:np.ndarray) -> np.ndarray:
+        return self.esus_amp_fun(rho)
+    
+    def msus_amp(self, rho:np.ndarray) -> np.ndarray:
+        return np.zeros(0)
+
+class General_Medium_Box2:
+
+    def __init__(
+        self, 
+        size=Vector3(), 
+        center=Vector3(), 
+        density=None, 
+        dim=Vector3(), 
+        medium:General_Medium,
+        suffix="0"):
+
+        self.size = size.copy()
+        self.center = center.copy()
+        self.dim = dim.round()
+        self.medium = deepcopy(medium)
+        # sigma is included in get_epsilon routine which needs to be taken out
+
+        if callable(density):
+            self.density = density(np.stack(np.meshgrid(self.z, self.y, self.x, indexing='ij'), axis=-1))
+
+        elif isinstance(density, np.ndarray):
+            self.density = density
+
+        elif density is None:
+            self.density = np.zeros(self.shape, dtype=float)
+        else:
+            raise ValueError('amplitude input is not numpy array or a function')
+        
+        prefix = "general medium box2 %s " % suffix
+
+        self.density_dataset = prefix + "density"
+        self.density_fun_dataset = prefix + "density function"
+
+        self.epsilon_dataset = prefix + "epsilon"
+        self.mu_dataset = prefix + "mu"
+        self.e_sus_amp_dataset = prefix + "e sus amp"
+        self.m_sus_amp_dataset = prefix + "m sus amp"
+    
+    @property
+    def density(self):
+        return self._density
+    
+    @density.setter
+    def density(self, val):
+        if not cmp_shape(self.shape, val.shape):
+            raise ValueError("density size is not compatible with the box dimension")
+
+        self._density = np.array(val, copy=True)
+    
+    @property
+    def x(self):
+        return np.linspace(self.center.x - self.size.x/2, self.center.x + self.size.x/2, self.dim.x)
+    
+    @property
+    def y(self):
+        return np.linspace(self.center.y - self.size.y/2, self.center.y + self.size.y/2, self.dim.y)
+
+    @property
+    def z(self):
+        return np.linspace(self.center.z - self.size.z/2, self.center.z + self.size.z/2, self.dim.z)
+
+    @property
+    def dimension(self):
+        return self.dim
+    
+    @property
+    def shape(self):
+        return (int(self.dim.z), int(self.dim.y), int(self.dim.x))
+
+    @property
+    def numel(self):
+        return int(self.dim.prod())
+    
+    def dump(self, file):
+        # create interpolation sequence
+        rho = np.linspace(0, 1, 5001)
+
+        file.create_dataset(self.density_dataset, data=self.density.ravel())
+        file.create_dataset(self.density_fun_dataset, data=rho.ravel())
+
+        # einf and minf
+        file.create_dataset(self.epsilon_dataset, data=self.medium.e_inf(rho).ravel())
+        file.create_dataset(self.mu_dataset, data=self.medium.m_inf(rho).ravel())
+
+        # esus and msus
+        file.create_dataset(self.e_sus_amp_dataset, data=self.medium.esus_amp(rho).ravel())
+        file.create_dataset(self.m_sus_amp_dataset, data=self.medium.msus_amp(rho).ravel())
+
+    def get_json(self):
+        return {"type" : "general medium box",
+                "center" : self.center.get_json(),
+                "size" : self.size.get_json(),
+                "dimension" : self.dim.get_json(),
+                "density dataset" : self.density_dataset,
+                "density function dataset" : self.density_fun_dataset,
+                "epsilon dataset" : self.epsilon_dataset,
+                "mu dataset" : self.mu_dataset,
+                "electric susceptibility amplitudes dataset" : self.e_sus_amp_dataset,
+                "magnetic susceptibility amplitudes dataset" : self.m_sus_amp_dataset,
+                "medium" : self.medium.get_json()
+                }
+
+    
 
 class General_Medium_Box:
 

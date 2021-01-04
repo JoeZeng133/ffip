@@ -41,7 +41,7 @@ namespace ffip
         void organize();
 
         //update
-        void step(const std::vector<double> &accdb, std::vector<double> &eh);
+        void step(const std::vector<double> &accdb, std::vector<double> &eh, std::vector<double> &eh_prev);
 
         void output_details(std::ostream& os, const Yee3& grid) const;
     };
@@ -63,6 +63,9 @@ namespace ffip
 
         //group medium points by their susceptibility non-zeros
         std::unordered_map<size_t, Medium_Stepping> e_stepping, m_stepping;
+        
+        //eh from last step
+        std::vector<double> eh_prev;
 
     public:
         //avering method used for material averaging

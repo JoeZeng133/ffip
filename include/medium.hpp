@@ -7,10 +7,10 @@ namespace ffip
     //Susceptibility in polynomial form
     struct Susceptibility
     {
-        double a0, a1, b0, b1, b2;
+        double b0, b1, a0, a1, a2;
 
         //return complex value
-		Susceptibility(double a0, double a1, double b0, double b1, double b2);
+		Susceptibility(double b0, double b1, double a0, double a1, double a2);
         std::complex<double> get_val(double frequency) const;
     };
 
@@ -20,7 +20,7 @@ namespace ffip
     //Abstract Susceptibility for computation
     struct Abstract_Susceptibility
     {
-        double c1, c2, c3;
+        double b0, b1, b2, a1, a2;
         Abstract_Susceptibility(const Susceptibility &sus, double dt);
     };
 

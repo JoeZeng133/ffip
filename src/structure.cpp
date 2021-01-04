@@ -38,8 +38,13 @@ namespace ffip
     void Medium_Stepping::output_details(std::ostream& os, const Yee3& grid) const
     {
         os << "Reporting susceptibility pool\n";
+        os << "b0,b1,b2,a1,a2\n";
         for(auto& sus : sus_pool)
-            os << "c1=" << sus.c1 << ",c2=" << sus.c2 << ",c3=" << sus.c3 << "\n";
+            os << sus.b0
+            << "," << sus.b1
+            << "," << sus.b2
+            << "," << sus.a1
+            << "," << sus.a2 << "\n";
 
         os << "Reporting each point\n";
         for (int i = 0; i < points.size(); ++i)
@@ -53,9 +58,14 @@ namespace ffip
             
     }
 
-    void Medium_Stepping::step(const std::vector<double> &accdb, std::vector<double> &eh)
+    void Medium_Stepping::step(
+        const std::vector<double> &accdb,
+        std::vector<double> &eh,
+        std::vector<double> &eh_prev
+        )
     {
         const size_t stride = sus_pool.size();
+        std::vector<double> q(stride);
         
         if (polarization1.size() == 0)
         {
@@ -63,24 +73,42 @@ namespace ffip
             polarization.resize(stride * points.size(), 0);
         }
 
-        for (int i = 0; i < points.size(); ++i)
+        for (int n = 0; n < points.size(); ++n)
         {
-            size_t index = points[i].index;
-            double g_inf = points[i].g_inf;
-			double *p = &polarization[i * stride];
-			double *p1 = &polarization1[i * stride];
-			double *amp = &sus_amp[i * stride];
-			
-            for (int n = 0; n < stride; ++n)
+            size_t index = points[n].index;
+            double g_inf = points[n].g_inf;
+            double sum_b0 = 0;
+            double sum_q = 0;
+            double eh_1 = eh[index];
+            double eh_2 = eh_prev[index];
+
+			double *p_1 = &polarization[n * stride];
+			double *p_2 = &polarization1[n * stride];
+			double *amp = &sus_amp[n * stride];
+
+            //step 1
+            for (int i = 0; i < stride; ++i)
             {
-                auto &sus = sus_pool[n];
-				double tmp = p[n];
-				
-                p[n] = sus.c1 * p[n] + sus.c2 * p1[n] + amp[n] * sus.c3 * eh[index];
-				p1[n] = tmp;
+                auto &sus = sus_pool[i];
+                q[i] = sus.b1 * eh_1 + sus.b2 * eh_2
+                    - sus.a1 * p_1[i] - sus.a2 * p_2[i];
+                sum_q += sus_amp[i] * q[i];
+                sum_b0 += sus_amp[i] * sus.b0;
             }
 
-            eh[index] = (accdb[index] * dt - std::accumulate(p, p + stride, 0.0)) / g_inf;
+            //step 2
+            double eh_0 = (accdb[index] * dt - sum_q) / (g_inf + sum_b0);
+
+            //step 3
+            for (int i = 0; i < stride; ++i)
+            {
+                auto &sus = sus_pool[i];
+                p_2[i] = p_1[i];
+                p_1[i] = sus.b0 * eh_0 + q[i];
+            }
+
+            eh[index] = eh_0;
+            eh_prev[index] = eh_1;
         }
     }
 
@@ -90,6 +118,7 @@ namespace ffip
         this->grid = grid;
         this->dx = dx;
         this->dt = dt;
+        this->eh_prev.resize(grid.get_size(), 0);
     }
 
     void Structure::add_to_material_pool(const std::vector<Medium> &materials)
@@ -302,7 +331,7 @@ namespace ffip
     {
         for (auto &item : e_stepping)
         {
-            item.second.step(accd, e);
+            item.second.step(accd, e, eh_prev);
         }
     }
 
@@ -310,7 +339,7 @@ namespace ffip
     {
         for (auto &item : m_stepping)
         {
-            item.second.step(accb, h);
+            item.second.step(accb, h, eh_prev);
         }
     }
 
