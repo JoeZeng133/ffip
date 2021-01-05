@@ -28,7 +28,7 @@ def FePt(frequency=1.0):
     return Medium(epsilon=eps2, E_susceptibilities=[sus2])
 
 #------------------------------------------------------------------
-# gold (Au) L4 model
+# gold (Au) L4D model
 Au_plasma_frq = 9.03*eV_um_scale
 Au_f0 = 0.760
 Au_frq0 = 1e-10*eV_um_scale*sqrt(6.1971084e+21)
@@ -107,19 +107,28 @@ Au_LD_susc = [DrudeSusceptibility(frequency=Au_LD_frq0, gamma=Au_LD_gam0, sigma=
 Au_LD = Medium(epsilon=5.9673, E_susceptibilities=Au_LD_susc)
 
 #------------------------------------------------------------------
-# gold (Au) IIR 500-1000 nm model
-Au_IIR1_a1 = (-1.1859e+15 + 5.1317e+15j) * hz_scale
-Au_IIR1_c1 = (5.0833e+14 - 7.9338e+15j) * hz_scale
-Au_IIR1_a2 = (-5.5450e+13 + 2.2427e+14j) * hz_scale
-Au_IIR1_c2 = (-2.6683e+13 - 3.2983e+17j) * hz_scale
-Au_IIR1_susc = [
-	IIR_Susceptibility(Au_IIR1_a1, Au_IIR1_c1),
-	IIR_Susceptibility(Au_IIR1_a2, Au_IIR1_c2)]
-Au_IIR1 = Medium(epsilon=1, E_susceptibilities=Au_IIR1_susc)
+# gold (Au) IIR 200-1000 nm model
+# Au_IIR1_susc = [
+# 	IIR_Susceptibility((-1.1859e+15 + 5.1317e+15j) * hz_scale, (5.0833e+14 - 7.9338e+15j) * hz_scale),
+# 	IIR_Susceptibility((-5.5450e+13 + 2.2427e+14j) * hz_scale, (-2.6683e+13 - 3.2983e+17j) * hz_scale)]
+# Au_IIR1 = Medium(epsilon=1, E_susceptibilities=Au_IIR1_susc)
 
 #------------------------------------------------------------------
-# gold (Au) IIR 500-1000 nm linear interpolation
+# gold (Au) IIR 500-1000 nm model
+Au_IIR2_susc = [
+	IIR_Susceptibility((-1.1859e+15 + 5.1317e+15j) * hz_scale, (5.0833e+14 - 7.9338e+15j) * hz_scale),
+	IIR_Susceptibility((-5.5450e+13 + 2.2427e+14j) * hz_scale, (-2.6683e+13 - 3.2983e+17j) * hz_scale)
+]
+Au_IIR2 = Medium(epsilon=1, E_susceptibilities=Au_IIR2_susc)
 
+#------------------------------------------------------------------
+# gold (Au) square root IIR 500-1000 nm model
+Au_sqrt_IIR2_susc = [
+	IIR_Susceptibility((-8.6705e+15) * hz_scale, (-4.3885e+15) * hz_scale),
+	IIR_Susceptibility((-8.0645e+14 + 4.4853e+15j) * hz_scale, (8.3663e+14 + 2.3093e+14j) * hz_scale),
+	IIR_Susceptibility((-6.3678e+13) * hz_scale, (6.1786e+15) * hz_scale)
+]
+Au_sqrt_IIR2 = Medium(epsilon=1, E_susceptibilities=Au_sqrt_IIR2_susc)
 
 #------------------------------------------------------------------
 # fictious 1

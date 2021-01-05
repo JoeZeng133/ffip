@@ -58,6 +58,7 @@ set(FFIP_LIB_FILES
 "ffip/materials.py"
 "ffip/source.py"
 "ffip/simulation.py"
+"ffip/param_materials.py"
 )
 
 # install python module into site-packages folder
