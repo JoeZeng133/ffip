@@ -169,16 +169,119 @@ class Vector3(object):
     def copy(self):
         return Vector3(self.x, self.y, self.z)
 
+class Susceptibility:
+
+    def __init__(self, sigma=1.0):
+        self.sigma = sigma
+
+    def build_eqs(self, b0=0.0, b1=0.0, a0=0.0, a1=0.0, a2=0.0):
+        self.b0 = float(b0)
+        self.b1 = float(b1)
+        self.a0 = float(a0)
+        self.a1 = float(a1)
+        self.a2 = float(a2)
+
+    def __eq__(self, other):
+        return (self.b0 == other.b0 and
+                self.b1 == other.b1 and
+                self.a0 == other.a0 and
+                self.a1 == other.a1 and
+                self.a2 == other.a2)
+
+    def get_epsilon(self, frequency):
+        s = 2j * np.pi * frequency
+        return self.sigma * (self.b0 + self.b1 * s) / (self.a0 + self.a1 * s + self.a2 * s**2)
+
+    def get_dis_epsilon(self, frequency, dt):
+        a0 = self.a0 + 2 * self.a1 / dt + 4 * self.a2 / dt / dt
+        a1 = 2 * self.a0 - 8 * self.a2 / dt / dt
+        a2 = self.a0 - 2 * self.a1 / dt + 4 * self.a2 / dt / dt
+        b0 = self.b0 + 2 * self.b1 / dt
+        b1 = 2 * self.b0
+        b2 = self.b0 - 2 * self.b1 / dt
+
+        z = np.exp(1j * 2 * np.pi * frequency * dt)
+
+        return self.sigma * (b0 + b1 * z**-1 + b2 * z**-2) / (a0 + a1 * z**-1 + a2 * z**-2)
+
+class IIR_Susceptibility(Susceptibility):
+
+    def __init__(self, a:complex, c:complex, **kwargs):
+        self.a = complex(a)
+        self.c = complex(c)
+        super().__init__(**kwargs)
+        super().build_eqs(
+            -2 * np.real(a * np.conj(c)),
+            2 * np.real(c),
+            abs(a)**2,
+            -2 * np.real(a),
+            1)
+
+    def get_json(self):
+        return {"type": "IIR",
+                "b0":self.b0,
+                "b1":self.b1,
+                "a0":self.a0,
+                "a1":self.a1,
+                "a2":self.a2,
+                "amplitude": self.sigma}
+
+class LorentzianSusceptibility(Susceptibility):
+
+    def __init__(self, frequency=0.0, gamma=0.0, **kwargs):
+        w = 2 * np.pi * frequency
+        g = 2 * np.pi * gamma
+        super().__init__(**kwargs)
+        super().build_eqs(b0=w**2, a0=w**2, a1=g, a2=1)
+        self.frequency = float(frequency)
+        self.gamma = float(gamma)
+
+    def get_json(self):
+        return {"type": "Lorentz",
+                "frequency": self.frequency,
+                "gamma": self.gamma,
+                "amplitude": self.sigma}
+
+
+class DrudeSusceptibility(Susceptibility):
+
+    def __init__(self, frequency=0.0, gamma=0.0, **kwargs):
+        w = 2 * np.pi * frequency
+        g = 2 * np.pi * gamma
+        super().__init__(**kwargs)
+        super().build_eqs(b0=w**2, a1=g, a2=1)
+        self.frequency = float(frequency)
+        self.gamma = float(gamma)
+
+    def get_json(self):
+        return {"type": "Drude",
+                "frequency": self.frequency,
+                "gamma": self.gamma,
+                "amplitude": self.sigma}
+
+class DeybeSusceptibility(Susceptibility):
+
+    def __init__(self, tau=0.0, **kwargs):
+        super().__init__(**kwargs)
+        super().build_eqs(b0=1, a0=1, a1=tau)
+        self.tau = float(tau)
+
+    
+    def get_json(self):
+        return {'type' : 'Deybe',
+                'tau' : self.tau,
+                'amplitude' : self.sigma
+                }
 
 class Medium:
 
     def __init__(self,
-                 epsilon=1:float,
-                 mu=1:float,
-                 E_conductivity=0:float,
-                 M_conductivity=0:float,
-                 E_susceptibilities=[]:list[Susceptibility],
-                 M_susceptibilities=[]:list[Susceptibility]):
+                 epsilon:float=1,
+                 mu:float=1,
+                 E_conductivity:float=0,
+                 M_conductivity:float=0,
+                 E_susceptibilities=[],
+                 M_susceptibilities=[]):
 
         self.epsilon = float(epsilon)
         self.mu = float(mu)
@@ -225,111 +328,6 @@ class Medium:
             res += item.get_dis_epsilon(frequency, dt)
         
         return res
-
-class Susceptibility:
-
-    def __init__(self, sigma=1.0):
-        self.sigma = sigma
-
-    def build_eqs(self, b0=0.0, b1=0.0, a0=0.0, a1=0.0, a2=0.0):
-        self.b0 = float(b0)
-        self.b1 = float(b1)
-        self.a0 = float(a0)
-        self.a1 = float(a1)
-        self.a2 = float(a2)
-
-    def __eq__(self, other):
-        return (self.b0 == other.b0 and
-                self.b1 == other.b1 and
-                self.a0 == other.a0 and
-                self.a1 == other.a1 and
-                self.a2 == other.a2)
-
-    def get_epsilon(self, frequency):
-        s = 2j * np.pi * frequency
-        return self.sigma * (self.b0 + self.b1 * s) / (self.a0 + self.a1 * s + self.a2 * s**2)
-
-    def get_dis_epsilon(self, frequency, dt):
-        a0 = self.a0 + 2 * self.a1 / dt + 4 * self.a2 / dt / dt
-        a1 = 2 * sus.a0 - 8 * self.a2 / dt / dt
-        a2 = self.a0 - 2 * self.a1 / dt + 4 * self.a2 / dt / dt
-        b0 = self.b0 + 2 * self.b1 / dt
-        b1 = 2 * self.b0
-        b2 = self.b0 - 2 * self.b1 / dt
-
-        z = np.exp(1j * 2 * np.pi * frequency * dt)
-
-        return self.sigma * (b0 + b1 * z**-1 + b2 * z**-2) / (a0 + a1 * z**-1 + a2 * z**-2)
-
-class IIR_Susceptibility(Susceptibility):
-
-    def __init__(self, a:complex, c:complex, **kwargs):
-        self.a = complex(a)
-        self.c = complex(c)
-        super().__init__(**kwargs)
-        super().build_eqs(
-            -2 * np.real(a * np.conj(c)),
-            2 * np.real(c),
-            abs(a)**2,
-            -2 * np.real(a),
-            1)
-
-    def get_json(self):
-        return {"type": "IIR",
-                "b0":self.b0,
-                "b1":self.b1,
-                "a0":self.a0,
-                "a1":self.a1,
-                "a2":self.a2,
-                "amplitude": self.sigma}
-
-class LorentzianSusceptibility(Susceptibility):
-
-    def __init__(self, frequency=0.0, gamma=0.0, **kwargs):
-        w = 2 * np.pi * frequency
-        g = 2 * np.pi * gamma
-        super().__init__(**kwargs)
-        super().build_eqs(a0=w**2, b0=w**2, b1=g, b2=1)
-        self.frequency = float(frequency)
-        self.gamma = float(gamma)
-
-    def get_json(self):
-        return {"type": "Lorentz",
-                "frequency": self.frequency,
-                "gamma": self.gamma,
-                "amplitude": self.sigma}
-
-
-class DrudeSusceptibility(Susceptibility):
-
-    def __init__(self, frequency=0.0, gamma=0.0, **kwargs):
-        w = 2 * np.pi * frequency
-        g = 2 * np.pi * gamma
-        super().__init__(**kwargs)
-        super().build_eqs(a0=w**2, b1=g, b2=1)
-        self.frequency = float(frequency)
-        self.gamma = float(gamma)
-
-    def get_json(self):
-        return {"type": "Drude",
-                "frequency": self.frequency,
-                "gamma": self.gamma,
-                "amplitude": self.sigma}
-
-class DeybeSusceptibility(Susceptibility):
-
-    def __init__(self, tau=0.0, **kwargs):
-        super().__init__(**kwargs)
-        super().build_eqs(a0=1, b0=1, b1=tau)
-        self.tau = float(tau)
-
-    
-    def get_json(self):
-        return {'type' : 'Deybe',
-                'tau' : self.tau,
-                'amplitude' : self.sigma
-                }
-
 class GeometricObject:
 
     def __init__(self, material=Medium(), center=Vector3()):
@@ -505,11 +503,11 @@ class General_Medium_Box2:
 
     def __init__(
         self, 
-        size=Vector3(), 
-        center=Vector3(), 
+        size=Vector3, 
+        center=Vector3, 
         density=None, 
         dim=Vector3(), 
-        medium:General_Medium,
+        medium:General_Medium=None,
         suffix="0"):
 
         self.size = size.copy()

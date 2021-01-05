@@ -102,7 +102,7 @@ namespace ffip
                 sus_json.at("b1").get<double>(),
                 sus_json.at("a0").get<double>(),
                 sus_json.at("a1").get<double>(),
-                sus_json.at("a2").get<double>()}
+                sus_json.at("a2").get<double>()};
         }
 
         throw std::runtime_error("Unknonw susceptibility");

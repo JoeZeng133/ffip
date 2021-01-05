@@ -1,4 +1,4 @@
-from ffip.geom import DrudeSusceptibility, LorentzianSusceptibility, Medium, DeybeSusceptibility
+from ffip.geom import DrudeSusceptibility, LorentzianSusceptibility, Medium, DeybeSusceptibility, IIR_Susceptibility
 from math import sqrt, pi
 from numpy import real, imag
 # import ffip
@@ -105,6 +105,21 @@ Au_LD_sig1 = 1.09
 Au_LD_susc = [DrudeSusceptibility(frequency=Au_LD_frq0, gamma=Au_LD_gam0, sigma=Au_LD_sig0),
             LorentzianSusceptibility(frequency=Au_LD_frq1, gamma=Au_LD_gam1, sigma=Au_LD_sig1)]
 Au_LD = Medium(epsilon=5.9673, E_susceptibilities=Au_LD_susc)
+
+#------------------------------------------------------------------
+# gold (Au) IIR 500-1000 nm model
+Au_IIR1_a1 = (-1.1859e+15 + 5.1317e+15j) * hz_scale
+Au_IIR1_c1 = (5.0833e+14 - 7.9338e+15j) * hz_scale
+Au_IIR1_a2 = (-5.5450e+13 + 2.2427e+14j) * hz_scale
+Au_IIR1_c2 = (-2.6683e+13 - 3.2983e+17j) * hz_scale
+Au_IIR1_susc = [
+	IIR_Susceptibility(Au_IIR1_a1, Au_IIR1_c1),
+	IIR_Susceptibility(Au_IIR1_a2, Au_IIR1_c2)]
+Au_IIR1 = Medium(epsilon=1, E_susceptibilities=Au_IIR1_susc)
+
+#------------------------------------------------------------------
+# gold (Au) IIR 500-1000 nm linear interpolation
+
 
 #------------------------------------------------------------------
 # fictious 1
