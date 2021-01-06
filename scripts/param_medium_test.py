@@ -35,6 +35,5 @@ er2 = ffip.Au.get_dis_epsilon(ft, 1) * rho + 1 - rho
 er1p = mp.get_dis_epsilon(rho, ft, 1)
 er2p = np.ones(np.shape(rho)) * (ffip.Au.get_dis_epsilon(ft, 1) - 1)
 
-# print(m.esus_amp_fun(rho))
-print(er1)
-print(er2)
+print(er1p)
+print(er2p)

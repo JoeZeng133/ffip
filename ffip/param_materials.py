@@ -27,6 +27,27 @@ def Au_nonlin2():
 
 #------------------------------------------------------------------
 # gold (Au) 500-1000 nm linear interpolation parameterized model
+# based on L4D material
+def Au_lin1():
+	def e_inf_fun(rho: np.ndarray):
+		return np.ones(np.shape(rho))
+
+	def esus_amp_fun(rho: np.ndarray):
+		sus1 = (rho * s.sigma for s in Au_susc)
+		return np.stack((*sus1,), axis=-1)
+	
+	def e_inf_prime_fun(rho: np.ndarray):
+		return np.zeros(np.shape(rho))
+	
+	def esus_amp_prime_fun(rho: np.ndarray):
+		sus1 = (np.ones(np.shape(rho)) * s.sigma for s in Au_susc)
+		return np.stack((*sus1,), axis=-1)
+
+	m = Au
+	return Param_Medium(m, e_inf_fun, esus_amp_fun), Param_Medium(m, e_inf_prime_fun, esus_amp_prime_fun)
+
+#------------------------------------------------------------------
+# gold (Au) 500-1000 nm linear interpolation parameterized model
 # based on IIR2 material
 def Au_lin2():
 	def e_inf_fun(rho: np.ndarray):
