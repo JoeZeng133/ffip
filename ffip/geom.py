@@ -498,12 +498,12 @@ class Param_Medium:
 
     def get_epsilon(self, rho: np.ndarray, frq):
         sus = [sus.get_epsilon(frq)
-                for sus in self.medium.E_susceptibilities]
+               for sus in self.medium.E_susceptibilities]
         return self.e_inf(rho) + np.sum(self.esus_amp(rho) * np.array(sus), axis=-1)
 
     def get_dis_epsilon(self, rho: np.ndarray, frq, dt):
         sus = [sus.get_dis_epsilon(frq, dt)
-                for sus in self.medium.E_susceptibilities]
+               for sus in self.medium.E_susceptibilities]
         return self.e_inf(rho) + np.sum(self.esus_amp(rho) * np.array(sus), axis=-1)
 
     def get_medium(self, rho: float) -> Medium:
@@ -634,7 +634,7 @@ class Param_Medium_Box:
                 "mu dataset": self.mu_dataset,
                 "electric susceptibility amplitudes dataset": self.e_sus_amp_dataset,
                 "magnetic susceptibility amplitudes dataset": self.m_sus_amp_dataset,
-                "medium": self.medium.get_json()
+                "medium": self.medium.medium.get_json()
                 }
 
 

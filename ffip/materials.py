@@ -12,7 +12,7 @@ eV_um_scale = um_scale/1.23984193
 hz_scale = 1e-6 / 3e8 * um_scale
 
 
-#------------------------------------------------------------------
+# ------------------------------------------------------------------
 # FePt (single frequency model using Lorentz Pole)
 def FePt(frequency=1.0):
 
@@ -27,7 +27,8 @@ def FePt(frequency=1.0):
 
     return Medium(epsilon=eps2, E_susceptibilities=[sus2])
 
-#------------------------------------------------------------------
+
+# ------------------------------------------------------------------
 # gold (Au) L4D model
 Au_plasma_frq = 9.03*eV_um_scale
 Au_f0 = 0.760
@@ -52,14 +53,17 @@ Au_gam4 = 2.494*eV_um_scale
 Au_sig4 = Au_f4*Au_plasma_frq**2/Au_frq4**2
 
 Au_susc = [DrudeSusceptibility(frequency=Au_frq0, gamma=Au_gam0, sigma=Au_sig0),
-           LorentzianSusceptibility(frequency=Au_frq1, gamma=Au_gam1, sigma=Au_sig1),
-           LorentzianSusceptibility(frequency=Au_frq2, gamma=Au_gam2, sigma=Au_sig2),
-           LorentzianSusceptibility(frequency=Au_frq3, gamma=Au_gam3, sigma=Au_sig3),
+           LorentzianSusceptibility(
+               frequency=Au_frq1, gamma=Au_gam1, sigma=Au_sig1),
+           LorentzianSusceptibility(
+               frequency=Au_frq2, gamma=Au_gam2, sigma=Au_sig2),
+           LorentzianSusceptibility(
+               frequency=Au_frq3, gamma=Au_gam3, sigma=Au_sig3),
            LorentzianSusceptibility(frequency=Au_frq4, gamma=Au_gam4, sigma=Au_sig4)]
 
 Au = Medium(epsilon=1.0, E_susceptibilities=Au_susc)
 
-#------------------------------------------------------------------
+# ------------------------------------------------------------------
 # gold (Au)
 # fit to P.B. Johnson and R.W. Christy, Physical Review B, Vol. 6, pp. 4370-9, 1972
 
@@ -76,9 +80,9 @@ Au_JC_visible_susc = [DrudeSusceptibility(frequency=Au_JC_visible_frq0, gamma=Au
 
 Au_JC_visible = Medium(epsilon=6.1599, E_susceptibilities=Au_JC_visible_susc)
 
-#------------------------------------------------------------------
+# ------------------------------------------------------------------
 # gold (Au)
-# fit to E.D. Palik, Handbook of Optical Constants, Academic Press, 1985 
+# fit to E.D. Palik, Handbook of Optical Constants, Academic Press, 1985
 Au_visible_frq0 = 1/(0.0473629248511456*um_scale)
 Au_visible_gam0 = 1/(0.255476199605166*um_scale)
 Au_visible_sig0 = 1
@@ -92,7 +96,7 @@ Au_visible_susc = [DrudeSusceptibility(frequency=Au_visible_frq0, gamma=Au_visib
 
 Au_visible = Medium(epsilon=0.6888, E_susceptibilities=Au_visible_susc)
 
-#------------------------------------------------------------------
+# ------------------------------------------------------------------
 # gold (Au) LD model
 Au_LD_frq0 = 2113.6e12 * hz_scale
 Au_LD_gam0 = 15.92e12 * hz_scale
@@ -103,34 +107,37 @@ Au_LD_gam1 = 104.86e12 * hz_scale
 Au_LD_sig1 = 1.09
 
 Au_LD_susc = [DrudeSusceptibility(frequency=Au_LD_frq0, gamma=Au_LD_gam0, sigma=Au_LD_sig0),
-            LorentzianSusceptibility(frequency=Au_LD_frq1, gamma=Au_LD_gam1, sigma=Au_LD_sig1)]
+              LorentzianSusceptibility(frequency=Au_LD_frq1, gamma=Au_LD_gam1, sigma=Au_LD_sig1)]
 Au_LD = Medium(epsilon=5.9673, E_susceptibilities=Au_LD_susc)
 
-#------------------------------------------------------------------
+# ------------------------------------------------------------------
 # gold (Au) IIR 200-1000 nm model
 # Au_IIR1_susc = [
 # 	IIR_Susceptibility((-1.1859e+15 + 5.1317e+15j) * hz_scale, (5.0833e+14 - 7.9338e+15j) * hz_scale),
 # 	IIR_Susceptibility((-5.5450e+13 + 2.2427e+14j) * hz_scale, (-2.6683e+13 - 3.2983e+17j) * hz_scale)]
 # Au_IIR1 = Medium(epsilon=1, E_susceptibilities=Au_IIR1_susc)
 
-#------------------------------------------------------------------
+# ------------------------------------------------------------------
 # gold (Au) IIR 500-1000 nm model
 Au_IIR2_susc = [
-	IIR_Susceptibility((-1.1859e+15 + 5.1317e+15j) * hz_scale, (5.0833e+14 - 7.9338e+15j) * hz_scale),
-	IIR_Susceptibility((-5.5450e+13 + 2.2427e+14j) * hz_scale, (-2.6683e+13 - 3.2983e+17j) * hz_scale)
+    IIR_Susceptibility((-1.1859e+15 + 5.1317e+15j) * hz_scale,
+                       (5.0833e+14 - 7.9338e+15j) * hz_scale),
+    IIR_Susceptibility((-5.5450e+13 + 2.2427e+14j) * hz_scale,
+                       (-2.6683e+13 - 3.2983e+17j) * hz_scale)
 ]
 Au_IIR2 = Medium(epsilon=1, E_susceptibilities=Au_IIR2_susc)
 
-#------------------------------------------------------------------
+# ------------------------------------------------------------------
 # gold (Au) square root IIR 500-1000 nm model
 Au_sqrt_IIR2_susc = [
-	IIR_Susceptibility((-8.6705e+15) * hz_scale, (-4.3885e+15) * hz_scale),
-	IIR_Susceptibility((-8.0645e+14 + 4.4853e+15j) * hz_scale, (8.3663e+14 + 2.3093e+14j) * hz_scale),
-	IIR_Susceptibility((-6.3678e+13) * hz_scale, (6.1786e+15) * hz_scale)
+    IIR_Susceptibility((-8.6705e+15) * hz_scale, (-4.3885e+15) * hz_scale),
+    IIR_Susceptibility((-8.0645e+14 + 4.4853e+15j) * hz_scale,
+                       (8.3663e+14 + 2.3093e+14j) * hz_scale),
+    IIR_Susceptibility((-6.3678e+13) * hz_scale, (6.1786e+15) * hz_scale)
 ]
 Au_sqrt_IIR2 = Medium(epsilon=1, E_susceptibilities=Au_sqrt_IIR2_susc)
 
-#------------------------------------------------------------------
+# ------------------------------------------------------------------
 # fictious 1
 fic1_frq0 = 3e14 * hz_scale
 fic1_gam0 = 0.5e14 * hz_scale
@@ -144,7 +151,7 @@ fic_susc = [LorentzianSusceptibility(frequency=fic1_frq0, gamma=fic1_gam0, sigma
 
 fic = Medium(epsilon=1, mu=1, E_susceptibilities=fic_susc)
 
-#------------------------------------------------------------------
+# ------------------------------------------------------------------
 # elemental metals from A.D. Rakic et al., Applied Optics, Vol. 37, No. 22, pp. 5271-83, 1998
 # wavelength range: 0.2 - 12.4 um
 
@@ -175,9 +182,12 @@ Ag_gam4 = 0.916*eV_um_scale
 Ag_sig4 = Ag_f4*Ag_plasma_frq**2/Ag_frq4**2
 
 Ag_susc = [DrudeSusceptibility(frequency=Ag_frq0, gamma=Ag_gam0, sigma=Ag_sig0),
-           LorentzianSusceptibility(frequency=Ag_frq1, gamma=Ag_gam1, sigma=Ag_sig1),
-           LorentzianSusceptibility(frequency=Ag_frq2, gamma=Ag_gam2, sigma=Ag_sig2),
-           LorentzianSusceptibility(frequency=Ag_frq3, gamma=Ag_gam3, sigma=Ag_sig3),
+           LorentzianSusceptibility(
+               frequency=Ag_frq1, gamma=Ag_gam1, sigma=Ag_sig1),
+           LorentzianSusceptibility(
+               frequency=Ag_frq2, gamma=Ag_gam2, sigma=Ag_sig2),
+           LorentzianSusceptibility(
+               frequency=Ag_frq3, gamma=Ag_gam3, sigma=Ag_sig3),
            LorentzianSusceptibility(frequency=Ag_frq4, gamma=Ag_gam4, sigma=Ag_sig4)]
 
 Ag = Medium(epsilon=1.0, E_susceptibilities=Ag_susc)

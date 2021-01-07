@@ -19,11 +19,7 @@ sim_size = ffip.Vector3(100, 100, 100) + dpml * 2
 fsrc = 1 / 500
 fcen = 1 / 800
 
-m1 = ffip.Au
-m2 = ffip.Medium()
-
-e1 = m1.get_epsilon(fcen)
-e2 = m2.get_epsilon(fcen)
+param_medium, param_medium_der = ffip.Au_lin1()
 
 src_func = ffip.Gaussian1(fsrc, start_time=0.5/fcen)
 
@@ -89,7 +85,7 @@ adj_src = ffip.Adjoint_Flux(
     fluxes=box_flux.flux_regions
 )
 
-adj_vol = ffip.Adjoint_Volume(
+adj_vol = ffip.Adjoint_Volume2(
     adjoint_simulation=sim_adjoint,
     forward_simulation=sim_forward,
     frequency=fcen,
@@ -97,13 +93,13 @@ adj_vol = ffip.Adjoint_Volume(
     size=geom_size,
     dim=geom_dim,
     density=None,
-    medium1=m1,
-    medium2=m2,
+    param_medium=param_medium,
+	param_medium_der=param_medium_der,
     norm=ref_fft
 )
 
 rho_shape = adj_vol.density.shape
-rho_list = np.linspace(0, 0.25, 1001)
+rho_list = np.linspace(0, 1, 401)
 f_list = []
 se1s = []
 se2s = []

@@ -5,7 +5,7 @@ import json
 import h5py
 from scipy.interpolate import RegularGridInterpolator
 from scipy.integrate import trapz
-from ffip.geom import Medium, Vector3, Two_Medium_Box, General_Medium_Box,cmp_shape, metadata_to_pts
+from ffip.geom import Param_Medium_Box, Param_Medium, Medium, Vector3, Two_Medium_Box, General_Medium_Box, cmp_shape, metadata_to_pts
 from math import pi
 from ffip.source import Source, Inhom_Source
 from copy import deepcopy, copy
@@ -13,6 +13,7 @@ from copy import deepcopy, copy
 
 direction_dict = {'x': 0, 'y': 1, 'z': 2}
 side_dict = {'positive': 1, 'negative': -1}
+
 
 class Fields_DFT:
 
@@ -57,21 +58,20 @@ class Fields_DFT:
             # expanding frequency is different from expanding coordinates
             if self.frequency.size == 1:
                 self.frequency = self.frequency * np.array([0.9, 1.1])
-            
+
             if self.x.size == 1:
                 self.x = self.x + np.array([-self.dx/2, self.dx/2])
 
             if self.y.size == 1:
                 self.y = self.y + np.array([-self.dx/2, self.dx/2])
-            
+
             if self.z.size == 1:
                 self.z = self.z + np.array([-self.dx/2, self.dx/2])
 
             for i in range(4):
                 if self.v.shape[i] == 1:
                     self.v = np.concatenate((self.v, self.v), axis=i)
-            
-    
+
     def __call__(self, f, z, y, x, substract=None, **kwargs):
 
         interp = self.get_interpolant(substract, **kwargs)
@@ -108,12 +108,12 @@ class Flux_Region:
             center=center, size=size, frequency=frequency, field_component=self.e1_str)
         self._h2_dft = sim.add_dft_fields(
             center=center, size=size, frequency=frequency, field_component=self.h2_str)
-    
+
     @property
     def e1_str(self):
         dict = {0: 'x', 1: 'y', 2: 'z'}
         return 'E' + dict[(self.direction + 1) % 3]
-    
+
     @property
     def h2_str(self):
         dict = {0: 'x', 1: 'y', 2: 'z'}
@@ -139,16 +139,16 @@ class Flux_Region:
         h2_interp = self.h2_dft.get_interpolant(
             substract=substract.h2_dft if substract is not None else None,
             **kwargs)
-        
+
         pts = self.get_pts(scale=scale)
         e1 = e1_interp(pts)
         h2 = h2_interp(pts)
 
         return e1, h2
-    
+
     def get_len(self, scale=1):
         return (self.size / self.dx * scale).round() + ffip.Vector3(1, 1, 1)
-    
+
     def get_metadata(self, scale=1):
         len = self.get_len(scale=scale)
         p1 = self.center - self.size / 2
@@ -164,7 +164,7 @@ class Flux_Region:
         # return integration points
 
         return np.stack(np.meshgrid(*self.get_metadata(scale=scale), indexing='ij'), axis=-1)
-    
+
     def get_int_weights(self, scale=1):
         # return integration weights
 
@@ -186,16 +186,16 @@ class Flux_Region:
             if item.size > 1:
                 item[0] = 0.5
                 item[-1] = 0.5
-        
+
         Z, Y, X = np.meshgrid(z, y, x, indexing='ij')
         return X * Y * Z * meas * self.weight
-        
+
     def get_values(self, scale=1, substract=None, **kwargs):
         # return fluxes
 
         e1, h2 = self.get_fields(scale=scale, substract=substract, **kwargs)
         int_weights = self.get_int_weights(scale=scale)
-        
+
         flux = np.real(e1 * np.conj(h2)) * int_weights
 
         # integration along dimensions (1, 2, 3) = (dz, dy, dx)
@@ -208,6 +208,7 @@ class Flux_Region:
 
         flux = self.get_values(scale=scale, substract=substract)
         return RegularGridInterpolator((self.frequency,), flux)
+
 
 class Flux_Box:
     def __init__(self, sim, center, size, frequency):
@@ -322,22 +323,22 @@ class Simulation:
         for pml in self.pmls:
             if pml.sigma_max is None:
                 pml.sigma_max = 0.8 * (1 + pml.order) * resolution
-    
+
     @property
     def input_file(self):
         return self._input_file
-    
+
     @input_file.setter
     def input_file(self, val):
         if not isinstance(val, str):
             raise ValueError('file name is not a string')
-        
+
         self._input_file = val
-    
+
     @property
     def fields_output_file(self):
         return self._fields_output_file
-    
+
     @fields_output_file.setter
     def fields_output_file(self, val):
         if not isinstance(val, str):
@@ -348,6 +349,10 @@ class Simulation:
     @property
     def dx(self):
         return 1/self.resolution
+
+    @property
+    def dt(self):
+        return self.dx * self.courant
 
     def dump(self, file):
         # dump input data into input_file
@@ -409,19 +414,20 @@ class Simulation:
         with h5py.File(self.input_file, 'w') as input_file_h5:
             # dump json configuration file
             json.dump(self.get_json(stop_condition=stop_condition, decomposition=decomposition),
-                    open('config.json', 'w'), indent=4)
+                      open('config.json', 'w'), indent=4)
             # dump input data
             self.dump(input_file_h5)
 
         # invoking externel bash command
         if not skip:
-            process = subprocess.Popen('mpirun -np %d run_sim_json' % np, shell=True, **kwargs)
+            process = subprocess.Popen(
+                'mpirun -np %d run_sim_json' % np, shell=True, **kwargs)
             process.wait()
 
         # run externel command manually
         if pop:
             input('press enter when finished')
-        
+
         with h5py.File(self.fields_output_file, 'r') as output_file_h5:
             # read dft fields
             for item in self.dft_fields:
@@ -481,6 +487,8 @@ class run_until_time:
     def get_json(self):
         return {'type': 'time',
                 'time': self.time}
+
+
 class run_until_dft:
     def __init__(self, center=ffip.Vector3(), size=ffip.Vector3(), frequency=1, field_component='Ex', time_interval_examined=1, var=1e-2):
         self.center = center.copy()
@@ -489,15 +497,15 @@ class run_until_dft:
         self.time_interval_examined = float(time_interval_examined)
         self.var = float(var)
         self.frequency = float(frequency)
-    
+
     def get_json(self):
-        return {'type' : 'dft',
-                'center' : self.center.get_json(),
-                'size'   : self.size.get_json(),
-                'field component' : self.field_component,
+        return {'type': 'dft',
+                'center': self.center.get_json(),
+                'size': self.size.get_json(),
+                'field component': self.field_component,
                 'time interval examined': self.time_interval_examined,
-                'variation' : self.var,
-                'frequency' : self.frequency
+                'variation': self.var,
+                'frequency': self.frequency
                 }
 
 
@@ -541,6 +549,7 @@ class PML:
 
         return res
 
+
 def field_match_objective(obj_val, component='Ex', weight=1):
     # return triplets (list of components, list of fprimes, objective function)
     # for adjoint source calculations
@@ -549,35 +558,35 @@ def field_match_objective(obj_val, component='Ex', weight=1):
         # original complex component l2 norm
         def fun1(val):
             return np.sum(0.5 * np.ravel(weight) * np.abs(val.ravel() - obj_val.ravel())**2)
-        
+
         def fpconj1(val):
             return (np.conj(val - obj_val) * weight,)
-        
+
         return [component], fpconj1, fun1
-        
+
     if component in ['|Ex|', '|Ey|', '|Ez|']:
         # absolute value l2 norm
         def fun2(val):
             return np.sum(0.5 * np.ravel(weight) * (np.abs(val).ravel() - obj_val.ravel())**2)
-        
+
         def fpconj2(val):
             return ((1 - obj_val / np.abs(val)) * np.conj(val) * weight,)
-        
+
         return [component[1:-1]], fpconj2, fun2
-    
+
     if component == '|E|':
         # absolute value of vector l2 norm
 
         def fun3(ex, ey, ez):
             val = np.sqrt(np.abs(ex)**2 + np.abs(ey)**2 + np.abs(ez)**2)
             return np.sum(0.5 * (np.ravel(val) - np.ravel(obj_val))**2 * np.ravel(weight))
-        
+
         def fpconj3(ex, ey, ez):
             val = np.sqrt(np.abs(ex)**2 + np.abs(ey)**2 + np.abs(ez)**2)
-            return ((1 - obj_val / val) * np.conj(ex) * weight, 
+            return ((1 - obj_val / val) * np.conj(ex) * weight,
                     (1 - obj_val / val) * np.conj(ey) * weight,
                     (1 - obj_val / val) * np.conj(ez) * weight
-            )
+                    )
 
         return ['Ex', 'Ey', 'Ez'], fpconj3, fun3
 
@@ -592,44 +601,44 @@ class Adjoint_Flux:
         self.e_adjoint_sources = []
         self.m_adjoint_sources = []
 
-
-        for i in range(len(fluxes)):    
+        for i in range(len(fluxes)):
             flux = fluxes[i]
 
             if flux.frequency.size > 1:
-                raise ValueError('Fluxes used in Adjoint_Flux cannot have more than 1 frequency')
+                raise ValueError(
+                    'Fluxes used in Adjoint_Flux cannot have more than 1 frequency')
 
             # j1 source
             self.e_adjoint_sources.append(
                 Inhom_Source(
-                        function=function,
-                        frequency=frequency,
-                        amplitude=None,
-                        center=flux.center,
-                        size=flux.size,
-                        dim=flux.get_len(scale=scale),
-                        field_component=flux.e1_str,
-                        suffix='flux %d %s adjoint' % (i, flux.e1_str)
-                    )
+                    function=function,
+                    frequency=frequency,
+                    amplitude=None,
+                    center=flux.center,
+                    size=flux.size,
+                    dim=flux.get_len(scale=scale),
+                    field_component=flux.e1_str,
+                    suffix='flux %d %s adjoint' % (i, flux.e1_str)
                 )
-            
+            )
+
             # m2 source
             self.m_adjoint_sources.append(
                 Inhom_Source(
-                        function=function,
-                        frequency=frequency,
-                        amplitude=None,
-                        center=flux.center,
-                        size=flux.size,
-                        dim=flux.get_len(scale=scale),
-                        field_component=flux.h2_str,
-                        suffix='flux %d %s adjoint' % (i, flux.h2_str)
-                    )
+                    function=function,
+                    frequency=frequency,
+                    amplitude=None,
+                    center=flux.center,
+                    size=flux.size,
+                    dim=flux.get_len(scale=scale),
+                    field_component=flux.h2_str,
+                    suffix='flux %d %s adjoint' % (i, flux.h2_str)
                 )
-            
+            )
+
             adjoint_simulation.add_source(self.e_adjoint_sources[-1])
             adjoint_simulation.add_source(self.m_adjoint_sources[-1])
-    
+
     def eval_functionals_and_set_sources(self):
         res = 0
 
@@ -639,9 +648,11 @@ class Adjoint_Flux:
             e1, h2 = flux.get_fields(scale=self.scale)
             int_weights = flux.get_int_weights(scale=self.scale)
 
-            self.e_adjoint_sources[i].amplitude = np.conj(h2[0, ...]) * int_weights
-            self.m_adjoint_sources[i].amplitude = - np.conj(e1[0, ...]) * int_weights
-        
+            self.e_adjoint_sources[i].amplitude = np.conj(
+                h2[0, ...]) * int_weights
+            self.m_adjoint_sources[i].amplitude = - \
+                np.conj(e1[0, ...]) * int_weights
+
         return res
 
 
@@ -679,7 +690,7 @@ class Adjoint_Source:
         for func in functionals:
             if not cmp_shape(self.shape, func[1].shape):
                 raise ValueError('objective values does not match the shape')
-            
+
             self.udfs.append(field_match_objective(func[1], func[0], weight=1))
 
         for udf in self.udfs:
@@ -692,17 +703,16 @@ class Adjoint_Source:
 
             # if len(components) != len(fprimes):
             #     raise ValueError('The number of components does not match number of fprimes')
-            
+
             if not callable(fun):
                 raise ValueError('The objective function is not callable')
 
             for component in components:
                 self.add_component(component)
 
-    
     def add_component(self, component='Ex'):
         # add a field component into adjoint source and forward dfts
-        
+
         if component not in self.forward_dfts:
             self.forward_dfts[component] = self.forward_simulation.add_dft_fields(
                 center=self.center,
@@ -733,9 +743,10 @@ class Adjoint_Source:
         # get forward fields
         for component in self.forward_dfts.keys():
 
-            self.adjoint_sources[component].amplitude = np.zeros(self.shape, dtype=complex)
+            self.adjoint_sources[component].amplitude = np.zeros(
+                self.shape, dtype=complex)
             self.forward_fields[component] = self.forward_dfts[component](
-                    self.frequency, self.z, self.y, self.x).reshape(self.shape)
+                self.frequency, self.z, self.y, self.x).reshape(self.shape)
 
         res = 0
         for udf in self.udfs:
@@ -746,23 +757,24 @@ class Adjoint_Source:
             args = []
             for component in components:
                 args.append(self.forward_fields[component])
-            
-            res =  res + fun(*args)
+
+            res = res + fun(*args)
             derivatives = fprime(*args)
 
             for i in range(len(components)):
                 self.adjoint_sources[components[i]].amplitude += derivatives[i]
-        
+
         return res
 
     @property
     def numel(self):
         return int(self.dim.prod())
 
+
 class Adjoint_Volume:
-    def __init__(self, adjoint_simulation, forward_simulation, frequency=1.0, center=Vector3(), size=Vector3(), dim=Vector3(), 
-        density=None, medium1=Medium(), medium2=Medium(), 
-        epsilon_fun=None, epsilon_der=None, e_sus = [], norm=1):
+    def __init__(self, adjoint_simulation, forward_simulation, frequency=1.0, center=Vector3(), size=Vector3(), dim=Vector3(),
+                 density=None, medium1=Medium(), medium2=Medium(),
+                 epsilon_fun=None, epsilon_der=None, e_sus=[], norm=1):
         # legacy support: e = e1 * density + (1 - density) * e2
         # general e = e(rho) = eps_inf + rho1 * e_sus1 + rho2 * e_sus2, de/drho provided
 
@@ -778,21 +790,21 @@ class Adjoint_Volume:
         if epsilon_fun is None:
             e1 = medium1.get_epsilon(self.frequency)
             e2 = medium2.get_epsilon(self.frequency)
-            self.epsilon_fun = lambda rho : e1 * rho + (1 - rho) * e2
-            self.epsilon_der = lambda rho : e1 - e2
+            self.epsilon_fun = lambda rho: e1 * rho + (1 - rho) * e2
+            self.epsilon_der = lambda rho: e1 - e2
             self.medium1 = deepcopy(medium1)
             self.medium2 = deepcopy(medium2)
 
             self.geom = Two_Medium_Box(
-                size=size, 
-                center=center, 
+                size=size,
+                center=center,
                 dim=dim,
-                density=density, 
-                medium1=medium1, 
-                medium2=medium2, 
+                density=density,
+                medium1=medium1,
+                medium2=medium2,
                 suffix='adjoint'
             )
-            
+
         else:
             self.epsilon_der = deepcopy(epsilon_der)
             self.epsilon_fun = deepcopy(epsilon_fun)
@@ -807,7 +819,7 @@ class Adjoint_Volume:
                 e_sus=e_sus,
                 suffix='adjoint'
             )
-        
+
         adjoint_simulation.add_geometry(self.geom)
         forward_simulation.add_geometry(self.geom)
 
@@ -828,71 +840,81 @@ class Adjoint_Volume:
         ]
 
         self.geom_infos = [forward_simulation.request_geom_info(
-            geom=self.geom, 
+            geom=self.geom,
             field_component=component
-            ) for component in ['Ex', 'Ey', 'Ez']
+        ) for component in ['Ex', 'Ey', 'Ez']
         ]
-    
+
     def forward_dft(self, field_component='Ex'):
-        map = {'Ex' : 0, 'Ey' : 1, 'Ez' : 2}
+        map = {'Ex': 0, 'Ey': 1, 'Ez': 2}
         return self.forward_dfts[map[field_component]]
-    
+
     def adjoint_dft(self, field_component='Ex'):
-        map = {'Ex' : 0, 'Ey' : 1, 'Ez' : 2}
+        map = {'Ex': 0, 'Ey': 1, 'Ez': 2}
         return self.adjoint_dfts[map[field_component]]
 
     def get_sensitivity(self):
-        self.pts = [np.stack((self.frequency * np.ones(item.z.shape), item.z, item.y, item.x), axis=-1) for item in self.geom_infos]
+        self.pts = [np.stack((self.frequency * np.ones(item.z.shape),
+                              item.z, item.y, item.x), axis=-1) for item in self.geom_infos]
 
         rho_interp = RegularGridInterpolator(
             (self.z, self.y, self.x),
             self.density,
             bounds_error=True)
-        
-        self.rho = [rho_interp(np.stack((item.z, item.y, item.x), axis=-1)) for item in self.geom_infos]
-        self.forward_fields = [self.forward_dfts[i].get_interpolant(method='linear', bounds_error=True)(self.pts[i]) for i in range(3)]
-        self.adjoint_fields = [self.adjoint_dfts[i].get_interpolant(method='linear', bounds_error=True)(self.pts[i]) for i in range(3)]
+
+        self.rho = [rho_interp(np.stack((item.z, item.y, item.x), axis=-1))
+                    for item in self.geom_infos]
+        self.forward_fields = [self.forward_dfts[i].get_interpolant(
+            method='linear', bounds_error=True)(self.pts[i]) for i in range(3)]
+        self.adjoint_fields = [self.adjoint_dfts[i].get_interpolant(
+            method='linear', bounds_error=True)(self.pts[i]) for i in range(3)]
         self.se = []
         self.se_transposed = []
 
         res = 0
 
         for i in range(3):
-            self.se.append(np.real(2j * pi * self.frequency * self.forward_fields[i] * self.adjoint_fields[i] * self.epsilon_der(self.rho[i]) / self.norm))
+            self.se.append(np.real(2j * pi * self.frequency *
+                                   self.forward_fields[i] * self.adjoint_fields[i] * self.epsilon_der(self.rho[i]) / self.norm))
 
             self.se_transposed.append(
                 ffip.transpose(
-                    self.x, self.y, self.z, 
-                    np.stack((self.geom_infos[i].x, self.geom_infos[i].y, self.geom_infos[i].z,  self.se[i]), axis=-1)
-                    )
+                    self.x, self.y, self.z,
+                    np.stack((self.geom_infos[i].x, self.geom_infos[i].y,
+                              self.geom_infos[i].z,  self.se[i]), axis=-1)
+                )
             )
 
             res += self.se_transposed[i]
 
         return np.reshape(res, self.shape)
-    
+
     def get_sensitivity2(self):
-        pts = np.stack(np.meshgrid(self.frequency, self.z, self.y, self.x, indexing='ij'), axis=-1)
-        forward_fields = [self.forward_dfts[i].get_interpolant(method='linear', bounds_error=True)(pts) for i in range(3)]
-        adjoint_fields = [self.adjoint_dfts[i].get_interpolant(method='linear', bounds_error=True)(pts) for i in range(3)]
+        pts = np.stack(np.meshgrid(self.frequency, self.z,
+                                   self.y, self.x, indexing='ij'), axis=-1)
+        forward_fields = [self.forward_dfts[i].get_interpolant(
+            method='linear', bounds_error=True)(pts) for i in range(3)]
+        adjoint_fields = [self.adjoint_dfts[i].get_interpolant(
+            method='linear', bounds_error=True)(pts) for i in range(3)]
         res = 0
 
         for i in range(3):
-            res = res + 2j * pi * self.frequency * forward_fields[i] * adjoint_fields[i] / self.norm
-        
+            res = res + 2j * pi * self.frequency * \
+                forward_fields[i] * adjoint_fields[i] / self.norm
+
         res = np.reshape(res, self.shape)
         res = np.real(res * self.epsilon_der(self.density))
-        
+
         return res
 
     @property
     def x(self):
         return self.geom.x
-    
+
     @property
     def y(self):
         return self.geom.y
-    
+
     @property
     def z(self):
         return self.geom.z
@@ -904,15 +926,173 @@ class Adjoint_Volume:
     @property
     def density(self):
         return self.geom.density
-        
+
     @density.setter
     def density(self, val):
         self.geom.density = val
-    
+
     @property
     def numel(self):
         return int(self.dim.prod())
-    
+
+    @property
+    def shape(self):
+        return self.geom.shape
+
+
+class Adjoint_Volume2:
+    # adjoint volume using param_medium
+    def __init__(
+            self,
+            adjoint_simulation: Simulation,
+            forward_simulation: Simulation,
+            frequency=1.0,
+            center=Vector3(),
+            size=Vector3(),
+            dim=Vector3(),
+            density=None,
+            param_medium: Param_Medium = None,
+            param_medium_der: Param_Medium = None,
+            norm=1):
+
+        self.adjoint_simulation = adjoint_simulation
+        self.forward_simulation = forward_simulation
+        self.frequency = float(frequency)
+        self.center = center.copy()
+        self.size = size.copy()
+        self.dim = dim.round()
+        self.norm = complex(norm)
+        self.param_medium = deepcopy(param_medium)
+        self.param_medium_der = deepcopy(param_medium_der)
+
+        self.geom = Param_Medium_Box(
+            size=size,
+            center=center,
+            dim=dim,
+            density=density,
+            medium=param_medium,
+            suffix='adjoint'
+        )
+
+        adjoint_simulation.add_geometry(self.geom)
+        forward_simulation.add_geometry(self.geom)
+
+        self.forward_dfts = [forward_simulation.add_dft_fields(
+            center=center,
+            size=size,
+            frequency=[frequency],
+            field_component=component
+        ) for component in ['Ex', 'Ey', 'Ez']
+        ]
+
+        self.adjoint_dfts = [adjoint_simulation.add_dft_fields(
+            center=center,
+            size=size,
+            frequency=[frequency],
+            field_component=component
+        ) for component in ['Ex', 'Ey', 'Ez']
+        ]
+
+        self.geom_infos = [forward_simulation.request_geom_info(
+            geom=self.geom,
+            field_component=component
+        ) for component in ['Ex', 'Ey', 'Ez']
+        ]
+
+    def forward_dft(self, field_component='Ex'):
+        map = {'Ex': 0, 'Ey': 1, 'Ez': 2}
+        return self.forward_dfts[map[field_component]]
+
+    def adjoint_dft(self, field_component='Ex'):
+        map = {'Ex': 0, 'Ey': 1, 'Ez': 2}
+        return self.adjoint_dfts[map[field_component]]
+
+    def get_sensitivity(self):
+        self.pts = [np.stack((self.frequency * np.ones(item.z.shape),
+                              item.z, item.y, item.x), axis=-1) for item in self.geom_infos]
+
+        rho_interp = RegularGridInterpolator(
+            (self.z, self.y, self.x),
+            self.density,
+            bounds_error=True)
+
+        self.rho = [rho_interp(np.stack((item.z, item.y, item.x), axis=-1))
+                    for item in self.geom_infos]
+        self.forward_fields = [self.forward_dfts[i].get_interpolant(
+            method='linear', bounds_error=True)(self.pts[i]) for i in range(3)]
+        self.adjoint_fields = [self.adjoint_dfts[i].get_interpolant(
+            method='linear', bounds_error=True)(self.pts[i]) for i in range(3)]
+        self.se = []
+        self.se_transposed = []
+
+        res = 0
+
+        for i in range(3):
+            self.se.append(np.real(2j * pi * self.frequency
+                                   * self.forward_fields[i]
+                                   * self.adjoint_fields[i]
+                                   * self.param_medium_der.get_dis_epsilon(self.rho[i], self.frequency, self.forward_simulation.dt)
+                                   / self.norm))
+
+            self.se_transposed.append(
+                ffip.transpose(
+                    self.x, self.y, self.z,
+                    np.stack((self.geom_infos[i].x, self.geom_infos[i].y,
+                              self.geom_infos[i].z,  self.se[i]), axis=-1)
+                )
+            )
+
+            res += self.se_transposed[i]
+
+        return np.reshape(res, self.shape)
+
+    def get_sensitivity2(self):
+        pts = np.stack(np.meshgrid(self.frequency, self.z,
+                                   self.y, self.x, indexing='ij'), axis=-1)
+        forward_fields = [self.forward_dfts[i].get_interpolant(
+            method='linear', bounds_error=True)(pts) for i in range(3)]
+        adjoint_fields = [self.adjoint_dfts[i].get_interpolant(
+            method='linear', bounds_error=True)(pts) for i in range(3)]
+        res = 0
+
+        for i in range(3):
+            res = res + 2j * pi * self.frequency * \
+                forward_fields[i] * adjoint_fields[i] / self.norm
+
+        res = np.reshape(res, self.shape)
+        res = np.real(res * self.param_medium_der.get_dis_epsilon(self.density,
+                                                                  self.frequency, self.forward_simulation.dt))
+
+        return res
+
+    @property
+    def x(self):
+        return self.geom.x
+
+    @property
+    def y(self):
+        return self.geom.y
+
+    @property
+    def z(self):
+        return self.geom.z
+
+    @property
+    def p1(self):
+        return self.center - self.size/2
+
+    @property
+    def density(self):
+        return self.geom.density
+
+    @density.setter
+    def density(self, val):
+        self.geom.density = val
+
+    @property
+    def numel(self):
+        return int(self.dim.prod())
+
     @property
     def shape(self):
         return self.geom.shape
