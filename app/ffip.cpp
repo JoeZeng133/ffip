@@ -377,11 +377,15 @@ py::array check_inside(py::array_t<double> req_pts, py::array_t<double> poly_pts
         poly_pts_vec.push_back({poly_pts_ptr[i], poly_pts_ptr[i + 1]});
     }
 
-    auto pgn = Polygon_2(poly_pts_vec.begin(), poly_pts_vec.end());
+    // auto pgn = Polygon_2(poly_pts_vec.begin(), poly_pts_vec.end());
 
     for(ssize_t i = 0; i < req_pts.size(); i+=2)
     {
-        res_ptr[i / 2] = (pgn.bounded_side({req_ptr_ptr[i], req_ptr_ptr[i + 1]}) == CGAL::ON_BOUNDED_SIDE);
+        res_ptr[i / 2] = bounded_side_2(
+            poly_pts_vec.begin(), 
+            poly_pts_vec.end(), 
+            {req_ptr_ptr[i], req_ptr_ptr[i + 1]}) == CGAL::ON_BOUNDED_SIDE;
+        // res_ptr[i / 2] = (pgn.bounded_side({req_ptr_ptr[i], req_ptr_ptr[i + 1]}) == CGAL::ON_BOUNDED_SIDE);
     }
 
     return res;
