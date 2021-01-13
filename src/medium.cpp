@@ -29,12 +29,19 @@ namespace ffip
         b0 = sus.b0 + 2 * sus.b1 / dt;
         b1 = 2 * sus.b0;
         b2 = sus.b0 - 2 * sus.b1 / dt;
-        //normalize to a0=1
+        // normalize to a0=1
         a1 /= a0;
         a2 /= a0;
         b0 /= a0;
         b1 /= a0;
         b2 /= a0;
+
+        // double c0 = 2 * sus.a2 + sus.a1 * dt;
+
+        // a1 = -(4 * sus.a2 - 2 * sus.a0 * dt * dt) / c0;
+        // a2 = -(-2 * sus.a2 + sus.a1 * dt) / c0;
+        // b1 = (2 * sus.b0 * dt * dt) / c0;
+        // b0 = b2 = 0;
     }
 
     //Medium

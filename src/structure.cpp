@@ -29,7 +29,7 @@ namespace ffip
         for (auto x : sus_amp)
             this->sus_amp.push_back(x);
 
-        points.push_back({index, g_inf});
+        points.push_back({index, g_inf, 0});
     }
 
     void Medium_Stepping::organize() {}
@@ -60,8 +60,7 @@ namespace ffip
 
     void Medium_Stepping::step(
         const std::vector<double> &accdb,
-        std::vector<double> &eh,
-        std::vector<double> &eh_prev
+        std::vector<double> &eh
         )
     {
         const size_t stride = sus_pool.size();
@@ -80,7 +79,7 @@ namespace ffip
             double sum_b0 = 0;
             double sum_q = 0;
             double eh_1 = eh[index];
-            double eh_2 = eh_prev[index];
+            double eh_2 = points[n].eh_1;
 
 			double *p_1 = &polarization[n * stride];
 			double *p_2 = &polarization1[n * stride];
@@ -92,8 +91,8 @@ namespace ffip
                 auto &sus = sus_pool[i];
                 q[i] = sus.b1 * eh_1 + sus.b2 * eh_2
                     - sus.a1 * p_1[i] - sus.a2 * p_2[i];
-                sum_q += sus_amp[i] * q[i];
-                sum_b0 += sus_amp[i] * sus.b0;
+                sum_q += amp[i] * q[i];
+                sum_b0 += amp[i] * sus.b0;
             }
 
             //step 2
@@ -108,8 +107,28 @@ namespace ffip
             }
 
             eh[index] = eh_0;
-            eh_prev[index] = eh_1;
+            points[n].eh_1 = eh_1;
         }
+
+        // for (int i = 0; i < points.size(); ++i)
+        // {
+        //     size_t index = points[i].index;
+        //     double g_inf = points[i].g_inf;
+		// 	double *p = &polarization[i * stride];
+		// 	double *p1 = &polarization1[i * stride];
+		// 	double *amp = &sus_amp[i * stride];
+			
+        //     for (int n = 0; n < stride; ++n)
+        //     {
+        //         auto &sus = sus_pool[n];
+		// 		double tmp = p[n];
+				
+        //         p[n] = -sus.a1 * p[n] - sus.a2 * p1[n] + amp[n] * sus.b1 * eh[index];
+		// 		p1[n] = tmp;
+        //     }
+
+        //     eh[index] = (accdb[index] * dt - std::accumulate(p, p + stride, 0.0)) / g_inf;
+        // }
     }
 
     //Structure
@@ -118,7 +137,7 @@ namespace ffip
         this->grid = grid;
         this->dx = dx;
         this->dt = dt;
-        this->eh_prev.resize(grid.get_size(), 0);
+        // this->eh_prev.resize(grid.get_size(), 0);
     }
 
     void Structure::add_to_material_pool(const std::vector<Medium> &materials)
@@ -331,7 +350,7 @@ namespace ffip
     {
         for (auto &item : e_stepping)
         {
-            item.second.step(accd, e, eh_prev);
+            item.second.step(accd, e);
         }
     }
 
@@ -339,7 +358,7 @@ namespace ffip
     {
         for (auto &item : m_stepping)
         {
-            item.second.step(accb, h, eh_prev);
+            item.second.step(accb, h);
         }
     }
 
