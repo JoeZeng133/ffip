@@ -174,6 +174,63 @@ class Vector3(object):
         return Vector3(self.x, self.y, self.z)
 
 
+class Medium:
+
+    def __init__(self,
+                 epsilon: float = 1,
+                 mu: float = 1,
+                 E_conductivity: float = 0,
+                 M_conductivity: float = 0,
+                 E_susceptibilities=[],
+                 M_susceptibilities=[]):
+
+        self.epsilon = float(epsilon)
+        self.mu = float(mu)
+        self.E_susceptibilities = deepcopy(E_susceptibilities)
+        self.M_susceptibilities = deepcopy(M_susceptibilities)
+        self.E_conductivity = float(E_conductivity)
+        self.M_conductivity = float(M_conductivity)
+
+    # return wave impedance of non dispersive part
+    def get_imp(self):
+        return sqrt(self.mu / self.epsilon)
+
+    # return wave speed of non dispersive part
+    def get_c(self):
+        return 1 / sqrt(self.mu * self.epsilon)
+
+    def get_json(self):
+
+        e_sus = [item.get_json() for item in self.E_susceptibilities]
+        m_sus = [item.get_json() for item in self.M_susceptibilities]
+
+        return {
+            'epsilon': self.epsilon,
+            'mu': self.mu,
+            'electric conductivity': self.E_conductivity,
+            'magnetic conductivity': self.M_conductivity,
+            'electric susceptibility': e_sus,
+            'magnetic susceptibility': m_sus
+        }
+
+    # return epsilon at a particular frequency
+    def get_epsilon(self, frequency):
+        res = self.epsilon - 1j * self.E_conductivity / (2 * np.pi * frequency)
+        for item in self.E_susceptibilities:
+            res += item.get_epsilon(frequency)
+
+        return res
+
+    def get_dis_epsilon(self, frequency, dt):
+        z = np.exp(1j * 2 * np.pi * frequency * dt)
+        res = self.epsilon + 2 * dt * z / (z**2 - 1) * self.E_conductivity
+
+        for item in self.E_susceptibilities:
+            res += item.get_dis_epsilon(frequency, dt)
+
+        return res
+
+
 class Susceptibility:
 
     def __init__(self, sigma=1.0):
@@ -281,63 +338,6 @@ class DeybeSusceptibility(Susceptibility):
                 }
 
 
-class Medium:
-
-    def __init__(self,
-                 epsilon: float = 1,
-                 mu: float = 1,
-                 E_conductivity: float = 0,
-                 M_conductivity: float = 0,
-                 E_susceptibilities=[],
-                 M_susceptibilities=[]):
-
-        self.epsilon = float(epsilon)
-        self.mu = float(mu)
-        self.E_susceptibilities = deepcopy(E_susceptibilities)
-        self.M_susceptibilities = deepcopy(M_susceptibilities)
-        self.E_conductivity = float(E_conductivity)
-        self.M_conductivity = float(M_conductivity)
-
-    # return wave impedance of non dispersive part
-    def get_imp(self):
-        return sqrt(self.mu / self.epsilon)
-
-    # return wave speed of non dispersive part
-    def get_c(self):
-        return 1 / sqrt(self.mu * self.epsilon)
-
-    def get_json(self):
-
-        e_sus = [item.get_json() for item in self.E_susceptibilities]
-        m_sus = [item.get_json() for item in self.M_susceptibilities]
-
-        return {
-            'epsilon': self.epsilon,
-            'mu': self.mu,
-            'electric conductivity': self.E_conductivity,
-            'magnetic conductivity': self.M_conductivity,
-            'electric susceptibility': e_sus,
-            'magnetic susceptibility': m_sus
-        }
-
-    # return epsilon at a particular frequency
-    def get_epsilon(self, frequency):
-        res = self.epsilon - 1j * self.E_conductivity / (2 * np.pi * frequency)
-        for item in self.E_susceptibilities:
-            res += item.get_epsilon(frequency)
-
-        return res
-
-    def get_dis_epsilon(self, frequency, dt):
-        z = np.exp(1j * 2 * np.pi * frequency * dt)
-        res = self.epsilon + 2 * dt * z / (z**2 - 1) * self.E_conductivity
-
-        for item in self.E_susceptibilities:
-            res += item.get_dis_epsilon(frequency, dt)
-
-        return res
-
-
 class GeometricObject:
 
     def __init__(self, material=Medium(), center=Vector3()):
@@ -440,15 +440,15 @@ class Two_Medium_Box:
 
     @property
     def x(self):
-        return np.linspace(self.center.x - self.size.x/2, self.center.x + self.size.x/2, self.dim.x)
+        return np.linspace(self.center.x - self.size.x/2, self.center.x + self.size.x/2, int(self.dim.x))
 
     @property
     def y(self):
-        return np.linspace(self.center.y - self.size.y/2, self.center.y + self.size.y/2, self.dim.y)
+        return np.linspace(self.center.y - self.size.y/2, self.center.y + self.size.y/2, int(self.dim.y))
 
     @property
     def z(self):
-        return np.linspace(self.center.z - self.size.z/2, self.center.z + self.size.z/2, self.dim.z)
+        return np.linspace(self.center.z - self.size.z/2, self.center.z + self.size.z/2, int(self.dim.z))
 
     @property
     def dimension(self):
@@ -582,15 +582,15 @@ class Param_Medium_Box:
 
     @property
     def x(self):
-        return np.linspace(self.center.x - self.size.x/2, self.center.x + self.size.x/2, self.dim.x)
+        return np.linspace(self.center.x - self.size.x/2, self.center.x + self.size.x/2, int(self.dim.x))
 
     @property
     def y(self):
-        return np.linspace(self.center.y - self.size.y/2, self.center.y + self.size.y/2, self.dim.y)
+        return np.linspace(self.center.y - self.size.y/2, self.center.y + self.size.y/2, int(self.dim.y))
 
     @property
     def z(self):
-        return np.linspace(self.center.z - self.size.z/2, self.center.z + self.size.z/2, self.dim.z)
+        return np.linspace(self.center.z - self.size.z/2, self.center.z + self.size.z/2, int(self.dim.z))
 
     @property
     def dimension(self):
@@ -701,15 +701,15 @@ class General_Medium_Box:
 
     @property
     def x(self):
-        return np.linspace(self.center.x - self.size.x/2, self.center.x + self.size.x/2, self.dim.x)
+        return np.linspace(self.center.x - self.size.x/2, self.center.x + self.size.x/2, int(self.dim.x))
 
     @property
     def y(self):
-        return np.linspace(self.center.y - self.size.y/2, self.center.y + self.size.y/2, self.dim.y)
+        return np.linspace(self.center.y - self.size.y/2, self.center.y + self.size.y/2, int(self.dim.y))
 
     @property
     def z(self):
-        return np.linspace(self.center.z - self.size.z/2, self.center.z + self.size.z/2, self.dim.z)
+        return np.linspace(self.center.z - self.size.z/2, self.center.z + self.size.z/2, int(self.dim.z))
 
     @property
     def dimension(self):
@@ -760,9 +760,9 @@ class General_Medium_Box:
 
 def getgrid(center=Vector3(), size=Vector3(), dim=Vector3()):
 
-    x = np.linspace(center.x - size.x/2, center.x + size.x/2, dim.x)
-    y = np.linspace(center.y - size.y/2, center.y + size.y/2, dim.y)
-    z = np.linspace(center.z - size.z/2, center.z + size.z/2, dim.z)
+    x = np.linspace(center.x - size.x/2, center.x + size.x/2, int(dim.x))
+    y = np.linspace(center.y - size.y/2, center.y + size.y/2, int(dim.y))
+    z = np.linspace(center.z - size.z/2, center.z + size.z/2, int(dim.z))
 
     return z, y, x
 

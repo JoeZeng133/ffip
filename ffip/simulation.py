@@ -154,9 +154,9 @@ class Flux_Region:
         p1 = self.center - self.size / 2
         p2 = self.center + self.size / 2
 
-        x = np.linspace(p1.x, p2.x, len.x)
-        y = np.linspace(p1.y, p2.y, len.y)
-        z = np.linspace(p1.z, p2.z, len.z)
+        x = np.linspace(p1.x, p2.x, int(len.x))
+        y = np.linspace(p1.y, p2.y, int(len.y))
+        z = np.linspace(p1.z, p2.z, int(len.z))
 
         return self.frequency, z, y, x
 
@@ -682,9 +682,9 @@ class Adjoint_Source:
         self.forward_fields = {}
 
         p1 = self.center - self.size / 2
-        self.x = np.linspace(p1.x, p1.x + self.size.x, dim.x)
-        self.y = np.linspace(p1.y, p1.y + self.size.y, dim.y)
-        self.z = np.linspace(p1.z, p1.z + self.size.z, dim.z)
+        self.x = np.linspace(p1.x, p1.x + self.size.x, int(dim.x))
+        self.y = np.linspace(p1.y, p1.y + self.size.y, int(dim.y))
+        self.z = np.linspace(p1.z, p1.z + self.size.z, int(dim.z))
 
         # legacy support
         for func in functionals:
